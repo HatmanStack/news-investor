@@ -1,0 +1,13 @@
+services:
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - '4566:4566'
+    environment:
+      - SERVICES=dynamodb
+      - DEBUG=0
+    volumes:
+      - './backend/localstack-init:/etc/localstack/init/ready.d'
+      - localstack-data:/var/lib/localstack
+volumes:
+  localstack-data:

@@ -1,0 +1,7 @@
+# Requirements for ONNX export script (run locally, not on Lambda)
+# Install with: pip install -r requirements-export.txt
+
+torch>=2.0.0
+transformers>=4.30.0
+onnx>=1.14.0
+onnxruntime>=1.16.0

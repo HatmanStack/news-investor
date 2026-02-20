@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Microsoft Acquires AI Startup for $2 Billion",
+    "description": "Microsoft announced the acquisition of AI company OpenTech for $2 billion in cash and stock, expanding its artificial intelligence capabilities.",
+    "expectedEventType": "M&A",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Google Parent Alphabet Completes Spin-off of Waymo",
+    "description": "Alphabet Inc. completed the spin-off of its self-driving car division Waymo into a separate publicly-traded company valued at $30 billion.",
+    "expectedEventType": "M&A",
+    "expectedConfidence": ">0.7"
+  },
+  {
+    "title": "Amazon to Buy Whole Foods in $13.7 Billion Deal",
+    "description": "Amazon.com announced an agreement to purchase Whole Foods Market for $13.7 billion, marking its largest acquisition to date.",
+    "expectedEventType": "M&A",
+    "expectedConfidence": ">0.8"
+  }
+]

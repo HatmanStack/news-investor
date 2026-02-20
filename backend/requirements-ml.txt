@@ -1,0 +1,19 @@
+# ML Sentiment Service Dependencies (ONNX Runtime)
+# Optimized for AWS Lambda zip deployment (<50MB total)
+
+# ONNX Runtime for inference (~17MB)
+onnxruntime>=1.16.0
+
+# Fast tokenizer (~5MB)
+tokenizers>=0.15.0
+
+# AWS SDK for S3 model loading
+boto3>=1.28.0
+
+# Web Framework
+fastapi>=0.100.0
+pydantic>=2.0.2
+mangum>=0.17.0
+
+# Server (for local development only - exclude from Lambda)
+# uvicorn[standard]==0.23.0

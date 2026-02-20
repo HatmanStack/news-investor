@@ -1,0 +1,50 @@
+{
+  "name": "news-investor-pro",
+  "version": "2.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "start": "cd frontend && expo start",
+    "test": "jest --config frontend/jest.config.js --ci --forceExit",
+    "test:backend": "cd backend && npm test -- --ci --forceExit",
+    "lint": "cd frontend && expo lint -- --max-warnings 0",
+    "lint:backend": "cd backend && npm run lint && npm run type-check",
+    "lint:ml": "uvx ruff check backend/services/ml backend/python backend/python_tests",
+    "lint:python-types": "cd backend/python && uvx mypy .",
+    "test:e2e": "cd backend && npm run test:e2e",
+    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:python-types && npm run test && npm run test:backend",
+    "deploy": "./backend/scripts/deploy.sh",
+    "hygiene": "./scripts/code-hygiene.sh",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky || true"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@commitlint/cli": "^20.4.1",
+    "@commitlint/config-conventional": "^20.4.1",
+    "husky": "^9.1.7",
+    "knip": "^5.80.0",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "*.py": [
+      "uvx ruff check --fix",
+      "uvx ruff format"
+    ]
+  }
+}

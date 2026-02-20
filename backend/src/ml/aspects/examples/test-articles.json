@@ -1,0 +1,144 @@
+{
+  "description": "Test fixtures for aspect analysis validation",
+  "articles": [
+    {
+      "name": "Positive Revenue",
+      "ticker": "AAPL",
+      "headline": "Apple Revenue Surges Past Estimates",
+      "summary": "Apple Inc. reported revenue of $95B, beating analyst estimates of $92B by 3%.",
+      "expectedScores": {
+        "REVENUE": 0.8,
+        "overallScore": 0.8,
+        "confidence": 0.7
+      }
+    },
+    {
+      "name": "Positive Earnings",
+      "ticker": "MSFT",
+      "headline": "Microsoft Crushes Earnings Expectations",
+      "summary": "Microsoft reported EPS of $2.50, significantly exceeding the $2.20 consensus.",
+      "expectedScores": {
+        "EARNINGS": 0.9,
+        "overallScore": 0.9,
+        "confidence": 0.8
+      }
+    },
+    {
+      "name": "Negative Guidance",
+      "ticker": "TSLA",
+      "headline": "Tesla Lowers Full-Year Outlook",
+      "summary": "Tesla reduced its full-year guidance citing weak demand and pricing pressure.",
+      "expectedScores": {
+        "GUIDANCE": -0.7,
+        "overallScore": -0.7,
+        "confidence": 0.7
+      }
+    },
+    {
+      "name": "Mixed Sentiment - Revenue Beat, Earnings Miss",
+      "ticker": "AMZN",
+      "headline": "Amazon Beats Revenue But Misses Earnings",
+      "summary": "Amazon reported revenue growth of 15% but earnings fell short of expectations by 10%.",
+      "expectedScores": {
+        "REVENUE": 0.6,
+        "EARNINGS": -0.6,
+        "overallScore": -0.03,
+        "note": "Overall slightly negative because EARNINGS weight (30%) > REVENUE weight (25%)"
+      }
+    },
+    {
+      "name": "Margin Compression",
+      "ticker": "WMT",
+      "headline": "Walmart Margins Under Pressure",
+      "summary": "Operating margins compressed to 3.5% from 4.2% as costs rose faster than revenue.",
+      "expectedScores": {
+        "MARGINS": -0.6,
+        "REVENUE": 0.3,
+        "overallScore": -0.15,
+        "note": "Mixed signals: revenue up but margins compressed"
+      }
+    },
+    {
+      "name": "Debt Reduction",
+      "ticker": "F",
+      "headline": "Ford Reduces Debt Load Significantly",
+      "summary": "Ford paid down $5B in total debt, improving its balance sheet and credit rating.",
+      "expectedScores": {
+        "DEBT": 0.8,
+        "overallScore": 0.8,
+        "note": "Reduced debt is positive"
+      }
+    },
+    {
+      "name": "Accelerating Growth",
+      "ticker": "NVDA",
+      "headline": "Nvidia Growth Accelerating on AI Demand",
+      "summary": "Year-over-year growth accelerated to 30%, up from 20% last quarter.",
+      "expectedScores": {
+        "GROWTH": 0.8,
+        "overallScore": 0.8
+      }
+    },
+    {
+      "name": "Comprehensive Positive - All Aspects",
+      "ticker": "GOOGL",
+      "headline": "Google Reports Stellar Quarter Across All Metrics",
+      "summary": "Google beat on revenue and earnings, raised guidance, expanded margins, accelerated growth, and reduced debt.",
+      "expectedScores": {
+        "REVENUE": 0.7,
+        "EARNINGS": 0.7,
+        "GUIDANCE": 0.7,
+        "MARGINS": 0.6,
+        "GROWTH": 0.6,
+        "DEBT": 0.6,
+        "overallScore": 0.65,
+        "note": "All aspects positive, high confidence from multiple signals"
+      }
+    },
+    {
+      "name": "Negation Pattern",
+      "ticker": "META",
+      "headline": "Meta Revenue Did Not Beat Expectations",
+      "summary": "Meta reported revenue that did not meet analyst forecasts, falling short by 2%.",
+      "expectedScores": {
+        "REVENUE": -0.5,
+        "overallScore": -0.5,
+        "note": "Negation 'did not beat' should flip to negative"
+      }
+    },
+    {
+      "name": "Intensity Modifier - Significant",
+      "ticker": "NFLX",
+      "headline": "Netflix Significantly Beats Subscriber Growth",
+      "summary": "Netflix added 10M subscribers, significantly exceeding the 7M estimate.",
+      "expectedScores": {
+        "GROWTH": 0.9,
+        "overallScore": 0.9,
+        "note": "Intensity modifier 'significantly' should amplify positive score"
+      }
+    },
+    {
+      "name": "Neutral Mention",
+      "ticker": "DIS",
+      "headline": "Disney Reports Quarterly Results",
+      "summary": "Disney announced revenue and earnings for Q1 as expected.",
+      "expectedScores": {
+        "REVENUE": 0.0,
+        "EARNINGS": 0.0,
+        "overallScore": 0.0,
+        "note": "No clear positive or negative signals, should be neutral"
+      }
+    },
+    {
+      "name": "No Financial Aspects",
+      "ticker": "AAPL",
+      "headline": "Apple CEO Speaks at Technology Conference",
+      "summary": "Tim Cook discussed innovation and the future of technology at a recent conference.",
+      "expectedScores": {
+        "overallScore": 0.0,
+        "confidence": 0.0,
+        "note": "General news with no financial aspects detected"
+      }
+    }
+  ]
+}

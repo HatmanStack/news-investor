@@ -1,0 +1,191 @@
+# CloudWatch Alarms Configuration for React Stocks Backend
+# Deploy these alarms using AWS CLI or CloudFormation
+
+# ======================
+# Critical Alarms (Page On-Call)
+# ======================
+
+LambdaErrorCountHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-lambda-error-count-high
+    AlarmDescription: Lambda error count exceeds 5 errors in 5 minutes
+    MetricName: Errors
+    Namespace: AWS/Lambda
+    Statistic: Sum
+    Period: 300 # 5 minutes
+    EvaluationPeriods: 1
+    Threshold: 5 # 5 errors in 5 minutes
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref CriticalAlarmsTopicArn # Replace with SNS topic ARN
+    Dimensions:
+      - Name: FunctionName
+        Value: !Ref ReactStocksFunctionName
+
+APIGateway5xxRateHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-api-5xx-rate-high
+    AlarmDescription: API Gateway 5xx error rate exceeds 1% for 5 minutes
+    MetricName: 5XXError
+    Namespace: AWS/ApiGateway
+    Statistic: Sum
+    Period: 300 # 5 minutes
+    EvaluationPeriods: 1
+    Threshold: 10 # Adjust based on expected traffic
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref CriticalAlarmsTopicArn
+    Dimensions:
+      - Name: ApiName
+        Value: ReactStocksApi
+
+LambdaTimeoutRateHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-lambda-timeout-rate-high
+    AlarmDescription: Lambda timeout rate exceeds 10% for 10 minutes
+    MetricName: Duration
+    Namespace: AWS/Lambda
+    Statistic: Maximum
+    Period: 600 # 10 minutes
+    EvaluationPeriods: 1
+    Threshold: 28000 # 28 seconds (timeout is 30s)
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref CriticalAlarmsTopicArn
+    Dimensions:
+      - Name: FunctionName
+        Value: !Ref ReactStocksFunctionName
+
+# ======================
+# Warning Alarms (Email)
+# ======================
+
+LambdaDurationP95High:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-lambda-duration-p95-high
+    AlarmDescription: Lambda p95 duration exceeds threshold for 15 minutes
+    MetricName: Duration
+    Namespace: AWS/Lambda
+    ExtendedStatistic: p95
+    Period: 900 # 15 minutes
+    EvaluationPeriods: 1
+    Threshold: 1000 # 1 second
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref WarningAlarmsTopicArn # Replace with SNS topic ARN
+    Dimensions:
+      - Name: FunctionName
+        Value: !Ref ReactStocksFunctionName
+
+LambdaThrottlesDetected:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-lambda-throttles-detected
+    AlarmDescription: Lambda throttles detected
+    MetricName: Throttles
+    Namespace: AWS/Lambda
+    Statistic: Sum
+    Period: 300 # 5 minutes
+    EvaluationPeriods: 1
+    Threshold: 1
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref WarningAlarmsTopicArn
+    Dimensions:
+      - Name: FunctionName
+        Value: !Ref ReactStocksFunctionName
+
+APIGateway4xxRateHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-api-4xx-rate-high
+    AlarmDescription: API Gateway 4xx error rate exceeds 10% for 15 minutes
+    MetricName: 4XXError
+    Namespace: AWS/ApiGateway
+    Statistic: Sum
+    Period: 900 # 15 minutes
+    EvaluationPeriods: 1
+    Threshold: 50 # Adjust based on expected traffic
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref WarningAlarmsTopicArn
+    Dimensions:
+      - Name: ApiName
+        Value: ReactStocksApi
+
+APIGatewayLatencyP95High:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-api-latency-p95-high
+    AlarmDescription: API Gateway p95 latency exceeds 2 seconds for 15 minutes
+    MetricName: Latency
+    Namespace: AWS/ApiGateway
+    ExtendedStatistic: p95
+    Period: 900 # 15 minutes
+    EvaluationPeriods: 1
+    Threshold: 2000 # 2 seconds
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref WarningAlarmsTopicArn
+    Dimensions:
+      - Name: ApiName
+        Value: ReactStocksApi
+
+# ======================
+# Informational Alarms
+# ======================
+
+LambdaConcurrentExecutionsHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: react-stocks-lambda-concurrent-high
+    AlarmDescription: Lambda concurrent executions approaching limits
+    MetricName: ConcurrentExecutions
+    Namespace: AWS/Lambda
+    Statistic: Maximum
+    Period: 300 # 5 minutes
+    EvaluationPeriods: 1
+    Threshold: 800 # Adjust based on account limits (default 1000)
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions:
+      - !Ref InformationalAlarmsTopicArn # Replace with SNS topic ARN
+    Dimensions:
+      - Name: FunctionName
+        Value: !Ref ReactStocksFunctionName
+
+# ======================
+# Cost Anomaly Detection
+# ======================
+# Note: Set up Cost Anomaly Detection in AWS Cost Management Console
+# This provides alerting for unexpected cost increases
+
+# ======================
+# Deployment Instructions
+# ======================
+#
+# 1. Create SNS Topics for notifications:
+#    aws sns create-topic --name react-stocks-critical-alarms
+#    aws sns create-topic --name react-stocks-warning-alarms
+#    aws sns create-topic --name react-stocks-informational-alarms
+#
+# 2. Subscribe to topics:
+#    aws sns subscribe --topic-arn <TOPIC_ARN> --protocol email --notification-endpoint your-email@example.com
+#
+# 3. Update backend/template.yaml to include these alarms or deploy separately:
+#    aws cloudformation deploy --template-file alarms-stack.yaml --stack-name react-stocks-alarms
+#
+# 4. Customize thresholds based on your traffic patterns
+#
+# 5. Test alarms by triggering conditions (if safe)

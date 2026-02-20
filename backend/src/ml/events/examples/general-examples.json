@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Apple CEO Tim Cook Speaks at Tech Conference",
+    "description": "Apple CEO Tim Cook discussed the future of technology and innovation at the annual CES conference in Las Vegas.",
+    "expectedEventType": "GENERAL",
+    "expectedConfidence": "<0.3"
+  },
+  {
+    "title": "Stock Market Update: Tech Shares Trade Higher",
+    "description": "Technology stocks rallied today as investors showed renewed optimism about the sector's growth prospects.",
+    "expectedEventType": "GENERAL",
+    "expectedConfidence": "<0.3"
+  },
+  {
+    "title": "Tesla Opens New Service Center in Austin",
+    "description": "Tesla Inc. opened a new service center in Austin, Texas, to support its growing customer base in the region.",
+    "expectedEventType": "GENERAL",
+    "expectedConfidence": "<0.3"
+  }
+]

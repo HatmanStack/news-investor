@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Morgan Stanley Upgrades Apple to Buy with $200 Price Target",
+    "description": "Morgan Stanley upgraded Apple Inc. from Hold to Buy, raising its price target to $200 from $175, citing strong iPhone demand and services growth.",
+    "expectedEventType": "ANALYST_RATING",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Goldman Sachs Initiates Coverage on Tesla with Neutral Rating",
+    "description": "Goldman Sachs initiated coverage of Tesla Inc. with a Neutral rating and $250 price target, noting execution risks balanced against growth potential.",
+    "expectedEventType": "ANALYST_RATING",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Wells Fargo Downgrades Netflix on Valuation Concerns",
+    "description": "Wells Fargo downgraded Netflix from Overweight to Equal Weight, lowering its price target to $450 from $550 due to valuation concerns.",
+    "expectedEventType": "ANALYST_RATING",
+    "expectedConfidence": ">0.7"
+  }
+]

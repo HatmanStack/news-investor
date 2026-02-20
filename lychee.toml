@@ -1,0 +1,32 @@
+# lychee link checker configuration
+# https://lychee.cli.rs/usage/config/
+
+# Exclude paths
+exclude_path = [
+  "node_modules",
+  ".aws-sam",
+  "CHANGELOG.md",
+]
+
+# Exclude URL patterns
+exclude = [
+  # Placeholder URLs
+  "https://xxx\\.execute-api",
+  "https://your-api-gateway-url",
+  # Yahoo Finance API (requires auth headers)
+  "https://query2\\.finance\\.yahoo\\.com",
+  # localhost URLs (only valid during local dev)
+  "http://localhost",
+]
+
+# Timeout per request
+timeout = 10
+
+# Accept these status codes (some sites block bots)
+accept = [200, 204, 301, 302, 403, 429]
+
+# Max concurrent requests
+max_concurrency = 4
+
+# Don't check mail addresses
+include_mail = false

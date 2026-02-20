@@ -1,0 +1,207 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Format check
+        run: npx prettier --check .
+      - name: Lint
+        run: npx expo lint -- --max-warnings 0
+        working-directory: frontend
+      - name: Type check
+        run: npx tsc --noEmit
+        working-directory: frontend
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run frontend tests
+        run: npm test
+
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: cd backend && npm ci
+      - name: Lint
+        run: cd backend && npx eslint "src/**/*.ts" --max-warnings 0
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    env:
+      AWS_DEFAULT_REGION: us-east-1
+      FINNHUB_API_KEY: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: cd backend && npm ci
+      - name: Type check
+        run: cd backend && npx tsc --noEmit
+      - name: Run tests
+        run: cd backend && npm test -- --ci --forceExit
+
+  python-stocks-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint Python stocks Lambda
+        run: ruff check backend/python backend/python_tests
+
+  python-stocks-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          pip install -r backend/python/requirements.txt
+          pip install -r backend/python/requirements-dev.txt
+      - name: Run tests
+        env:
+          PYTHONPATH: backend/python
+        run: pytest backend/python_tests --maxfail=1 -v --ignore=backend/python_tests/test_yfinance_service.py
+
+  ml-service-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint Python
+        run: ruff check backend/services/ml backend/scripts
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint markdown
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: '*.md docs/*.md .github/**/*.md'
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: '--no-progress *.md docs/*.md'
+          fail: true
+
+  code-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - name: TypeScript dead code check (knip)
+        run: npx knip --exclude unlisted,binaries,types
+      - name: Python dead code check (vulture)
+        run: |
+          pip install vulture
+          vulture backend/python/ backend/services/ml/ backend/vulture_whitelist.py --min-confidence 80
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:latest
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: dynamodb
+    env:
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      DYNAMODB_TABLE_NAME: e2e-test-Table
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: cd backend && npm ci
+      - name: Wait for LocalStack
+        run: timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -qE "\"(running|available)\""; do sleep 1; done'
+      - name: Run E2E tests
+        run: cd backend && npm run test:e2e
+
+  status-check:
+    runs-on: ubuntu-latest
+    needs:
+      [
+        frontend-lint,
+        frontend-tests,
+        backend-lint,
+        backend-tests,
+        python-stocks-lint,
+        python-stocks-tests,
+        ml-service-lint,
+        docs,
+        code-hygiene,
+        e2e-tests,
+      ]
+    if: always()
+    steps:
+      - name: All Checks Passed
+        run: |
+          if [[ "${{ needs.frontend-lint.result }}" != "success" ]] || \
+             [[ "${{ needs.frontend-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.backend-lint.result }}" != "success" ]] || \
+             [[ "${{ needs.backend-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.python-stocks-lint.result }}" != "success" ]] || \
+             [[ "${{ needs.python-stocks-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.ml-service-lint.result }}" != "success" ]] || \
+             [[ "${{ needs.docs.result }}" != "success" ]] || \
+             [[ "${{ needs.code-hygiene.result }}" != "success" ]] || \
+             [[ "${{ needs.e2e-tests.result }}" != "success" ]]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"

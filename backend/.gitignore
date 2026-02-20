@@ -1,0 +1,13 @@
+.deploy-config.json
+.env.deploy
+samconfig.toml
+dist/
+coverage/
+node_modules/
+.aws-sam/
+
+# ML model files (too large for git)
+models/
+
+# Python cache files
+__pycache__/

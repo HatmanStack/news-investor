@@ -1,0 +1,151 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "title": "Lambda Invocations",
+        "region": "us-east-1",
+        "metrics": [["AWS/Lambda", "Invocations", { "stat": "Sum", "label": "Total Invocations" }]],
+        "period": 300,
+        "stat": "Average",
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "Lambda Duration (p50, p95, p99)",
+        "region": "us-east-1",
+        "metrics": [
+          ["AWS/Lambda", "Duration", { "stat": "p50", "label": "p50" }],
+          ["...", { "stat": "p95", "label": "p95" }],
+          ["...", { "stat": "p99", "label": "p99" }]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Milliseconds"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "Lambda Errors",
+        "region": "us-east-1",
+        "metrics": [
+          ["AWS/Lambda", "Errors", { "stat": "Sum", "label": "Errors", "color": "#d62728" }],
+          [".", "Throttles", { "stat": "Sum", "label": "Throttles", "color": "#ff7f0e" }]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "Lambda Concurrent Executions",
+        "region": "us-east-1",
+        "metrics": [
+          ["AWS/Lambda", "ConcurrentExecutions", { "stat": "Maximum", "label": "Concurrent" }]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "API Gateway Requests",
+        "region": "us-east-1",
+        "metrics": [["AWS/ApiGateway", "Count", { "stat": "Sum", "label": "Total Requests" }]],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "API Gateway Latency (p50, p95, p99)",
+        "region": "us-east-1",
+        "metrics": [
+          ["AWS/ApiGateway", "Latency", { "stat": "p50", "label": "p50" }],
+          ["...", { "stat": "p95", "label": "p95" }],
+          ["...", { "stat": "p99", "label": "p99" }]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Milliseconds"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "API Gateway 4xx Errors (Client Errors)",
+        "region": "us-east-1",
+        "metrics": [
+          [
+            "AWS/ApiGateway",
+            "4XXError",
+            { "stat": "Sum", "label": "Client Errors", "color": "#ff7f0e" }
+          ]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "API Gateway 5xx Errors (Server Errors)",
+        "region": "us-east-1",
+        "metrics": [
+          [
+            "AWS/ApiGateway",
+            "5XXError",
+            { "stat": "Sum", "label": "Server Errors", "color": "#d62728" }
+          ]
+        ],
+        "period": 300,
+        "yAxis": {
+          "left": {
+            "label": "Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "properties": {
+        "title": "Recent Lambda Errors",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/react-stocks-backend-prod-ReactStocksFunction'\n| fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 20",
+        "region": "us-east-1"
+      }
+    }
+  ]
+}

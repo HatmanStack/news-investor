@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Tesla Raises Full-Year Guidance on Strong Demand",
+    "description": "Tesla Inc. raised its full-year revenue guidance to $100 billion from $95 billion, citing strong demand for electric vehicles and production improvements.",
+    "expectedEventType": "GUIDANCE",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Apple Lowers Q2 Revenue Outlook Due to Supply Constraints",
+    "description": "Apple Inc. reduced its second-quarter revenue forecast to $90-92 billion from previous guidance of $95-97 billion due to ongoing supply chain challenges.",
+    "expectedEventType": "GUIDANCE",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Netflix Reaffirms Subscriber Growth Projections",
+    "description": "Netflix reaffirmed its full-year guidance, expecting to add 20 million new subscribers despite increased competition in streaming.",
+    "expectedEventType": "GUIDANCE",
+    "expectedConfidence": ">0.7"
+  }
+]

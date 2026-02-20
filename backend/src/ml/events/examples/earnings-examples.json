@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Apple Reports Q1 Earnings Beat",
+    "description": "Apple Inc. reported quarterly earnings of $1.25 per share, beating analyst estimates of $1.15. Revenue grew 15% year-over-year to $95 billion.",
+    "expectedEventType": "EARNINGS",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Tesla Misses EPS Expectations Despite Revenue Growth",
+    "description": "Tesla Inc. reported Q4 earnings of $0.85 per share, missing expectations of $1.10, though revenue increased 20% to $25 billion.",
+    "expectedEventType": "EARNINGS",
+    "expectedConfidence": ">0.8"
+  },
+  {
+    "title": "Microsoft Delivers Strong Fiscal Year Results",
+    "description": "Microsoft Corporation posted full-year profit of $72 billion, exceeding analyst forecasts on cloud computing strength.",
+    "expectedEventType": "EARNINGS",
+    "expectedConfidence": ">0.7"
+  }
+]

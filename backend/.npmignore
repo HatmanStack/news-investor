@@ -1,0 +1,48 @@
+# ONNX models - loaded from S3 at runtime
+models/
+*.onnx
+
+# Development files
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# TypeScript build output (SAM doesn't need this)
+dist/
+*.js.map
+src/
+
+# Local config
+.env*
+.deploy-config.json
+samconfig.toml
+
+# IDE
+.idea/
+.vscode/
+
+# Tests
+tests/
+*_test.py
+test_*.py
+*.test.ts
+*.spec.ts
+
+# ML service (separate stack)
+services/
+
+# Scripts not needed at runtime
+scripts/
+
+# Documentation
+*.md
+docs/
+
+# SAM/AWS config files
+.aws-sam/
+template.yaml
+ml-template*.yaml
+.samignore
+Dockerfile*

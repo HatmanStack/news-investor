@@ -1,0 +1,54 @@
+{
+  "name": "news-investor-backend",
+  "version": "2.0.0",
+  "description": "AWS Lambda backend for NewsInvestor - yfinance stock data, Finnhub news, DynamoDB caching",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/index.js --external:@aws-sdk/*",
+    "build:watch": "npm run build -- --watch",
+    "test": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js",
+    "test:watch": "npm run test -- --watch",
+    "test:coverage": "npm run test -- --coverage",
+    "test:integration": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --testPathPattern=integration",
+    "test:e2e": "node --experimental-vm-modules ../node_modules/jest/bin/jest.js --config e2e/jest.config.e2e.js --runInBand",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "clean": "rm -rf dist coverage",
+    "warm-cache": "tsx scripts/warm-cache.ts",
+    "create-dashboard": "./scripts/create-dashboard.sh",
+    "deploy": "./scripts/deploy.sh",
+    "validate": "./scripts/validate.sh",
+    "logs": "./scripts/logs.sh",
+    "update-env": "./scripts/update-env.sh"
+  },
+  "keywords": [
+    "aws-lambda",
+    "api-gateway",
+    "serverless",
+    "stocks",
+    "backend"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.931.0",
+    "@aws-sdk/lib-dynamodb": "^3.931.0",
+    "sentiment": "^5.0.2",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^20.17.0",
+    "@types/sentiment": "^5.0.4",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.16.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.18.0"
+  }
+}

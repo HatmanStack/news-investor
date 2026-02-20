@@ -1,0 +1,22 @@
+{
+  "workspaces": {
+    "frontend": {
+      "entry": [
+        "app/**/*.tsx",
+        "src/hooks/*.ts",
+        "src/contexts/*.tsx",
+        "src/database/database.ts",
+        "src/database/index.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"],
+      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}"]
+    },
+    "backend": {
+      "entry": ["scripts/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["**/__tests__/**", "**/*.test.ts"]
+    }
+  },
+  "ignoreDependencies": ["babel-preset-expo", "eslint-config-expo"],
+  "ignoreExportsUsedInFile": true
+}

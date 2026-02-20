@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Apple Unveils New iPhone 15 with Advanced Camera Features",
+    "description": "Apple Inc. unveiled the iPhone 15 with improved camera technology, longer battery life, and USB-C charging. The device will be available starting September 22.",
+    "expectedEventType": "PRODUCT_LAUNCH",
+    "expectedConfidence": ">0.7"
+  },
+  {
+    "title": "Tesla Introduces Updated Autopilot with Enhanced Safety",
+    "description": "Tesla announced the rollout of an updated Autopilot system featuring enhanced safety features and improved lane-keeping capabilities.",
+    "expectedEventType": "PRODUCT_LAUNCH",
+    "expectedConfidence": ">0.7"
+  },
+  {
+    "title": "Microsoft Launches AI-Powered Copilot for Office 365",
+    "description": "Microsoft introduced Copilot, an AI assistant integrated into Office 365 applications, designed to boost productivity through natural language commands.",
+    "expectedEventType": "PRODUCT_LAUNCH",
+    "expectedConfidence": ">0.7"
+  }
+]

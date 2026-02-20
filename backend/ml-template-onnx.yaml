@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Financial Sentiment Analysis Service (ONNX Runtime)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+  ModelBucket:
+    Type: String
+    Description: S3 bucket containing the ONNX model (created by deploy.js)
+
+  ModelPrefix:
+    Type: String
+    Default: ''
+    Description: S3 key prefix for model files (stack-specific)
+
+Resources:
+  # Lambda Function
+  SentimentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-sentiment'
+      Description: Financial sentiment analysis using ONNX Runtime
+      Runtime: python3.13
+      Handler: handler.handler
+      CodeUri: services/ml/
+      Timeout: 60
+      MemorySize: 1024
+      EphemeralStorage:
+        Size: 512
+      Environment:
+        Variables:
+          ML_MODEL_BUCKET: !Ref ModelBucket
+          ONNX_MODEL_KEY: !Sub '${ModelPrefix}/distilroberta-financial.onnx'
+          TOKENIZER_KEY: !Sub '${ModelPrefix}/tokenizer/tokenizer.json'
+          API_STAGE: !Ref Environment
+          LOG_LEVEL: INFO
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ModelBucket
+      Events:
+        SentimentApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SentimentApi
+            Path: /{proxy+}
+            Method: ANY
+        RootApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SentimentApi
+            Path: /
+            Method: ANY
+      Tags:
+        Service: ml-sentiment
+        Environment: !Ref Environment
+
+  # HTTP API Gateway
+  SentimentApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub 'Financial Sentiment API - ${AWS::StackName}'
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        MaxAge: 300
+      Tags:
+        Service: ml-sentiment
+        Environment: !Ref Environment
+
+  # CloudWatch Log Group
+  SentimentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-sentiment'
+      RetentionInDays: 14
+
+  # CloudWatch Alarms
+  SentimentErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-errors'
+      AlarmDescription: Alert when error rate exceeds threshold
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SentimentFunction
+      TreatMissingData: notBreaching
+
+  SentimentDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-duration'
+      AlarmDescription: Alert when average duration exceeds 10 seconds
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SentimentFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  SentimentApiUrl:
+    Description: API Gateway endpoint URL for sentiment service
+    Value: !Sub 'https://${SentimentApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SentimentApiUrl'
+
+  FunctionArn:
+    Description: Sentiment Lambda Function ARN
+    Value: !GetAtt SentimentFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+
+  FunctionName:
+    Description: Sentiment Lambda Function Name
+    Value: !Ref SentimentFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionName'

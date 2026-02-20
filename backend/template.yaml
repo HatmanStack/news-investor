@@ -1,0 +1,519 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: NewsInvestor Backend - Lambda API for stock data (yfinance) and Finnhub news
+
+Parameters:
+  FinnhubApiKey:
+    Type: String
+    Description: Finnhub API key for news data
+
+  AlphaVantageApiKey:
+    Type: String
+    Description: Alpha Vantage API key for historical news (optional fallback)
+    Default: ''
+
+  # SECURITY NOTE: Default '*' is intentional for this personal/demo app.
+  # With no authentication, CORS provides no security benefit (nothing to protect
+  # via same-origin policy). Configure via .env.deploy for production if needed.
+  # See CLAUDE.md "Security Decisions" for full rationale.
+  AllowedOrigins:
+    Type: String
+    Description: Comma-separated list of allowed CORS origins (e.g., https://example.com,https://www.example.com). Use '*' for development only.
+    Default: '*'
+
+  DistilFinBERTApiUrl:
+    Type: String
+    Description: URL of the DistilFinBERT ML service API
+    Default: ''
+
+  # --- Optimization Parameters ---
+
+  # Lambda Configuration Parameters
+  StocksMemory:
+    Type: Number
+    Default: 512
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory for stocks endpoint (I/O bound)
+
+  StocksTimeout:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 900
+    Description: Timeout for stocks endpoint
+
+  NewsMemory:
+    Type: Number
+    Default: 512
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory for news endpoint (I/O bound)
+
+  NewsTimeout:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    MaxValue: 900
+    Description: Timeout for news endpoint
+
+  SearchMemory:
+    Type: Number
+    Default: 256
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory for search endpoint (Lightweight)
+
+  SearchTimeout:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 900
+    Description: Timeout for search endpoint
+
+  SentimentMemory:
+    Type: Number
+    Default: 1536
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory for sentiment endpoint (CPU intensive)
+
+  SentimentTimeout:
+    Type: Number
+    Default: 120
+    MinValue: 1
+    MaxValue: 900
+    Description: Timeout for sentiment endpoint
+
+  PredictMemory:
+    Type: Number
+    Default: 2048
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory for predict endpoint (ML Training)
+
+  PredictTimeout:
+    Type: Number
+    Default: 120
+    MinValue: 1
+    MaxValue: 900
+    Description: Timeout for predict endpoint
+
+Globals:
+  Function:
+    # Set to max required for now since we use single function
+    Timeout: !Ref PredictTimeout
+    MemorySize: !Ref PredictMemory
+    Runtime: nodejs24.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        NODE_ENV: production
+        LOG_LEVEL: INFO
+    Tracing: Active # Enable X-Ray tracing for debugging
+
+Resources:
+  # ============================================================
+  # Unified DynamoDB Table (Single-Table Design)
+  # ============================================================
+  # See docs/plans/Phase-0.md ADR-003 for design rationale
+  #
+  # This table consolidates 7 previous tables into one using composite keys:
+  # - PK: Entity type prefix + identifier (e.g., STOCK#AAPL, NEWS#AAPL, JOB#id)
+  # - SK: Context-specific sort key (e.g., DATE#2024-01-15, HASH#abc123, META)
+  #
+  # Entity Types:
+  # - STOCK#ticker + DATE#date: Stock price cache (TTL: 7-90 days)
+  # - NEWS#ticker + HASH#hash: News article cache (TTL: 7 days)
+  # - SENT#ticker + HASH#hash: Sentiment analysis cache (TTL: 30 days)
+  # - JOB#jobId + META: Sentiment job status (TTL: 1 day)
+  # - HIST#ticker + DATE#date: Historical price data (persistent)
+  # - ARTICLE#ticker + HASH#hash#DATE#date: Article analysis (persistent)
+  # - DAILY#ticker + DATE#date: Daily sentiment aggregate (persistent)
+  # - CIRCUIT#service + STATE: Circuit breaker state (persistent)
+  ReactStocksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-Table'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: ttl
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: news-investor
+        - Key: Design
+          Value: single-table
+
+  # ============================================================
+  # API Gateway v2 HTTP API
+  # ============================================================
+  ReactStocksApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      ProtocolType: HTTP
+      # CORS configuration - see AllowedOrigins parameter for security rationale
+      CorsConfiguration:
+        AllowOrigins: !Split [',', !Ref AllowedOrigins]
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        MaxAge: 300
+      Tags:
+        Project: news-investor
+
+  # API Gateway Stage
+  ReactStocksApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      StageName: $default
+      AutoDeploy: true
+
+  # Lambda Integration (Node.js - news, sentiment, predict)
+  ReactStocksIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ReactStocksFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  # Lambda Integration (Python - stocks, search)
+  PythonStocksIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt PythonStocksFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  # Routes
+  StocksRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /stocks'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
+
+  NewsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /news'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  SearchRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /search'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
+
+  SentimentPostRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /sentiment'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  SentimentGetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /sentiment'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  SentimentJobRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /sentiment/job/{jobId}'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  SentimentArticlesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /sentiment/articles'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  PredictRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /predict'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  BatchStocksRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /batch/stocks'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
+
+  BatchNewsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /batch/news'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  BatchSentimentRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /batch/sentiment'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  # Lambda Permission for API Gateway (Node.js)
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReactStocksFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ReactStocksApi}/*'
+
+  # Lambda Permission for API Gateway (Python)
+  PythonApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PythonStocksFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ReactStocksApi}/*'
+
+  # ============================================================
+  # Lambda Functions
+  # ============================================================
+
+  # Python Lambda Function for Stock Data (yfinance)
+  PythonStocksFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-stocks'
+      CodeUri: python/
+      Handler: index.handler
+      Runtime: python3.13
+      MemorySize: !Ref StocksMemory
+      Timeout: !Ref StocksTimeout
+      Description: Stock data API using yfinance (replaces Tiingo)
+      Environment:
+        Variables:
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          DYNAMODB_TABLE_NAME: !Ref ReactStocksTable
+          LOG_LEVEL: INFO
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+              Resource:
+                - !GetAtt ReactStocksTable.Arn
+      Tracing: Active
+
+  # NOTE: No API authentication by design. This is a personal/demo app with:
+  # - No user accounts or private data
+  # - Read-only/compute-only endpoints (no destructive operations)
+  # - Cost bounded by Lambda concurrency and CloudWatch alarms
+  # See CLAUDE.md "Security Decisions" for full rationale.
+  ReactStocksFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-api'
+      CodeUri: ./
+      Handler: dist/index.handler
+      Description: Backend proxy for Finnhub news and ML services
+      Environment:
+        Variables:
+          FINNHUB_API_KEY: !Ref FinnhubApiKey
+          ALPHA_VANTAGE_API_KEY: !Ref AlphaVantageApiKey
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          DYNAMODB_TABLE_NAME: !Ref ReactStocksTable
+          PREDICTION_FUNCTION_NAME: !Sub '${AWS::StackName}-api'
+          DISTILFINBERT_API_URL: !Ref DistilFinBERTApiUrl
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+              Resource:
+                - !GetAtt ReactStocksTable.Arn
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-api'
+
+  # ============================================================
+  # CloudWatch Alarms & Monitoring
+  # ============================================================
+
+  # SNS Topic for Cost Anomaly Notifications
+  CostAnomalySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-CostAnomalyAlerts'
+      DisplayName: 'NewsInvestor Cost Alerts'
+      Tags:
+        - Key: Project
+          Value: news-investor
+
+  # CloudWatch Alarms
+  LambdaInvocationsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Lambda invocations exceeded expected threshold'
+      MetricName: Invocations
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${AWS::StackName}-api'
+      Statistic: Sum
+      Period: 86400 # 1 day
+      EvaluationPeriods: 1
+      Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  DynamoDBReadUnitsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'DynamoDB read units exceeded expected threshold'
+      MetricName: ConsumedReadCapacityUnits
+      Namespace: AWS/DynamoDB
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ReactStocksTable
+      Statistic: Sum
+      Period: 86400 # 1 day
+      EvaluationPeriods: 1
+      Threshold: 50000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+      OKActions:
+        - !Ref CostAnomalySNSTopic
+
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Lambda average duration exceeded threshold - potential cold starts or performance issues'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${AWS::StackName}-api'
+      Statistic: Average
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 3
+      Threshold: 5000 # 5 seconds average indicates issues
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Lambda errors exceeded threshold'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${AWS::StackName}-api'
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  LambdaThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Lambda throttles detected - consider increasing concurrency'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub '${AWS::StackName}-api'
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+Outputs:
+  ReactStocksApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ReactStocksApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  ReactStocksFunctionArn:
+    Description: Lambda Function ARN (Node.js - news, sentiment, predict)
+    Value: !GetAtt ReactStocksFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+
+  PythonStocksFunctionArn:
+    Description: Lambda Function ARN (Python - stocks, search)
+    Value: !GetAtt PythonStocksFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-PythonFunctionArn'
+
+  ReactStocksTableArn:
+    Description: ARN of unified DynamoDB table
+    Value: !GetAtt ReactStocksTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TableArn'
+
+  ReactStocksTableName:
+    Description: Name of unified DynamoDB table
+    Value: !Ref ReactStocksTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TableName'
+
+  CostAnomalySNSTopicArn:
+    Description: SNS Topic ARN for cost anomaly alerts
+    Value: !Ref CostAnomalySNSTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-CostAnomalySNSTopicArn'
