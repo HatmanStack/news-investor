@@ -7,18 +7,18 @@
         "src/contexts/*.tsx",
         "src/database/database.ts",
         "src/database/index.ts",
-        "src/features/tier/hooks/useCheckout.ts"
+        "src/features/tier/index.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"],
       "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}"]
     },
     "backend": {
-      "entry": ["scripts/*.ts"],
+      "entry": ["scripts/*.ts", "src/utils/dynamodb.util.ts"],
       "project": ["src/**/*.ts"],
       "ignore": ["**/__tests__/**", "**/*.test.ts"]
     }
   },
   "ignore": [".sync/**"],
-  "ignoreDependencies": ["babel-preset-expo", "eslint-config-expo"],
+  "ignoreDependencies": ["babel-preset-expo", "eslint-config-expo", "amazon-cognito-identity-js"],
   "ignoreExportsUsedInFile": true
 }

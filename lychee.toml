@@ -17,6 +17,8 @@ exclude = [
   "https://query2\\.finance\\.yahoo\\.com",
   # localhost URLs (only valid during local dev)
   "http://localhost",
+  # Private pro repo (404 when checked from community edition)
+  "https://github\\.com/HatmanStack/news-investor-pro",
 ]
 
 # Timeout per request
