@@ -18,6 +18,7 @@ import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 
 // Contexts
+import { TierProvider } from '../src/features/tier';
 import { StockProvider } from '../src/contexts/StockContext';
 
 // Theme
@@ -131,12 +132,14 @@ export default function RootLayout() {
           <PaperProvider theme={theme}>
             <Portal.Host>
               <QueryClientProvider client={queryClient}>
-                <StockProvider>
-                  <ToastProvider>
-                    <Slot />
-                    <StatusBar style="light" />
-                  </ToastProvider>
-                </StockProvider>
+                <TierProvider>
+                  <StockProvider>
+                    <ToastProvider>
+                      <Slot />
+                      <StatusBar style="light" />
+                    </ToastProvider>
+                  </StockProvider>
+                </TierProvider>
               </QueryClientProvider>
             </Portal.Host>
           </PaperProvider>

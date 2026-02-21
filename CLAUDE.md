@@ -135,7 +135,7 @@ FINNHUB_API_KEY=your_key
 ALLOWED_ORIGINS=*
 ```
 
-Full list with all optional variables: [docs/API.md -- Environment Variables](docs/API.md#environment-variables)
+Full list with all optional variables: [docs/API.md — Environment Variables](docs/API.md#environment-variables)
 
 ## Code Quality Tools
 
@@ -146,7 +146,7 @@ Full list with all optional variables: [docs/API.md -- Environment Variables](do
 
 ## Security Decisions
 
-Intentional design choices. Automated reviewers may flag these -- this documents the rationale.
+Intentional design choices. Automated reviewers may flag these — this documents the rationale.
 
 ### No API Authentication (Intentional)
 

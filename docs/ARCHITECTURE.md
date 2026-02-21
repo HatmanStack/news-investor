@@ -203,6 +203,7 @@ File: `frontend/src/ml/prediction/prediction.service.ts`
 ```text
 frontend/src/
 ├── hooks/useSentimentData.ts          # Data gathering, alignment, prediction trigger
+├── services/api/backendClient.ts      # Shared axios client
 ├── ml/prediction/
 │   ├── prediction.service.ts          # Ensemble orchestration, F-test diagnostics
 │   ├── preprocessing.ts               # Feature matrices (8-feat, 4-feat), labels

@@ -113,7 +113,7 @@ describe('useSentimentData', () => {
     expect(latest.nextDayProbability).toBe(0.7);
   });
 
-  it('attempts predictions even with fewer than 25 records', async () => {
+  it('skips predictions with fewer than 25 records', async () => {
     const mockData = Array.from({ length: 20 }, (_, i) => ({
       date: `2025-01-${String(i + 1).padStart(2, '0')}`,
       ticker: 'AAPL',
@@ -122,13 +122,11 @@ describe('useSentimentData', () => {
       sentimentNumber: 0.3,
     }));
     fetchCombinedSentiment.mockResolvedValue(mockData);
-    generateBrowserPredictions.mockResolvedValue(null);
 
     const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // Predictions are always attempted — the function handles data sufficiency internally
-    expect(generateBrowserPredictions).toHaveBeenCalled();
+    expect(generateBrowserPredictions).not.toHaveBeenCalled();
   });
 
   it('is disabled when ticker is empty', () => {

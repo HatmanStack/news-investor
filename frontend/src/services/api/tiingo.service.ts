@@ -3,13 +3,11 @@
  * Fetches stock prices and company metadata from Lambda backend
  */
 
-import axios, { AxiosInstance, isAxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import type { TiingoStockPrice, TiingoSymbolMetadata, TiingoSearchResult } from './tiingo.types';
 import type { StockDetails, SymbolDetails } from '@/types/database.types';
-import { Environment } from '@/config/environment';
 import { logger } from '@/utils/logger';
-
-const BACKEND_TIMEOUT = 30000;
+import { createBackendClient } from './backendClient';
 
 function handleApiError(error: unknown, context: string, ticker?: string): never {
   if (isAxiosError(error)) {
@@ -22,20 +20,6 @@ function handleApiError(error: unknown, context: string, ticker?: string): never
   }
   logger.error(`[TiingoService] ${context}:`, error);
   throw new Error(`${context}: ${error}`);
-}
-
-function createBackendClient(): AxiosInstance {
-  if (!Environment.BACKEND_URL) {
-    throw new Error('Backend URL not configured. Set EXPO_PUBLIC_BACKEND_URL in .env file.');
-  }
-
-  return axios.create({
-    baseURL: Environment.BACKEND_URL,
-    timeout: BACKEND_TIMEOUT,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
 }
 
 async function retryWithBackoff<T>(
@@ -152,9 +136,7 @@ export async function searchTickers(query: string): Promise<TiingoSearchResult[]
   const fetchFn = async () => {
     try {
       logger.debug(`[TiingoService] Searching for: ${trimmedQuery}`);
-      logger.debug(
-        `[TiingoService] Backend URL: ${Environment.BACKEND_URL}/search?query=${trimmedQuery}`,
-      );
+      logger.debug(`[TiingoService] Searching: /search?query=${trimmedQuery}`);
       const startTime = Date.now();
       const response = await client.get<{ data: TiingoSearchResult[] }>('/search', {
         params: { query: trimmedQuery },

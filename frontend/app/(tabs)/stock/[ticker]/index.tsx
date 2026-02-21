@@ -89,7 +89,6 @@ export default function PriceScreen() {
   }, [stockData]);
 
   // DataTable columns for price history
-  // Color coding: compare close vs open (green = gain, red = loss) matching PriceListItem behavior
   const priceColumns: DataTableColumn<StockDetails>[] = useMemo(
     () => [
       {
@@ -99,12 +98,7 @@ export default function PriceScreen() {
         sortable: true,
         getValue: (item) => item.date,
         render: (item) => (
-          <MonoText
-            variant="price"
-            style={{ fontSize: 12 }}
-            positive={item.close > item.open}
-            negative={item.close < item.open}
-          >
+          <MonoText variant="price" style={{ fontSize: 12 }}>
             {item.date}
           </MonoText>
         ),
@@ -117,12 +111,7 @@ export default function PriceScreen() {
         sortable: true,
         getValue: (item) => item.open,
         render: (item) => (
-          <MonoText
-            variant="price"
-            style={{ fontSize: 12 }}
-            positive={item.close > item.open}
-            negative={item.close < item.open}
-          >
+          <MonoText variant="price" style={{ fontSize: 12 }}>
             ${item.open.toFixed(2)}
           </MonoText>
         ),
@@ -135,12 +124,7 @@ export default function PriceScreen() {
         sortable: true,
         getValue: (item) => item.high,
         render: (item) => (
-          <MonoText
-            variant="price"
-            style={{ fontSize: 12 }}
-            positive={item.close > item.open}
-            negative={item.close < item.open}
-          >
+          <MonoText variant="price" style={{ fontSize: 12 }} positive>
             ${item.high.toFixed(2)}
           </MonoText>
         ),
@@ -153,12 +137,7 @@ export default function PriceScreen() {
         sortable: true,
         getValue: (item) => item.low,
         render: (item) => (
-          <MonoText
-            variant="price"
-            style={{ fontSize: 12 }}
-            positive={item.close > item.open}
-            negative={item.close < item.open}
-          >
+          <MonoText variant="price" style={{ fontSize: 12 }} negative>
             ${item.low.toFixed(2)}
           </MonoText>
         ),
@@ -171,12 +150,7 @@ export default function PriceScreen() {
         sortable: true,
         getValue: (item) => item.close,
         render: (item) => (
-          <MonoText
-            variant="price"
-            style={{ fontSize: 12 }}
-            positive={item.close > item.open}
-            negative={item.close < item.open}
-          >
+          <MonoText variant="price" style={{ fontSize: 12 }}>
             ${item.close.toFixed(2)}
           </MonoText>
         ),

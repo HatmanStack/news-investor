@@ -8,6 +8,7 @@ import { View, StyleSheet, Linking } from 'react-native';
 import { Card, Text, Chip } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useToast } from '@/components/common';
+import { FeatureGate } from '@/features/tier';
 import type { WordCountDetails } from '@/types/database.types';
 import { formatShortDate } from '@/utils/date/dateUtils';
 
@@ -178,13 +179,22 @@ export const SingleWordItem: React.FC<SingleWordItemProps> = React.memo(({ item 
             {item.title}
           </Text>
         )}
-        <Text
-          variant="bodySmall"
-          style={[styles.body, { color: theme.colors.onSurfaceVariant }]}
-          numberOfLines={2}
+        <FeatureGate
+          feature="full_article_body"
+          fallback={
+            <Text
+              variant="bodySmall"
+              style={[styles.body, { color: theme.colors.onSurfaceVariant }]}
+              numberOfLines={2}
+            >
+              {item.body || 'No description available'}
+            </Text>
+          }
         >
-          {item.body || 'No description available'}
-        </Text>
+          <Text variant="bodySmall" style={[styles.body, { color: theme.colors.onSurfaceVariant }]}>
+            {item.body || 'No description available'}
+          </Text>
+        </FeatureGate>
       </Card.Content>
     </Card>
   );

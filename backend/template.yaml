@@ -134,6 +134,8 @@ Resources:
   # - CIRCUIT#service + STATE: Circuit breaker state (persistent)
   ReactStocksTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub '${AWS::StackName}-Table'
       BillingMode: PAY_PER_REQUEST
@@ -336,7 +338,7 @@ Resources:
                 - !GetAtt ReactStocksTable.Arn
       Tracing: Active
 
-  # NOTE: No API authentication by design. This is a personal/demo app with:
+  # NOTE: No API authentication by design. This is a community app with:
   # - No user accounts or private data
   # - Read-only/compute-only endpoints (no destructive operations)
   # - Cost bounded by Lambda concurrency and CloudWatch alarms

@@ -29,6 +29,8 @@ All endpoints served via API Gateway v2 (HTTP API). Base URL stored in `frontend
 | POST   | `/batch/news`            | Bulk news for multiple tickers      |
 | POST   | `/batch/sentiment`       | Bulk sentiment for multiple tickers |
 
+All endpoints are public. No authentication required.
+
 ### Sentiment Job Flow
 
 ```text

@@ -44,6 +44,8 @@ export function SearchResultItem({
       accessibilityRole="button"
     >
       <View style={{ padding: cardPadding * 0.8 }}>
+        {' '}
+        {/* Reduced padding for compact display */}
         <View style={styles.container}>
           <View style={styles.leftContent}>
             <View style={styles.tickerRow}>

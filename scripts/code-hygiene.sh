@@ -47,8 +47,8 @@ echo ""
 echo -e "${CYAN}[1/6] TypeScript dead code analysis (knip)...${NC}"
 KNIP_OUTPUT=$(npx knip --no-exit-code 2>&1 || true)
 
-UNUSED_DEPS=$(echo "$KNIP_OUTPUT" | grep -c "Unused dependencies" || echo "0")
-UNUSED_EXPORTS=$(echo "$KNIP_OUTPUT" | grep -c "backend\|frontend" | head -1 || echo "0")
+UNUSED_DEPS=$(echo "$KNIP_OUTPUT" | grep -c "Unused dependencies" || true)
+UNUSED_EXPORTS=$(echo "$KNIP_OUTPUT" | grep -c "backend\|frontend" || true)
 
 if echo "$KNIP_OUTPUT" | grep -q "^Unused"; then
     echo -e "${YELLOW}  Found unused TypeScript code:${NC}"
@@ -109,14 +109,14 @@ echo ""
 echo -e "${CYAN}[4/6] Unused import check...${NC}"
 
 # TypeScript (using ESLint no-unused-vars)
-TS_UNUSED_IMPORTS=$((cd frontend && npx expo lint 2>&1 || true) | \
-    grep -c "no-unused-vars" || echo "0")
-TS_UNUSED_IMPORTS_BACKEND=$((cd backend && npm run lint 2>&1 || true) | \
-    grep -c "no-unused-vars" || echo "0")
+TS_UNUSED_IMPORTS=$( (cd frontend && npx expo lint 2>&1 || true) | \
+    grep -c "no-unused-vars" || true)
+TS_UNUSED_IMPORTS_BACKEND=$( (cd backend && npm run lint 2>&1 || true) | \
+    grep -c "no-unused-vars" || true)
 
 # Python (using ruff F401)
 PY_UNUSED_IMPORTS=$(uvx ruff check backend/python backend/services/ml \
-    --select F401 2>&1 | grep -c "F401" || echo "0")
+    --select F401 2>&1 | grep -c "F401" || true)
 
 TOTAL_UNUSED=$((TS_UNUSED_IMPORTS + TS_UNUSED_IMPORTS_BACKEND + PY_UNUSED_IMPORTS))
 echo "  Unused imports: $TOTAL_UNUSED"
@@ -137,10 +137,10 @@ echo ""
 # ============================================================================
 echo -e "${CYAN}[5/6] TypeScript lint check...${NC}"
 
-FRONTEND_LINT_ERRORS=$((cd frontend && npx expo lint 2>&1 || true) | \
-    grep -c "error" || echo "0")
-BACKEND_LINT_ERRORS=$((cd backend && npm run lint 2>&1 || true) | \
-    grep -c "error" || echo "0")
+FRONTEND_LINT_ERRORS=$( (cd frontend && npx expo lint 2>&1 || true) | \
+    grep -c "error" || true)
+BACKEND_LINT_ERRORS=$( (cd backend && npm run lint 2>&1 || true) | \
+    grep -c "error" || true)
 
 if [ "$FRONTEND_LINT_ERRORS" -gt 0 ] || [ "$BACKEND_LINT_ERRORS" -gt 0 ]; then
     echo -e "${RED}  ✗ Lint errors found${NC}"
@@ -156,7 +156,7 @@ echo ""
 echo -e "${CYAN}[6/6] Python lint check...${NC}"
 
 RUFF_OUTPUT=$(uvx ruff check backend/python backend/services/ml 2>&1 || true)
-RUFF_ERRORS=$(echo "$RUFF_OUTPUT" | grep -cE "^backend" || echo "0")
+RUFF_ERRORS=$(echo "$RUFF_OUTPUT" | grep -cE "^backend" || true)
 
 if [ "$RUFF_ERRORS" -gt 0 ]; then
     echo -e "${RED}  ✗ Ruff errors: $RUFF_ERRORS${NC}"

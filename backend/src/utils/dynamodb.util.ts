@@ -52,7 +52,7 @@ const dynamoDb = DynamoDBDocumentClient.from(client, {
  *
  * Uses DYNAMODB_TABLE_NAME env var, falling back to stack-based naming.
  */
-function getTableName(): string {
+export function getTableName(): string {
   const tableName = process.env.DYNAMODB_TABLE_NAME;
   if (!tableName) {
     throw new Error('DYNAMODB_TABLE_NAME environment variable not set');
@@ -370,4 +370,12 @@ export async function updateItem(
   };
 
   await dynamoDb.send(new UpdateCommand(params));
+}
+
+/**
+ * Get the shared DynamoDB Document Client instance.
+ * Used by repositories that need custom update expressions (e.g., ADD for counters).
+ */
+export function getDynamoDbClient(): DynamoDBDocumentClient {
+  return dynamoDb;
 }

@@ -4,11 +4,8 @@
  * Handles job triggering, status polling, and result fetching
  */
 
-import axios, { AxiosInstance, isAxiosError } from 'axios';
-import { Environment } from '@/config/environment';
-
-// Backend API configuration
-const BACKEND_TIMEOUT = 30000; // 30 seconds (Lambda handles retries)
+import { isAxiosError } from 'axios';
+import { createBackendClient } from './backendClient';
 
 /**
  * Request to trigger sentiment analysis
@@ -136,23 +133,6 @@ export interface SentimentResultsResponse {
     twoWeek: { direction: 'up' | 'down'; probability: number };
     oneMonth: { direction: 'up' | 'down'; probability: number };
   };
-}
-
-/**
- * Create axios instance for backend API
- */
-function createBackendClient(): AxiosInstance {
-  if (!Environment.BACKEND_URL) {
-    throw new Error('Backend URL not configured. Set EXPO_PUBLIC_BACKEND_URL in .env file.');
-  }
-
-  return axios.create({
-    baseURL: Environment.BACKEND_URL,
-    timeout: BACKEND_TIMEOUT,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
 }
 
 /**

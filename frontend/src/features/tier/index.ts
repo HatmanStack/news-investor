@@ -13,9 +13,10 @@ import React from 'react';
 // ---------------------------------------------------------------------------
 
 export interface TierInfo {
-  tier: 'community';
+  tier: 'free';
   features: Record<string, boolean>;
   quotas: Record<string, never>;
+  usage: Record<string, never>;
   loading: false;
   error: null;
   isFeatureEnabled: (feature: string) => boolean;
@@ -26,9 +27,10 @@ export interface TierInfo {
 // ---------------------------------------------------------------------------
 
 const TIER_VALUE: TierInfo = {
-  tier: 'community',
+  tier: 'free',
   features: {},
   quotas: {} as Record<string, never>,
+  usage: {} as Record<string, never>,
   loading: false,
   error: null,
   isFeatureEnabled: () => true,
@@ -57,7 +59,13 @@ export function useTier(): TierInfo {
 // ---------------------------------------------------------------------------
 
 /** Always renders children — all features enabled in community edition. */
-export function FeatureGate({ children }: { feature: string; children: React.ReactNode }) {
+export function FeatureGate({
+  children,
+}: {
+  feature: string;
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}) {
   return React.createElement(React.Fragment, null, children);
 }
 

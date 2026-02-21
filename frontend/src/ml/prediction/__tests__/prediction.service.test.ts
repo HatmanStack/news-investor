@@ -58,8 +58,7 @@ describe('prediction.service', () => {
     });
 
     it('throws on insufficient data', async () => {
-      // Need fewer than TREND_WINDOW + 2 = 22 to trigger throw
-      const prices = Array.from({ length: 15 }, (_, i) => 100 + i);
+      const prices = Array.from({ length: 30 }, (_, i) => 100 + i);
       await expect(getStockPredictions('AAPL', prices, prices)).rejects.toThrow(
         'Insufficient data',
       );
@@ -107,19 +106,20 @@ describe('prediction.service', () => {
       expect(result.next).not.toBeNull();
     });
 
-    it('produces predictions for all horizons with minimal data', async () => {
-      // 30 days: NEXT has 30-20=10 labels, WEEK subsamples to 1, MONTH has 0
-      // Horizons with < 2 labels fall back to 0.5, rest produce real predictions
-      const n = 30;
+    it('returns null for WEEK/MONTH with insufficient independent samples', async () => {
+      // 50 days: enough for NEXT (50-20=30 labels), but WEEK needs 10 independent
+      // samples (every 10th) from 50-20=30 labels → only 3 independent, not enough
+      const n = 50;
       const closePrices = Array.from({ length: n }, (_, i) => 100 + i);
       const volumes = Array.from({ length: n }, () => 1000000);
 
       const result = await getStockPredictions('SHORT', closePrices, volumes);
 
       expect(result.next).not.toBeNull();
-      // All horizons should have a value (real prediction or 0.5 fallback)
-      expect(result.week).not.toBeNull();
-      expect(result.month).not.toBeNull();
+      // WEEK (10-day horizon) from 30 labels: 30/10 = 3 independent, < 10 required
+      expect(result.week).toBeNull();
+      // MONTH (21-day horizon) from 30-21+1=10 labels: 10/21 < 1, null
+      expect(result.month).toBeNull();
     });
 
     it('produces predictions as 4-decimal strings', async () => {

@@ -16,6 +16,7 @@ import {
 } from '@/services/data/sentimentDataFetcher';
 import { generateBrowserPredictions } from '@/ml/prediction/browserPredictions';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
+import { MIN_SENTIMENT_DATA } from '@/constants/ml.constants';
 
 export interface UseSentimentDataOptions {
   /** Number of days of sentiment data to fetch (default: 30) */
@@ -51,8 +52,7 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
       }
 
       // Step 2: Generate browser-based predictions
-      // Always attempt — generateBrowserPredictions will fetch wider sentiment window if needed
-      {
+      if (sentimentData.length >= MIN_SENTIMENT_DATA) {
         const predictions = await generateBrowserPredictions(ticker, sentimentData, days);
 
         if (predictions) {

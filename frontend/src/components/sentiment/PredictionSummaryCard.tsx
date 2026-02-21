@@ -136,7 +136,7 @@ export const PredictionSummaryCard: React.FC<PredictionSummaryCardProps> = ({
               variant="labelSmall"
               style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}
             >
-              Predictions improve with more data. Try selecting a longer time range.
+              Predictions require at least 29 days of sentiment and price data
             </Text>
           </View>
         )}

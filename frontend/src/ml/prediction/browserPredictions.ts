@@ -3,37 +3,28 @@
  *
  * Coordinates stock data fetching, sentiment alignment, feature extraction,
  * and logistic regression model invocation to produce predictions.
- *
- * Uses an adaptive ensemble: the model blends price-only and sentiment+price
- * predictions based on how much sentiment data is actually available
- * (sentimentAvailability weight). No hard minimum thresholds — use whatever
- * data we have and let the ensemble weighting handle the rest.
  */
 
 import * as StockRepository from '@/database/repositories/stock.repository';
-import * as CombinedWordRepository from '@/database/repositories/combinedWord.repository';
 import { syncStockData } from '@/services/sync/stockDataSync';
 import { formatDateForDB } from '@/utils/date/dateUtils';
 import { subDays } from 'date-fns';
 import { getStockPredictions, parsePredictionResponse } from '@/ml/prediction/prediction.service';
 import type { CombinedWordDetails, EventType } from '@/types/database.types';
 import type { Predictions } from '@/utils/sentiment/dataTransformer';
-import { TREND_WINDOW } from '@/constants/ml.constants';
-
-/** Physical minimum: TREND_WINDOW + 1 label + 1 horizon offset for NEXT */
-const ABSOLUTE_MIN_DATA = TREND_WINDOW + 2;
+import { MIN_SENTIMENT_DATA, MIN_STOCK_DATA } from '@/constants/ml.constants';
 
 /**
  * Generate predictions using browser-based logistic regression.
  *
- * Adaptive approach — no hard data minimums beyond what the feature matrix
- * physically requires. The ensemble weights by sentiment availability:
- * - 0% sentiment → 100% price-only model
- * - Partial sentiment → proportional blend
- * - Full sentiment → full ensemble
+ * Steps:
+ * 1. Validate sentiment data length
+ * 2. Sync and fetch stock price data
+ * 3. Align stock and sentiment by date (with interpolation)
+ * 4. Extract features (prices, volumes, event types, aspect/ML scores)
+ * 5. Run ensemble logistic regression model
  *
- * Per-horizon: if a horizon doesn't have enough labels to train,
- * it falls back to 0.5 (neutral/50-50 prediction).
+ * @returns Predictions or null if insufficient data
  */
 export async function generateBrowserPredictions(
   ticker: string,
@@ -41,26 +32,19 @@ export async function generateBrowserPredictions(
   days: number,
 ): Promise<Predictions | null> {
   try {
-    // Fetch a wide data window regardless of display time range
-    const safeDays = Math.max(days, 90);
+    if (sentimentData.length < MIN_SENTIMENT_DATA) {
+      return null;
+    }
+
+    // Fetch stock data for the user's selected timeframe
+    // Don't override user's selection - let predictions fail naturally if insufficient data
+    // Clamp days to at least 1 to avoid future dates or empty ranges
+    const safeDays = Math.max(1, days);
     const stockEndStr = formatDateForDB(new Date());
     const stockStartStr = formatDateForDB(subDays(new Date(), safeDays));
 
-    // Gather as much sentiment as possible — try wider window if display range is sparse
-    let effectiveSentiment = sentimentData;
-    if (effectiveSentiment.length < 25) {
-      const wideSentiment = await CombinedWordRepository.findByTickerAndDateRange(
-        ticker,
-        stockStartStr,
-        stockEndStr,
-      );
-      if (wideSentiment.length > effectiveSentiment.length) {
-        effectiveSentiment = wideSentiment;
-      }
-    }
-
     try {
-      await syncStockData(ticker, stockStartStr, stockEndStr, ABSOLUTE_MIN_DATA);
+      await syncStockData(ticker, stockStartStr, stockEndStr, MIN_STOCK_DATA);
     } catch {
       // Stock sync failed, using local data
     }
@@ -71,117 +55,93 @@ export async function generateBrowserPredictions(
       stockEndStr,
     );
 
-    if (stockData.length < ABSOLUTE_MIN_DATA) {
+    if (stockData.length < MIN_STOCK_DATA) {
       return null;
     }
 
+    // Sort and align datasets
     const sortedStocks = [...stockData].sort((a, b) => a.date.localeCompare(b.date));
+    const sortedSentiment = [...sentimentData].sort((a, b) => a.date.localeCompare(b.date));
 
-    // Align stock and sentiment data
-    let alignedStocks: typeof sortedStocks;
-    let eventTypes: EventType[];
-    let aspectScores: number[];
-    let mlScores: (number | null)[];
+    const stockByDate = new Map(sortedStocks.map((s) => [s.date, s]));
+    const sentimentByDate = new Map(sortedSentiment.map((s) => [s.date, s]));
 
-    if (effectiveSentiment.length > 0) {
-      // Interpolate sentiment for each trading day
-      const sortedSentiment = [...effectiveSentiment].sort((a, b) =>
-        a.date.localeCompare(b.date),
-      );
-      const stockByDate = new Map(sortedStocks.map((s) => [s.date, s]));
-      const sentimentByDate = new Map(sortedSentiment.map((s) => [s.date, s]));
-      const tradingDays = [...stockByDate.keys()].sort();
-      const sentimentDates = [...sentimentByDate.keys()].sort();
-      const firstSentimentDate = sentimentDates[0]!;
-      const lastSentimentDate = sentimentDates[sentimentDates.length - 1]!;
+    const tradingDays = [...stockByDate.keys()].sort();
+    const sentimentDates = [...sentimentByDate.keys()].sort();
+    const firstSentimentDate = sentimentDates[0];
+    const lastSentimentDate = sentimentDates[sentimentDates.length - 1];
 
-      const trimmedStocks: typeof sortedStocks = [];
-      const trimmedSentiment: typeof sortedSentiment = [];
-
-      for (const tradingDay of tradingDays) {
-        const stock = stockByDate.get(tradingDay)!;
-        let sentiment = sentimentByDate.get(tradingDay);
-
-        if (!sentiment) {
-          if (tradingDay < firstSentimentDate) {
-            sentiment = sentimentByDate.get(firstSentimentDate);
-          } else if (tradingDay > lastSentimentDate) {
-            sentiment = sentimentByDate.get(lastSentimentDate);
-          } else {
-            const priorDates = sentimentDates.filter((d) => d <= tradingDay);
-            const lastPriorDate = priorDates[priorDates.length - 1];
-            if (lastPriorDate) {
-              sentiment = sentimentByDate.get(lastPriorDate);
-            }
-          }
-        }
-
-        if (sentiment) {
-          trimmedStocks.push(stock);
-          trimmedSentiment.push(sentiment);
-        }
-      }
-
-      alignedStocks = trimmedStocks.length >= ABSOLUTE_MIN_DATA ? trimmedStocks : sortedStocks;
-
-      // Extract sentiment features from aligned data (or zeros if alignment failed)
-      const sentimentSource =
-        trimmedStocks.length >= ABSOLUTE_MIN_DATA ? trimmedSentiment : [];
-
-      eventTypes = [];
-      aspectScores = [];
-      mlScores = [];
-
-      for (let i = 0; i < alignedStocks.length; i++) {
-        const day = sentimentSource[i];
-        if (day) {
-          let dominantEvent: EventType = 'GENERAL';
-          if (day.eventCounts) {
-            try {
-              const parsed: unknown = JSON.parse(day.eventCounts);
-              const counts =
-                typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-                  ? (parsed as Record<string, number>)
-                  : {};
-              const nonGeneral = Object.entries(counts).filter(
-                ([t, count]) => t !== 'GENERAL' && typeof count === 'number' && count > 0,
-              );
-              if (nonGeneral.length > 0) {
-                const [type] = nonGeneral.reduce((max, curr) =>
-                  curr[1] > max[1] ? curr : max,
-                );
-                dominantEvent = type as EventType;
-              }
-            } catch {
-              // Use default GENERAL
-            }
-          }
-          eventTypes.push(dominantEvent);
-          aspectScores.push(day.avgAspectScore ?? 0);
-          mlScores.push(day.avgMlScore ?? null);
-        } else {
-          // No sentiment for this day — zeros let sentimentAvailability handle weighting
-          eventTypes.push('GENERAL');
-          aspectScores.push(0);
-          mlScores.push(null);
-        }
-      }
-    } else {
-      // No sentiment at all — pure price-only prediction via ensemble weighting
-      alignedStocks = sortedStocks;
-      eventTypes = sortedStocks.map(() => 'GENERAL' as EventType);
-      aspectScores = sortedStocks.map(() => 0);
-      mlScores = sortedStocks.map(() => null);
-    }
-
-    if (alignedStocks.length < ABSOLUTE_MIN_DATA) {
+    if (!firstSentimentDate || !lastSentimentDate) {
       return null;
     }
 
-    const closePrices = alignedStocks.map((s) => s.close);
-    const volumes = alignedStocks.map((s) => s.volume);
+    // Interpolate sentiment for each trading day
+    const trimmedStocks: typeof sortedStocks = [];
+    const trimmedSentiment: typeof sortedSentiment = [];
 
-    // Run logistic regression ensemble — the model handles partial data adaptively
+    for (const tradingDay of tradingDays) {
+      const stock = stockByDate.get(tradingDay)!;
+      let sentiment = sentimentByDate.get(tradingDay);
+
+      if (!sentiment) {
+        if (tradingDay < firstSentimentDate) {
+          sentiment = sentimentByDate.get(firstSentimentDate);
+        } else if (tradingDay > lastSentimentDate) {
+          sentiment = sentimentByDate.get(lastSentimentDate);
+        } else {
+          const priorDates = sentimentDates.filter((d) => d <= tradingDay);
+          const lastPriorDate = priorDates[priorDates.length - 1];
+          if (lastPriorDate) {
+            sentiment = sentimentByDate.get(lastPriorDate);
+          }
+        }
+      }
+
+      if (sentiment) {
+        trimmedStocks.push(stock);
+        trimmedSentiment.push(sentiment);
+      }
+    }
+
+    if (trimmedStocks.length < MIN_STOCK_DATA) {
+      return null;
+    }
+
+    // Extract features
+    const closePrices = trimmedStocks.map((s) => s.close);
+    const volumes = trimmedStocks.map((s) => s.volume);
+
+    const eventTypes: EventType[] = [];
+    const aspectScores: number[] = [];
+    const mlScores: (number | null)[] = [];
+
+    for (const day of trimmedSentiment) {
+      let dominantEvent: EventType = 'GENERAL';
+      if (day.eventCounts) {
+        try {
+          const parsed: unknown = JSON.parse(day.eventCounts);
+          const counts =
+            typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+              ? (parsed as Record<string, number>)
+              : {};
+          // Filter out GENERAL and entries with count <= 0
+          const nonGeneral = Object.entries(counts).filter(
+            ([t, count]) => t !== 'GENERAL' && typeof count === 'number' && count > 0,
+          );
+          if (nonGeneral.length > 0) {
+            const [type] = nonGeneral.reduce((max, curr) => (curr[1] > max[1] ? curr : max));
+            dominantEvent = type as EventType;
+          }
+        } catch {
+          // Use default GENERAL
+        }
+      }
+      eventTypes.push(dominantEvent);
+      aspectScores.push(day.avgAspectScore ?? 0);
+      mlScores.push(day.avgMlScore ?? null);
+    }
+
+    // Run logistic regression ensemble
     const response = await getStockPredictions(
       ticker,
       closePrices,

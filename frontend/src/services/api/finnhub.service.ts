@@ -4,30 +4,10 @@
  * Backend proxies requests to Finnhub API (API keys secured in Lambda)
  */
 
-import axios, { AxiosInstance, isAxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import type { FinnhubNewsArticle } from './finnhub.types';
 import type { NewsDetails } from '@/types/database.types';
-import { Environment } from '@/config/environment';
-
-// Backend API configuration
-const BACKEND_TIMEOUT = 30000; // 30 seconds (Lambda handles retries)
-
-/**
- * Create axios instance for backend API
- */
-function createBackendClient(): AxiosInstance {
-  if (!Environment.BACKEND_URL) {
-    throw new Error('Backend URL not configured. Set EXPO_PUBLIC_BACKEND_URL in .env file.');
-  }
-
-  return axios.create({
-    baseURL: Environment.BACKEND_URL,
-    timeout: BACKEND_TIMEOUT,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-}
+import { createBackendClient } from './backendClient';
 
 /**
  * Generate simple hash for URL (used for deduplication)

@@ -260,11 +260,10 @@ function DataTableRow<T>({
     scale.value = withSpring(1, { damping: 15 });
   };
 
-  // Separate layout animation (outer) from transform animation (inner)
-  // to avoid Reanimated property conflict on transform
-  const enteringAnim = animate ? FadeInDown.delay(index * 30).springify() : undefined;
+  const AnimatedWrapper = animate ? Animated.View : View;
+  const animationProps = animate ? { entering: FadeInDown.delay(index * 30).springify() } : {};
 
-  const rowContent = (
+  return (
     <Pressable
       onPress={onPress ? () => onPress(item, index) : undefined}
       onPressIn={handlePressIn}
@@ -273,8 +272,10 @@ function DataTableRow<T>({
       onMouseEnter={Platform.OS === 'web' ? () => onHover(rowKey) : undefined}
       onMouseLeave={Platform.OS === 'web' ? () => onHover(null) : undefined}
     >
-      <Animated.View
+      {/* @ts-ignore - animation types */}
+      <AnimatedWrapper
         style={[styles.row, rowStyle, { borderBottomColor: theme.colors.outline }]}
+        {...animationProps}
       >
         {showRowNumber && (
           <View style={[styles.rowNumberColumn, styles.cell]}>
@@ -301,20 +302,9 @@ function DataTableRow<T>({
             )}
           </View>
         ))}
-      </Animated.View>
+      </AnimatedWrapper>
     </Pressable>
   );
-
-  if (enteringAnim) {
-    return (
-      // @ts-ignore - animation types
-      <Animated.View entering={enteringAnim}>
-        {rowContent}
-      </Animated.View>
-    );
-  }
-
-  return rowContent;
 }
 
 function getAlignment(align?: 'left' | 'center' | 'right'): 'flex-start' | 'center' | 'flex-end' {
