@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.2.0] - 2026-02-22
+
+### Added
+
+- **[Pro]** Sentiment velocity indicator — shows rate of change in daily sentiment scores with directional arrows and magnitude badges
+- **[Pro]** Stock notes — per-stock notes with DynamoDB primary storage and local SQLite fallback for offline use; full CRUD with cloud sync on app open
+- **[Pro]** Sector ETF benchmarking — GICS sector-to-SPDR ETF mapping (11 sectors), sector/industry metadata enrichment via yfinance, relative performance comparison on price screen
+- **[Pro]** Earnings calendar — upcoming earnings dates with BMO/AMC/TNS timing, EPS estimates, batch endpoint, DynamoDB cache with 24-hour TTL and empty sentinel for ETFs
+- **[Pro]** Prediction track record — immutable prediction snapshots (`PRED#` DynamoDB entity), on-demand resolution against actual prices, per-horizon accuracy gauges (1d/14d/30d), prediction history with correct/incorrect/pending indicators
+- **[Pro]** `POST /predictions/snapshot` endpoint for browser-side prediction tracking
+- **[Pro]** `GET /predictions/track-record` endpoint with stats aggregation and recent predictions
+- **[Pro]** Notes CRUD endpoints (`GET/POST /notes`, `PUT/DELETE /notes/:noteId`)
+- **[Pro]** Earnings endpoints (`GET /earnings`, `POST /batch/earnings`)
+- Trading day utility functions (weekend-aware date arithmetic, UTC-anchored)
+- SQLite migrations v5 (notes table) and v6 (sector columns on symbol_details)
+- 5 new feature flags: `sentiment_velocity`, `stock_notes`, `sector_benchmarking`, `earnings_calendar`, `prediction_track_record`
+- Implementation plan documentation in `docs/plans/` (Phase 0-3)
+
+### Fixed
+
+- Notes sync: PUT→404 fallback to POST for notes edited before first sync
+- Notes sync: ID mismatch causing duplicate notes after sync (frontend now sends local ID to backend)
+- Notes sync: `createBackendClient()` moved outside sync loop
+- Earnings cache: deferred `DYNAMODB_TABLE_NAME` check for testability
+- Track record: parallel DynamoDB resolution via `Promise.all()`
+- Track record: per-horizon recent predictions (7 per horizon, merged by date)
+- Prediction snapshots: ticker validated against real stock data; basePriceClose required
+
+### Changed
+
+- ESLint upgraded to v9 with flat config
+- Sync config updated to exclude notes and track record backend files from community edition
+- Community sync boundary documented: earnings, sector, and velocity intentionally available in community (public data, no auth required)
+
 ## [2.1.0] - 2026-02-20
 
 ### Added

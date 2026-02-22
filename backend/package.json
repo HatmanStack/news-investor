@@ -1,6 +1,6 @@
 {
   "name": "news-investor-backend",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "AWS Lambda backend for NewsInvestor - yfinance stock data, Finnhub news, DynamoDB caching",
   "main": "dist/index.js",
   "type": "module",
