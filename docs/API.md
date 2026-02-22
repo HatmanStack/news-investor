@@ -6,15 +6,21 @@ All endpoints served via API Gateway v2 (HTTP API). Base URL stored in `frontend
 
 ### Python Lambda (yfinance)
 
-| Method | Path            | Description                          |
-| ------ | --------------- | ------------------------------------ |
-| GET    | `/stocks`       | Historical OHLCV price data          |
-| GET    | `/search`       | Symbol search                        |
-| POST   | `/batch/stocks` | Bulk price data for multiple tickers |
+| Method | Path              | Description                          |
+| ------ | ----------------- | ------------------------------------ |
+| GET    | `/stocks`         | Historical OHLCV price data          |
+| GET    | `/search`         | Symbol search                        |
+| GET    | `/earnings`       | Upcoming earnings dates              |
+| POST   | `/batch/stocks`   | Bulk price data for multiple tickers |
+| POST   | `/batch/earnings` | Bulk earnings for multiple tickers   |
 
 **GET /stocks** query params: `ticker`, `startDate`, `endDate`
 
 **GET /search** query params: `query`
+
+**GET /earnings** query params: `ticker` — Returns upcoming earnings date, BMO/AMC timing, EPS/revenue estimates. Cache-first with 24-hour DynamoDB TTL.
+
+**POST /batch/earnings** body: `{ tickers: ["AAPL", "MSFT"] }` — Bulk fetch for portfolio.
 
 ### Node.js Lambda (Finnhub + Sentiment)
 
@@ -30,6 +36,8 @@ All endpoints served via API Gateway v2 (HTTP API). Base URL stored in `frontend
 | POST   | `/batch/sentiment`       | Bulk sentiment for multiple tickers |
 
 All endpoints are public. No authentication required.
+
+Additional endpoints for stock notes, prediction track record, and user tiers are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro).
 
 ### Sentiment Job Flow
 
@@ -50,16 +58,17 @@ Single-table design with composite keys. PAY_PER_REQUEST billing.
 
 Table name: `${StackName}-Table`
 
-| Entity           | PK                | SK                    | TTL       | Purpose               |
-| ---------------- | ----------------- | --------------------- | --------- | --------------------- |
-| Stock Cache      | `STOCK#ticker`    | `DATE#YYYY-MM-DD`     | 7-90 days | Price data cache      |
-| News Cache       | `NEWS#ticker`     | `HASH#articleHash`    | 7 days    | News article cache    |
-| Sentiment Cache  | `SENT#ticker`     | `HASH#articleHash`    | 30 days   | Per-article sentiment |
-| Sentiment Job    | `JOB#jobId`       | `META`                | 1 day     | Async job tracking    |
-| Historical Data  | `HIST#ticker`     | `DATE#YYYY-MM-DD`     | None      | ML training data      |
-| Article Analysis | `ARTICLE#ticker`  | `HASH#hash#DATE#date` | None      | Article analysis      |
-| Daily Aggregate  | `DAILY#ticker`    | `DATE#YYYY-MM-DD`     | None      | Aggregated signals    |
-| Circuit Breaker  | `CIRCUIT#service` | `STATE`               | None      | ML service health     |
+| Entity           | PK                | SK                    | TTL       | Purpose                 |
+| ---------------- | ----------------- | --------------------- | --------- | ----------------------- |
+| Stock Cache      | `STOCK#ticker`    | `DATE#YYYY-MM-DD`     | 7-90 days | Price data cache        |
+| News Cache       | `NEWS#ticker`     | `HASH#articleHash`    | 7 days    | News article cache      |
+| Sentiment Cache  | `SENT#ticker`     | `HASH#articleHash`    | 30 days   | Per-article sentiment   |
+| Sentiment Job    | `JOB#jobId`       | `META`                | 1 day     | Async job tracking      |
+| Historical Data  | `HIST#ticker`     | `DATE#YYYY-MM-DD`     | None      | ML training data        |
+| Article Analysis | `ARTICLE#ticker`  | `HASH#hash#DATE#date` | None      | Article analysis        |
+| Daily Aggregate  | `DAILY#ticker`    | `DATE#YYYY-MM-DD`     | None      | Aggregated signals      |
+| Circuit Breaker  | `CIRCUIT#service` | `STATE`               | None      | ML service health       |
+| Earnings Cache   | `EARN#ticker`     | `DATE#YYYY-MM-DD`     | 24 hours  | Earnings calendar cache |
 
 ### Sentiment Cache Item Schema
 

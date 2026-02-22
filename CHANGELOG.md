@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.2.2] - 2026-02-22
+
+### Changed
+
+- Updated ARCHITECTURE.md and API.md with v2.2 feature documentation (sentiment velocity, sector benchmarking, earnings calendar, notes, track record)
+- Updated community overlay docs to include public features and reference pro for gated features
+- Marked implemented features in PRO_FEATURES_ROADMAP.md
+
 ## [2.2.1] - 2026-02-22
 
 ### Changed

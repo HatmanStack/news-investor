@@ -198,11 +198,102 @@ File: `frontend/src/ml/prediction/prediction.service.ts`
 | MIN_INDEPENDENT_SAMPLES | 10      | For WEEK/MONTH subsampled horizons             |
 | TREND_WINDOW            | 20 days | Rolling baseline for abnormal return           |
 
+## Sentiment Velocity
+
+Frontend-computed rate of change in daily sentiment scores.
+
+```text
+Daily Sentiment Scores → velocityCalculator → useSentimentVelocity → SentimentVelocityIndicator
+```
+
+**Computation**:
+
+1. Sort daily records by date ascending
+2. Velocity: `score[i] - score[i-1]` for consecutive days
+3. Acceleration: compare consecutive velocities (threshold ±0.01) → accelerating / decelerating / stable
+4. Trend: latest velocity direction → improving / worsening / flat
+
+Uses `avgSignalScore` with fallback to `sentimentNumber`. Requires 2 data points for velocity, 3 for acceleration.
+
+Displayed as a color-coded pill on the sentiment screen and compact badge on portfolio cards.
+
+Files: `frontend/src/utils/sentiment/velocityCalculator.ts`, `frontend/src/hooks/useSentimentVelocity.ts`, `frontend/src/components/sentiment/SentimentVelocityIndicator.tsx`
+
+## Sector ETF Benchmarking
+
+Compares stock performance against corresponding GICS sector SPDR ETF.
+
+| Sector                 | ETF  |
+| ---------------------- | ---- |
+| Technology             | XLK  |
+| Financial Services     | XLF  |
+| Energy                 | XLE  |
+| Healthcare             | XLV  |
+| Industrials            | XLI  |
+| Communication Services | XLC  |
+| Consumer Cyclical      | XLY  |
+| Consumer Defensive     | XLP  |
+| Utilities              | XLU  |
+| Real Estate            | XLRE |
+| Basic Materials        | XLB  |
+
+**Data flow**: yfinance `ticker.info['sector']` → Python metadata response (`sector`, `industry`, `sectorEtf` fields) → `useSymbolDetails` → `useSectorBenchmark` → `SectorBenchmarkCard`.
+
+**Metrics**:
+
+- Relative return: `stockReturn - sectorReturn` (% over period)
+- Sentiment differential: `stockSentiment - sectorSentiment`
+
+Sector data stored in SQLite `symbol_details` table. ETFs flow through the same price/sentiment pipelines as regular stocks.
+
+Files: `backend/python/constants/sector_etf_map.py`, `frontend/src/constants/sectorEtf.constants.ts`, `frontend/src/hooks/useSectorBenchmark.ts`, `frontend/src/components/sector/SectorBenchmarkCard.tsx`
+
+## Earnings Calendar
+
+Upcoming earnings dates fetched from yfinance with DynamoDB cache.
+
+**Backend (Python)**:
+
+- `GET /earnings?ticker=X` — cache-first, fetches from yfinance `ticker.calendar` on miss
+- `POST /batch/earnings` — bulk fetch for portfolio
+- Cache: `EARN#ticker` / `DATE#YYYY-MM-DD`, 24-hour TTL
+- BMO/AMC determination from time component (before 12:00 = BMO, after = AMC)
+
+**Frontend**:
+
+- `useEarningsCalendar` hook with 30-minute stale time
+- `EarningsBadge` on portfolio cards (shows within 7 days of earnings)
+- `EarningsCard` on stock detail with date, timing, countdown, EPS/revenue estimates
+
+Files: `backend/python/services/earnings_service.py`, `backend/python/handlers/earnings.py`, `backend/python/repositories/earnings_cache.py`, `frontend/src/hooks/useEarningsCalendar.ts`, `frontend/src/components/earnings/`
+
+## Additional Pro Features
+
+The following features are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro):
+
+- **Stock Notes** — Per-stock notes with cloud sync (DynamoDB primary, local SQLite fallback)
+- **Prediction Track Record** — Immutable prediction snapshots with on-demand resolution and per-horizon accuracy tracking
+
 ## File Map
 
 ```text
 frontend/src/
-├── hooks/useSentimentData.ts          # Data gathering, alignment, prediction trigger
+├── hooks/
+│   ├── useSentimentData.ts            # Data gathering, alignment, prediction trigger
+│   ├── useSentimentVelocity.ts        # Velocity from sentiment data
+│   ├── useSectorBenchmark.ts          # Stock vs sector ETF comparison
+│   └── useEarningsCalendar.ts         # Upcoming earnings dates
+├── utils/sentiment/
+│   └── velocityCalculator.ts          # Sentiment rate of change computation
+├── components/
+│   ├── sentiment/
+│   │   └── SentimentVelocityIndicator.tsx  # Velocity pill/badge
+│   ├── sector/
+│   │   └── SectorBenchmarkCard.tsx    # Relative performance card
+│   └── earnings/
+│       ├── EarningsBadge.tsx          # Portfolio card badge (< 7 days)
+│       └── EarningsCard.tsx           # Full earnings detail card
+├── constants/sectorEtf.constants.ts   # GICS sector to SPDR ETF mapping
 ├── services/api/backendClient.ts      # Shared axios client
 ├── ml/prediction/
 │   ├── prediction.service.ts          # Ensemble orchestration, F-test diagnostics
@@ -216,6 +307,7 @@ frontend/src/
     └── lexicon.ts                     # Financial domain terms
 
 backend/src/
+├── handlers/prediction.handler.ts     # Prediction endpoint
 ├── services/
 │   ├── sentimentProcessing.service.ts # Article pipeline orchestration
 │   ├── eventClassification.service.ts # Event type classifier
@@ -225,10 +317,17 @@ backend/src/
 ├── utils/sentiment.util.ts            # Daily aggregation (signal-weighted)
 └── ml/sentiment/analyzer.ts           # AFINN + financial lexicon (server-side)
 
+backend/python/
+├── handlers/earnings.py               # GET /earnings, POST /batch/earnings
+├── services/earnings_service.py       # yfinance calendar fetch + parsing
+├── repositories/earnings_cache.py     # EARN# DynamoDB cache (24h TTL)
+├── constants/sector_etf_map.py        # GICS sector to SPDR ETF mapping
+└── utils/transform.py                 # Metadata enrichment (sector, industry, sectorEtf)
+
 backend/services/ml/
 └── model_onnx.py                      # DistilRoBERTa inference + calibration
 ```
 
 ---
 
-_Some features described here are available exclusively in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro)._
+_Some features are available exclusively in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro)._
