@@ -4,12 +4,13 @@ import { SectorBenchmarkCard } from '../SectorBenchmarkCard';
 import { useSectorBenchmark } from '@/hooks/useSectorBenchmark';
 
 jest.mock('@/hooks/useSectorBenchmark');
-jest.mock('@/features/tier/contexts/TierContext', () => ({
+jest.mock('@/features/tier', () => ({
   useTier: () => ({
     isFeatureEnabled: () => true,
     tier: 'pro',
     loading: false,
   }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const mockUseSectorBenchmark = useSectorBenchmark as jest.MockedFunction<typeof useSectorBenchmark>;

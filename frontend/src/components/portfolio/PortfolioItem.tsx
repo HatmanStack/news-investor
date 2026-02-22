@@ -19,7 +19,7 @@ import { useLatestStockPrice, useStockData, useLayoutDensity } from '@/hooks';
 import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
 import { EarningsBadge } from '@/components/earnings/EarningsBadge';
 import { useSymbolDetails } from '@/hooks/useSymbolSearch';
-import { FeatureGate } from '@/features/tier/components/FeatureGate';
+import { FeatureGate } from '@/features/tier';
 
 interface PortfolioItemProps {
   item: PortfolioDetails;

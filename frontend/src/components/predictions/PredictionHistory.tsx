@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Card, Chip, Text, useTheme } from 'react-native-paper';
-import { FeatureGate } from '@/features/tier/components/FeatureGate';
+import { FeatureGate } from '@/features/tier';
 import { usePredictionTrackRecord } from '@/hooks/usePredictionTrackRecord';
 
 interface PredictionHistoryProps {

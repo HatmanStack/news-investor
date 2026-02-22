@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
-import { FeatureGate } from '@/features/tier/components/FeatureGate';
+import { FeatureGate } from '@/features/tier';
 import { useEarningsCalendar } from '@/hooks/useEarningsCalendar';
 import { format, parseISO } from 'date-fns';
 

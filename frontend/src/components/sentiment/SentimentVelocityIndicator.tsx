@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Chip } from 'react-native-paper';
-import { FeatureGate } from '@/features/tier/components/FeatureGate';
+import { FeatureGate } from '@/features/tier';
 import { useSentimentVelocity } from '@/hooks/useSentimentVelocity';
 
 interface SentimentVelocityIndicatorProps {

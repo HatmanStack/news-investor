@@ -8,12 +8,13 @@ jest.mock('@/hooks/useSentimentVelocity', () => ({
 }));
 
 // Mock the tier context
-jest.mock('@/features/tier/contexts/TierContext', () => ({
+jest.mock('@/features/tier', () => ({
   useTier: () => ({
     isFeatureEnabled: (f: string) => f === 'sentiment_velocity',
     tier: 'pro',
     loading: false,
   }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const { useSentimentVelocity } = jest.requireMock('@/hooks/useSentimentVelocity');

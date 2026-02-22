@@ -6,12 +6,13 @@ jest.mock('@/hooks/usePredictionTrackRecord', () => ({
   usePredictionTrackRecord: jest.fn(),
 }));
 
-jest.mock('@/features/tier/contexts/TierContext', () => ({
+jest.mock('@/features/tier', () => ({
   useTier: () => ({
     isFeatureEnabled: (f: string) => f === 'prediction_track_record',
     tier: 'pro',
     loading: false,
   }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const { usePredictionTrackRecord } = jest.requireMock('@/hooks/usePredictionTrackRecord');

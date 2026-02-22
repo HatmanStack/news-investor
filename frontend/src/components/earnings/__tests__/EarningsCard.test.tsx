@@ -6,12 +6,13 @@ jest.mock('@/hooks/useEarningsCalendar', () => ({
   useEarningsCalendar: jest.fn(),
 }));
 
-jest.mock('@/features/tier/contexts/TierContext', () => ({
+jest.mock('@/features/tier', () => ({
   useTier: () => ({
     isFeatureEnabled: (f: string) => f === 'earnings_calendar',
     tier: 'pro',
     loading: false,
   }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const { useEarningsCalendar } = jest.requireMock('@/hooks/useEarningsCalendar');
