@@ -94,7 +94,7 @@ frontend/
 Two Lambda functions sharing API Gateway and a single DynamoDB table (composite keys):
 
 1. **Node.js** (`ReactStocksFunction`): News, sentiment, prediction - built via esbuild
-2. **Python** (`PythonStocksFunction`): Stock data, search - uses yfinance
+2. **Python** (`PythonStocksFunction`): Stock data, search, earnings - uses yfinance
 
 ```text
 backend/
@@ -109,6 +109,17 @@ backend/
 │   └── repositories/
 └── template.yaml        # SAM CloudFormation template
 ```
+
+**DynamoDB Entity Types**:
+
+| PK          | SK                | Purpose                     |
+| ----------- | ----------------- | --------------------------- |
+| `STOCK#XYZ` | `DATE#YYYY-MM-DD` | Stock price cache           |
+| `NEWS#XYZ`  | `HASH#abc123`     | News articles               |
+| `SENT#XYZ`  | `HASH#abc123`     | Sentiment analysis cache    |
+| `DAILY#XYZ` | `DATE#YYYY-MM-DD` | Daily sentiment aggregates  |
+| `HIST#XYZ`  | `DATE#YYYY-MM-DD` | Historical price data (ML)  |
+| `EARN#XYZ`  | `DATE#YYYY-MM-DD` | Earnings calendar (24h TTL) |
 
 ## Testing Notes
 
