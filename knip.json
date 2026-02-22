@@ -15,7 +15,7 @@
     "backend": {
       "entry": ["scripts/*.ts", "src/utils/dynamodb.util.ts"],
       "project": ["src/**/*.ts"],
-      "ignore": ["**/__tests__/**", "**/*.test.ts"]
+      "ignore": ["**/__tests__/**", "**/*.test.ts", "src/types/dynamodb.types.ts"]
     }
   },
   "ignore": [".sync/**"],
