@@ -12,6 +12,8 @@ import { useSymbolDetails } from '@/hooks/useSymbolSearch';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useContentWidth } from '@/hooks/useContentWidth';
 import { StockMetadataCard } from '@/components/stock/StockMetadataCard';
+import { SectorBenchmarkCard } from '@/components/sector/SectorBenchmarkCard';
+import { EarningsCard } from '@/components/earnings/EarningsCard';
 import { PriceListHeader } from '@/components/stock/PriceListHeader';
 import { PriceListItem } from '@/components/stock/PriceListItem';
 import { DataTable, DataTableColumn, MonoText } from '@/components/common';
@@ -227,6 +229,12 @@ export default function PriceScreen() {
               </View>
               <View style={styles.desktopRightColumn}>
                 <StockMetadataCard symbol={symbol || null} isLoading={isSymbolLoading} />
+                <SectorBenchmarkCard
+                  ticker={ticker as string}
+                  sectorEtf={symbol?.sectorEtf}
+                  sectorName={symbol?.sector}
+                />
+                <EarningsCard ticker={ticker as string} />
               </View>
             </View>
           </ScrollView>
@@ -250,6 +258,12 @@ export default function PriceScreen() {
               onRangeChange={handleRangeChange}
             />
             <StockMetadataCard symbol={symbol || null} isLoading={isSymbolLoading} />
+            <SectorBenchmarkCard
+              ticker={ticker as string}
+              sectorEtf={symbol?.sectorEtf}
+              sectorName={symbol?.sector}
+            />
+            <EarningsCard ticker={ticker as string} />
             <View style={styles.tableContainer}>
               <DataTable
                 data={sortedStockData}
@@ -294,6 +308,12 @@ export default function PriceScreen() {
             </View>
             <View style={styles.metadataColumn}>
               <StockMetadataCard symbol={symbol || null} isLoading={isSymbolLoading} />
+              <SectorBenchmarkCard
+                ticker={ticker as string}
+                sectorEtf={symbol?.sectorEtf}
+                sectorName={symbol?.sector}
+              />
+              <EarningsCard ticker={ticker as string} />
             </View>
           </View>
         </ScrollView>

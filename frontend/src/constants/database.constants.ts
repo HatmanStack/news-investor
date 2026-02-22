@@ -4,7 +4,7 @@
  */
 
 export const DB_NAME = 'stock_sentiment.db';
-export const DB_VERSION = 4; // Phase 1: Added prediction fields + multi-signal word_count fields
+export const DB_VERSION = 6; // Phase 2 pro: Added sector columns to symbol_details
 
 export const TABLE_NAMES = {
   STOCK_DETAILS: 'stock_details',
@@ -13,6 +13,7 @@ export const TABLE_NAMES = {
   WORD_COUNT_DETAILS: 'word_count_details',
   COMBINED_WORD_DETAILS: 'combined_word_count_details',
   PORTFOLIO_DETAILS: 'portfolio_details',
+  NOTES: 'notes',
 } as const;
 
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];

@@ -2,7 +2,8 @@
  * Prediction Handler Tests
  *
  * Tests for HTTP handler for ML prediction API endpoint.
- * Covers input validation, direct Lambda invocation, success path, and error handling.
+ * Covers input validation, direct Lambda invocation, success path, error handling,
+ * and prediction snapshot creation for track record.
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -13,6 +14,10 @@ const mockRunPredictionPipeline =
   jest.fn<() => Promise<Array<{ horizon: number; direction: string; probability: number }>>>();
 const mockPutDailyAggregate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockGetDailyAggregate = jest.fn<() => Promise<null>>().mockResolvedValue(null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockCreateSnapshot = jest.fn<(...args: any[]) => Promise<boolean>>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockQueryItems = jest.fn<(...args: any[]) => Promise<unknown[]>>();
 
 // Mock dependencies using unstable_mockModule for ESM compatibility
 jest.unstable_mockModule('../../services/pipeline', () => ({
@@ -21,6 +26,13 @@ jest.unstable_mockModule('../../services/pipeline', () => ({
 jest.unstable_mockModule('../../repositories/dailySentimentAggregate.repository', () => ({
   putDailyAggregate: mockPutDailyAggregate,
   getDailyAggregate: mockGetDailyAggregate,
+}));
+jest.unstable_mockModule('../../repositories/predictionSnapshot.repository.js', () => ({
+  createSnapshot: mockCreateSnapshot,
+}));
+jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
+  queryItems: mockQueryItems,
+  getTableName: jest.fn(() => 'test-table'),
 }));
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -70,6 +82,8 @@ describe('Prediction Handler', () => {
     jest.clearAllMocks();
     mockGetDailyAggregate.mockResolvedValue(null);
     mockPutDailyAggregate.mockResolvedValue(undefined);
+    mockCreateSnapshot.mockResolvedValue(true);
+    mockQueryItems.mockResolvedValue([]);
   });
 
   describe('Input Validation', () => {
@@ -127,6 +141,68 @@ describe('Prediction Handler', () => {
       expect(body.predictions.nextDay).toEqual({ direction: 'up', probability: 0.7 });
       expect(body.predictions.twoWeek).toEqual({ direction: 'down', probability: 0.4 });
       expect(body.predictions.oneMonth).toEqual({ direction: 'up', probability: 0.6 });
+    });
+  });
+
+  describe('Prediction Snapshots', () => {
+    it('should create snapshots for all three horizons when base price available', async () => {
+      mockRunPredictionPipeline.mockResolvedValue([
+        { horizon: 1, direction: 'up', probability: 0.7 },
+        { horizon: 14, direction: 'down', probability: 0.4 },
+        { horizon: 30, direction: 'up', probability: 0.6 },
+      ]);
+      mockQueryItems.mockResolvedValue([{ close: 150.0 }]);
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      await predictionHandler(event);
+
+      expect(mockCreateSnapshot).toHaveBeenCalledTimes(3);
+      // Verify horizons
+      const horizons = mockCreateSnapshot.mock.calls.map(
+        (call) => (call[0] as Record<string, unknown>).horizon,
+      );
+      expect(horizons).toContain('1d');
+      expect(horizons).toContain('14d');
+      expect(horizons).toContain('30d');
+    });
+
+    it('should not create snapshots when base price unavailable', async () => {
+      mockRunPredictionPipeline.mockResolvedValue([
+        { horizon: 1, direction: 'up', probability: 0.7 },
+        { horizon: 14, direction: 'down', probability: 0.4 },
+        { horizon: 30, direction: 'up', probability: 0.6 },
+      ]);
+      mockQueryItems.mockResolvedValue([]); // No stock price data
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      const response = await predictionHandler(event);
+
+      expect(response.statusCode).toBe(200);
+      expect(mockCreateSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('should not fail request when snapshot creation fails', async () => {
+      mockRunPredictionPipeline.mockResolvedValue([
+        { horizon: 1, direction: 'up', probability: 0.7 },
+        { horizon: 14, direction: 'down', probability: 0.4 },
+        { horizon: 30, direction: 'up', probability: 0.6 },
+      ]);
+      mockQueryItems.mockResolvedValue([{ close: 150.0 }]);
+      mockCreateSnapshot.mockRejectedValue(new Error('DynamoDB error'));
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      const response = await predictionHandler(event);
+
+      expect(response.statusCode).toBe(200); // Still success
     });
   });
 

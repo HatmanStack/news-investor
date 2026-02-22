@@ -15,6 +15,7 @@ import {
   fetchArticleSentiment,
 } from '@/services/data/sentimentDataFetcher';
 import { generateBrowserPredictions } from '@/ml/prediction/browserPredictions';
+import { submitPredictionSnapshot } from '@/services/sync/predictionSnapshotService';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
 import { MIN_SENTIMENT_DATA } from '@/constants/ml.constants';
 
@@ -73,6 +74,7 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
           void Promise.allSettled([
             CombinedWordRepository.upsert(latestRecord),
             updatePredictions(ticker, predictions),
+            submitPredictionSnapshot(ticker, predictions),
           ]).then((results) => {
             for (const r of results) {
               if (r.status === 'rejected') {

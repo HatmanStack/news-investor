@@ -6,7 +6,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { IconButton } from 'react-native-paper';
+import { Chip, IconButton } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import Animated, { FadeOut } from 'react-native-reanimated';
@@ -16,6 +16,10 @@ import { MonoText, AnimatedCard, AnimatedNumber } from '@/components/common';
 import { MiniChart } from '@/components/charts';
 import { formatPrice, formatPercentage } from '@/utils/formatting';
 import { useLatestStockPrice, useStockData, useLayoutDensity } from '@/hooks';
+import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
+import { EarningsBadge } from '@/components/earnings/EarningsBadge';
+import { useSymbolDetails } from '@/hooks/useSymbolSearch';
+import { FeatureGate } from '@/features/tier/components/FeatureGate';
 
 interface PortfolioItemProps {
   item: PortfolioDetails;
@@ -32,6 +36,9 @@ export function PortfolioItem({ item, onPress, onDelete }: PortfolioItemProps) {
 
   // Fetch recent stock data for mini chart (last 30 days)
   const { data: stockHistory } = useStockData(item.ticker, { days: 30 });
+
+  // Fetch symbol details for sector chip (cached by TanStack Query)
+  const { data: symbolDetails } = useSymbolDetails(item.ticker);
 
   // Calculate price change percentage
   const priceChange = useMemo(() => {
@@ -258,6 +265,15 @@ export function PortfolioItem({ item, onPress, onDelete }: PortfolioItemProps) {
                 Pred (1D):
               </Text>
               {renderPrediction()}
+              <SentimentVelocityIndicator ticker={item.ticker} compact />
+              <EarningsBadge ticker={item.ticker} />
+              {symbolDetails?.sector && (
+                <FeatureGate feature="sector_benchmarking" fallback={null}>
+                  <Chip compact textStyle={styles.sectorChipText} style={styles.sectorChip}>
+                    {symbolDetails.sector}
+                  </Chip>
+                </FeatureGate>
+              )}
             </View>
           </View>
         </AnimatedCard>
@@ -360,5 +376,13 @@ const styles = StyleSheet.create({
   },
   predictionText: {
     fontWeight: '600',
+  },
+  sectorChip: {
+    height: 22,
+    marginLeft: 'auto',
+  },
+  sectorChipText: {
+    fontSize: 10,
+    lineHeight: 12,
   },
 });

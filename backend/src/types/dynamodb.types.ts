@@ -21,6 +21,7 @@ const EntityPrefix = {
   ARTICLE: 'ARTICLE', // Article analysis data (ML)
   DAILY: 'DAILY', // Daily sentiment aggregate
   CIRCUIT: 'CIRCUIT', // Circuit breaker state
+  PREDICTION: 'PRED', // Prediction snapshot
 } as const;
 
 /**
@@ -31,6 +32,7 @@ export const SortKeyPrefix = {
   HASH: 'HASH',
   META: 'META',
   STATE: 'STATE',
+  SNAP: 'SNAP',
 } as const;
 
 // ============================================================
@@ -230,6 +232,49 @@ export interface CircuitBreakerItem extends BaseTableItem {
 }
 
 // ============================================================
+// User Content Entity Types
+// ============================================================
+
+/**
+ * User note item
+ * PK: USER#{sub}, SK: NOTE#{ticker}#{noteId}
+ */
+export interface NoteItem extends BaseTableItem {
+  entityType: 'NOTE';
+  ticker: string;
+  noteId: string;
+  content: string;
+}
+
+// ============================================================
+// Prediction Snapshot Entity Type
+// ============================================================
+
+/**
+ * Prediction snapshot item (immutable track record)
+ * PK: PRED#AAPL, SK: SNAP#2024-01-15#1d
+ */
+export interface PredictionSnapshotItem extends BaseTableItem {
+  entityType: 'PREDICTION_SNAPSHOT';
+  ticker: string;
+  predictionDate: string;
+  horizon: '1d' | '14d' | '30d';
+  direction: 'up' | 'down';
+  probability: number;
+  targetDate: string;
+  basePriceClose: number;
+  // Resolved fields (filled after horizon passes)
+  targetPriceClose?: number;
+  actualDirection?: 'up' | 'down';
+  correct?: boolean;
+  resolvedAt?: string;
+}
+
+// ============================================================
+// Earnings Calendar Entity Type
+// ============================================================
+
+// ============================================================
 // Union Type
 // ============================================================
 
@@ -245,7 +290,9 @@ export type TableItem =
   | ArticleAnalysisItem
   | DailySentimentItem
   | CircuitBreakerItem
-  | ModelCacheItem;
+  | ModelCacheItem
+  | NoteItem
+  | PredictionSnapshotItem;
 
 // ============================================================
 // Key Construction Helper Functions
@@ -301,6 +348,18 @@ export function makeCircuitPK(serviceName: string): string {
 
 export function makeStateSK(): string {
   return SortKeyPrefix.STATE;
+}
+
+export function makeNoteSK(ticker: string, noteId: string): string {
+  return `NOTE#${ticker.toUpperCase()}#${noteId}`;
+}
+
+export function makePredictionPK(ticker: string): string {
+  return `${EntityPrefix.PREDICTION}#${ticker.toUpperCase()}`;
+}
+
+export function makePredictionSnapshotSK(date: string, horizon: string): string {
+  return `${SortKeyPrefix.SNAP}#${date}#${horizon}`;
 }
 
 // ============================================================

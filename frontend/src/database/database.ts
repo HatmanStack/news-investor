@@ -200,6 +200,36 @@ async function runMigrations(fromVersion: number): Promise<void> {
         }
       }
     }
+
+    // Migration from version 4 to 5: Add notes table
+    if (fromVersion < 5) {
+      await database.execAsync(`
+        CREATE TABLE IF NOT EXISTS notes (
+          id TEXT PRIMARY KEY,
+          ticker TEXT NOT NULL,
+          content TEXT NOT NULL,
+          syncedAt TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      `);
+      await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_ticker ON notes(ticker)`);
+    }
+
+    // Migration from version 5 to 6: Add sector columns to symbol_details
+    if (fromVersion < 6) {
+      const tableName = 'symbol_details';
+
+      if (!(await columnExists(tableName, 'sector'))) {
+        await database.execAsync(`ALTER TABLE ${tableName} ADD COLUMN sector TEXT`);
+      }
+      if (!(await columnExists(tableName, 'industry'))) {
+        await database.execAsync(`ALTER TABLE ${tableName} ADD COLUMN industry TEXT`);
+      }
+      if (!(await columnExists(tableName, 'sectorEtf'))) {
+        await database.execAsync(`ALTER TABLE ${tableName} ADD COLUMN sectorEtf TEXT`);
+      }
+    }
   } catch (error) {
     console.error('[Database] Migration failed:', error);
     throw new Error(`Failed to run migrations: ${error}`);

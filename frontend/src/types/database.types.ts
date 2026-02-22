@@ -60,6 +60,9 @@ export interface SymbolDetails {
   startDate: string;
   ticker: string;
   endDate: string;
+  sector?: string;
+  industry?: string;
+  sectorEtf?: string;
 }
 
 /**

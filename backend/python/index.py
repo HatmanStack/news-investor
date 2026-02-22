@@ -34,6 +34,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Import handlers here to avoid circular imports and improve cold start
     from handlers.batch import handle_batch_stocks_request
+    from handlers.earnings import handle_batch_earnings_request, handle_earnings_request
     from handlers.search import handle_search_request
     from handlers.stocks import handle_stocks_request
     from utils.response import error_response
@@ -68,6 +69,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         elif raw_path == "/batch/stocks" and method == "POST":
             response = handle_batch_stocks_request(event)
+
+        elif raw_path == "/earnings" and method == "GET":
+            response = handle_earnings_request(event)
+
+        elif raw_path == "/batch/earnings" and method == "POST":
+            response = handle_batch_earnings_request(event)
 
         else:
             logger.warning("Unknown route", path=raw_path)

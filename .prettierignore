@@ -4,3 +4,5 @@ coverage
 .expo
 .aws-sam
 package-lock.json
+.mypy_cache
+.pytest_cache

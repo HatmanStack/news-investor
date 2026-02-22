@@ -167,6 +167,9 @@ export function useSymbolDetails(ticker: string) {
           startDate: metadata.startDate,
           endDate: metadata.endDate,
           longDescription: metadata.description,
+          sector: metadata.sector,
+          industry: metadata.industry,
+          sectorEtf: metadata.sectorEtf ?? undefined,
         };
 
         // Fire-and-forget: persist fresh data but don't let DB errors discard it

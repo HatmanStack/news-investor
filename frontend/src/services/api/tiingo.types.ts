@@ -26,6 +26,9 @@ export interface TiingoSymbolMetadata {
   startDate: string;
   endDate: string;
   description: string;
+  sector?: string;
+  industry?: string;
+  sectorEtf?: string | null;
 }
 
 export interface TiingoApiConfig {

@@ -137,6 +137,45 @@ class TestTransformInfoToMetadata:
 
         assert result["name"] == "AAPL"
 
+    def test_includes_sector_and_industry_fields(self):
+        """Metadata includes sector, industry, and sectorEtf fields."""
+        info = {
+            "shortName": "Apple Inc.",
+            "exchange": "NMS",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
+        }
+
+        result = transform_info_to_metadata(info, "AAPL")
+
+        assert result["sector"] == "Technology"
+        assert result["industry"] == "Consumer Electronics"
+        assert result["sectorEtf"] == "XLK"
+
+    def test_sector_etf_is_none_for_unknown_sector(self):
+        """sectorEtf is None when sector doesn't match GICS mapping."""
+        info = {
+            "shortName": "Foreign Co",
+            "exchange": "LSE",
+            "sector": "Unknown Sector",
+            "industry": "Unknown Industry",
+        }
+
+        result = transform_info_to_metadata(info, "FRGN")
+
+        assert result["sector"] == "Unknown Sector"
+        assert result["sectorEtf"] is None
+
+    def test_sector_defaults_to_empty_string(self):
+        """Sector defaults to empty string when not in info."""
+        info = {"shortName": "Test"}
+
+        result = transform_info_to_metadata(info, "TEST")
+
+        assert result["sector"] == ""
+        assert result["industry"] == ""
+        assert result["sectorEtf"] is None
+
 
 class TestTransformSearchToTiingo:
     """Tests for transform_search_to_tiingo function."""

@@ -16,6 +16,9 @@ import { SentimentListHeader } from '@/components/sentiment/SentimentListHeader'
 import { SentimentListItem } from '@/components/sentiment/SentimentListItem';
 import { SingleWordItem } from '@/components/sentiment/SingleWordItem';
 import { PredictionSummaryCard } from '@/components/sentiment/PredictionSummaryCard';
+import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
+import { TrackRecordCard } from '@/components/predictions/TrackRecordCard';
+import { PredictionHistory } from '@/components/predictions/PredictionHistory';
 import { TimeRangeSelector } from '@/components/common/TimeRangeSelector';
 import type { TimeRange } from '@/components/common/TimeRangeSelector';
 import { Skeleton } from '@/components/common/Skeleton';
@@ -26,6 +29,7 @@ import type { CombinedWordDetails, WordCountDetails } from '@/types/database.typ
 
 export default function SentimentScreen() {
   const {
+    ticker,
     sentimentData: aggregateData,
     sentimentLoading: isAggregateLoading,
     sentimentError: aggregateError,
@@ -107,6 +111,9 @@ export default function SentimentScreen() {
                 latestRecord={sortedAggregateData[0] || null}
                 isLoading={isAggregateLoading}
               />
+              <SentimentVelocityIndicator ticker={ticker} />
+              <TrackRecordCard ticker={ticker} />
+              <PredictionHistory ticker={ticker} limit={5} />
               <View style={styles.chartContainer}>
                 {isAggregateLoading ? (
                   <Skeleton width="90%" height={220} style={styles.chartSkeleton} />

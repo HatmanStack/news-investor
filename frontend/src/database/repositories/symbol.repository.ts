@@ -51,8 +51,9 @@ export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<number>
   const db = await getDatabase();
   const sql = `
     INSERT INTO ${TABLE_NAMES.SYMBOL_DETAILS} (
-      longDescription, exchangeCode, name, startDate, ticker, endDate
-    ) VALUES (?, ?, ?, ?, ?, ?)
+      longDescription, exchangeCode, name, startDate, ticker, endDate,
+      sector, industry, sectorEtf
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   try {
@@ -63,6 +64,9 @@ export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<number>
       symbol.startDate,
       symbol.ticker,
       symbol.endDate,
+      symbol.sector ?? null,
+      symbol.industry ?? null,
+      symbol.sectorEtf ?? null,
     ]);
 
     return result.lastInsertRowId;

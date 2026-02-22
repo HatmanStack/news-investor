@@ -265,6 +265,20 @@ Resources:
       RouteKey: 'POST /predict'
       Target: !Sub 'integrations/${ReactStocksIntegration}'
 
+  EarningsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /earnings'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
+
+  BatchEarningsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'POST /batch/earnings'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
+
   BatchStocksRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:

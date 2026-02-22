@@ -5,6 +5,8 @@ Converts yfinance data format to Tiingo API format for response compatibility.
 
 from typing import Any
 
+from constants.sector_etf_map import SECTOR_TO_ETF
+
 
 def transform_history_to_tiingo(df: Any, ticker: str) -> list[dict[str, Any]]:
     """
@@ -85,6 +87,9 @@ def transform_info_to_metadata(info: dict[str, Any], ticker: str) -> dict[str, A
         "startDate": "",  # yfinance doesn't provide
         "endDate": "",  # yfinance doesn't provide
         "description": info.get("longBusinessSummary", ""),
+        "sector": info.get("sector", ""),
+        "industry": info.get("industry", ""),
+        "sectorEtf": SECTOR_TO_ETF.get(info.get("sector", ""), None),
     }
 
 
@@ -116,11 +121,13 @@ def transform_search_to_tiingo(results: list[dict[str, Any]]) -> list[dict[str, 
         }
         asset_type = asset_type_map.get(quote_type, quote_type)
 
-        transformed.append({
-            "ticker": item.get("symbol", ""),
-            "name": item.get("shortname") or item.get("longname", ""),
-            "assetType": asset_type,
-            "isActive": True,  # yfinance doesn't provide, default to true
-        })
+        transformed.append(
+            {
+                "ticker": item.get("symbol", ""),
+                "name": item.get("shortname") or item.get("longname", ""),
+                "assetType": asset_type,
+                "isActive": True,  # yfinance doesn't provide, default to true
+            }
+        )
 
     return transformed

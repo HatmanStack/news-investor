@@ -13,6 +13,9 @@ interface StoredSymbol {
   longDescription?: string;
   startDate?: string;
   endDate?: string;
+  sector?: string;
+  industry?: string;
+  sectorEtf?: string;
 }
 
 /** Stored stock price data */
@@ -87,6 +90,16 @@ interface StoredArticleSentiment {
   sentimentNumber: number;
 }
 
+/** Stored note */
+interface StoredNote {
+  id: string;
+  ticker: string;
+  content: string;
+  syncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Stored portfolio item */
 interface StoredPortfolio {
   ticker: string;
@@ -110,6 +123,7 @@ interface StorageData {
   sentiment: Record<string, StoredSentiment[]>;
   articleSentiment: Record<string, StoredArticleSentiment[]>;
   portfolio: Record<string, StoredPortfolio>;
+  notes: Record<string, StoredNote>;
 }
 
 /**
@@ -157,6 +171,7 @@ class WebDatabase {
       sentiment: {},
       articleSentiment: {},
       portfolio: {},
+      notes: {},
     };
   }
 
@@ -292,6 +307,12 @@ class WebDatabase {
       return this.insertPortfolio(params || []);
     } else if (sqlLower.includes('delete from portfolio')) {
       return this.deleteFromPortfolio(params || []);
+    } else if (sqlLower.startsWith('insert or replace into notes')) {
+      return this.upsertNote(params || []);
+    } else if (sqlLower.includes('delete from notes')) {
+      return this.deleteNote(params || []);
+    } else if (sqlLower.includes('update notes')) {
+      return this.updateNote(sql, params || []);
     }
 
     return { changes: 0 };
@@ -312,6 +333,8 @@ class WebDatabase {
       return this.getArticleSentiment(params || []);
     } else if (sqlLower.includes('from portfolio_details')) {
       return this.getPortfolio(params || []);
+    } else if (sqlLower.includes('from notes')) {
+      return this.getNotes(sql, params || []);
     }
 
     return [];
@@ -366,6 +389,7 @@ class WebDatabase {
         else if (tableName === 'combined_word_count_details') this.data.sentiment = {};
         else if (tableName === 'word_count_details') this.data.articleSentiment = {};
         else if (tableName === 'portfolio_details') this.data.portfolio = {};
+        else if (tableName === 'notes') this.data.notes = {};
         this.saveData();
       }
       return;
@@ -374,14 +398,34 @@ class WebDatabase {
 
   // Symbol operations
   private insertSymbol(params: any[]): any {
-    const [longDescription, exchangeCode, name, startDate, ticker, endDate] = params;
+    const [
+      longDescription,
+      exchangeCode,
+      name,
+      startDate,
+      ticker,
+      endDate,
+      sector,
+      industry,
+      sectorEtf,
+    ] = params;
 
     // Check if symbol already exists
     if (this.data.symbols[ticker]) {
       return { changes: 0 };
     }
 
-    this.data.symbols[ticker] = { ticker, name, exchangeCode, longDescription, startDate, endDate };
+    this.data.symbols[ticker] = {
+      ticker,
+      name,
+      exchangeCode,
+      longDescription,
+      startDate,
+      endDate,
+      sector,
+      industry,
+      sectorEtf,
+    };
     this.saveData();
     return { changes: 1 };
   }
@@ -740,6 +784,60 @@ class WebDatabase {
     }
     // Get all portfolio items
     return Object.values(this.data.portfolio);
+  }
+
+  // Notes operations
+  private upsertNote(params: any[]): any {
+    const [id, ticker, content, syncedAt, createdAt, updatedAt] = params;
+
+    this.data.notes[id] = { id, ticker, content, syncedAt, createdAt, updatedAt };
+    this.saveData();
+    return { changes: 1 };
+  }
+
+  private deleteNote(params: any[]): any {
+    const id = params[0];
+    if (this.data.notes[id]) {
+      delete this.data.notes[id];
+      this.saveData();
+      return { changes: 1 };
+    }
+    return { changes: 0 };
+  }
+
+  private updateNote(sql: string, params: any[]): any {
+    // Handle "UPDATE notes SET syncedAt = ? WHERE id = ?"
+    const sqlLower = sql.toLowerCase();
+    if (sqlLower.includes('syncedat')) {
+      const [syncedAt, id] = params;
+      if (this.data.notes[id]) {
+        this.data.notes[id].syncedAt = syncedAt;
+        this.saveData();
+        return { changes: 1 };
+      }
+    }
+    return { changes: 0 };
+  }
+
+  private getNotes(sql: string, params: any[]): any[] {
+    const sqlLower = sql.toLowerCase();
+    const allNotes = Object.values(this.data.notes);
+
+    if (sqlLower.includes('where id = ?')) {
+      return allNotes.filter((n) => n.id === params[0]);
+    }
+    if (sqlLower.includes('where ticker = ?')) {
+      return allNotes
+        .filter((n) => n.ticker === params[0])
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }
+    if (sqlLower.includes('syncedat is null')) {
+      return allNotes
+        .filter((n) => n.syncedAt === null || n.syncedAt === undefined)
+        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+    }
+
+    return allNotes;
   }
 }
 

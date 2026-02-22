@@ -7,8 +7,12 @@ import {
   getDailyAggregate,
 } from '../repositories/dailySentimentAggregate.repository';
 import { DailySentimentAggregateItem } from '../types/dynamodb.types';
+import type { StockCacheItem } from '../types/dynamodb.types';
 import { predictionRequestSchema, parseBody, formatZodError } from '../utils/schemas.util';
 import { logger } from '../utils/logger.util.js';
+import { createSnapshot } from '../repositories/predictionSnapshot.repository.js';
+import { addTradingDays } from '../utils/date.util.js';
+import { queryItems } from '../utils/dynamodb.util.js';
 
 /** Direct Lambda invocation payload (not from API Gateway) */
 interface DirectInvocationEvent {
@@ -154,6 +158,45 @@ export async function predictionHandler(
     } catch (dbError) {
       logger.error('Failed to save prediction to DynamoDB', dbError);
       // We don't fail the request, just log error
+    }
+
+    // Snapshot predictions for track record
+    let basePriceClose: number | undefined;
+    try {
+      const stockItems = await queryItems<StockCacheItem>(`STOCK#${ticker.toUpperCase()}`, {
+        skPrefix: 'DATE#',
+        limit: 1,
+        scanIndexForward: false,
+      });
+      basePriceClose = stockItems[0]?.close;
+    } catch {
+      logger.warn('Could not fetch base price for snapshot');
+    }
+
+    if (basePriceClose !== undefined) {
+      const horizonMap = [
+        { horizon: '1d' as const, pred: predNextDay, tradingDays: 1 },
+        { horizon: '14d' as const, pred: predTwoWeek, tradingDays: 10 },
+        { horizon: '30d' as const, pred: predOneMonth, tradingDays: 21 },
+      ];
+
+      for (const { horizon, pred, tradingDays } of horizonMap) {
+        try {
+          const targetDate = addTradingDays(today, tradingDays);
+          await createSnapshot({
+            entityType: 'PREDICTION_SNAPSHOT',
+            ticker,
+            predictionDate: today,
+            horizon,
+            direction: pred.direction,
+            probability: pred.probability,
+            targetDate,
+            basePriceClose,
+          });
+        } catch {
+          logger.warn(`Failed to snapshot ${horizon} prediction`);
+        }
+      }
     }
 
     return {

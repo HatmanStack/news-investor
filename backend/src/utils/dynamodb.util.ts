@@ -13,6 +13,7 @@ import {
   PutCommand,
   QueryCommand,
   UpdateCommand,
+  DeleteCommand,
   BatchGetCommand,
   BatchWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -21,6 +22,7 @@ import type {
   PutCommandInput,
   QueryCommandInput,
   UpdateCommandInput,
+  DeleteCommandInput,
   BatchGetCommandInput,
   BatchWriteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
@@ -370,6 +372,18 @@ export async function updateItem(
   };
 
   await dynamoDb.send(new UpdateCommand(params));
+}
+
+/**
+ * Delete a single item by PK and SK
+ */
+export async function deleteItem(pk: string, sk: string): Promise<void> {
+  const params: DeleteCommandInput = {
+    TableName: getTableName(),
+    Key: { pk, sk },
+  };
+
+  await dynamoDb.send(new DeleteCommand(params));
 }
 
 /**
