@@ -19,6 +19,11 @@
     }
   },
   "ignore": [".sync/**"],
-  "ignoreDependencies": ["babel-preset-expo", "eslint-config-expo", "amazon-cognito-identity-js"],
+  "ignoreDependencies": [
+    "babel-preset-expo",
+    "eslint-config-expo",
+    "amazon-cognito-identity-js",
+    "@aws-sdk/client-ses"
+  ],
   "ignoreExportsUsedInFile": true
 }
