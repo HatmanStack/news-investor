@@ -267,10 +267,23 @@ Upcoming earnings dates fetched from yfinance with DynamoDB cache.
 
 Files: `backend/python/services/earnings_service.py`, `backend/python/handlers/earnings.py`, `backend/python/repositories/earnings_cache.py`, `frontend/src/hooks/useEarningsCalendar.ts`, `frontend/src/components/earnings/`
 
+## Materiality Heatmap
+
+Calendar grid on the portfolio page showing daily sentiment intensity with material event markers. Tapping a stock card expands an inline heatmap below it.
+
+**Backend**: `GET /sentiment/daily-history` queries pre-aggregated `DAILY#` entities. Returns date, sentimentScore, materialEventCount, eventCounts. Paginated by 30-day chunks.
+
+**Frontend**: 7-column calendar grid (Mon-Sun). Days colored by sentiment intensity (green=positive, red=negative, gray=neutral). Dot marker for material events. Backwards pagination via `useInfiniteQuery`.
+
+Files: `frontend/src/hooks/useDailyHistory.ts`, `frontend/src/components/heatmap/`
+
 ## Additional Pro Features
 
 The following features are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro):
 
+- **Model Diagnostics** — ML prediction feature importance percentages per horizon
+- **Comparative Sentiment** — Stock sentiment percentile ranking vs sector ETF top 10 holdings
+- **Email Reports** — Personalized HTML email digests via SES (on-demand + weekly scheduled)
 - **Stock Notes** — Per-stock notes with cloud sync (DynamoDB primary, local SQLite fallback)
 - **Prediction Track Record** — Immutable prediction snapshots with on-demand resolution and per-horizon accuracy tracking
 
@@ -282,7 +295,8 @@ frontend/src/
 │   ├── useSentimentData.ts            # Data gathering, alignment, prediction trigger
 │   ├── useSentimentVelocity.ts        # Velocity from sentiment data
 │   ├── useSectorBenchmark.ts          # Stock vs sector ETF comparison
-│   └── useEarningsCalendar.ts         # Upcoming earnings dates
+│   ├── useEarningsCalendar.ts         # Upcoming earnings dates
+│   └── useDailyHistory.ts            # Paginated daily sentiment for heatmap
 ├── utils/sentiment/
 │   └── velocityCalculator.ts          # Sentiment rate of change computation
 ├── components/
@@ -290,9 +304,13 @@ frontend/src/
 │   │   └── SentimentVelocityIndicator.tsx  # Velocity pill/badge
 │   ├── sector/
 │   │   └── SectorBenchmarkCard.tsx    # Relative performance card
-│   └── earnings/
-│       ├── EarningsBadge.tsx          # Portfolio card badge (< 7 days)
-│       └── EarningsCard.tsx           # Full earnings detail card
+│   ├── earnings/
+│   │   ├── EarningsBadge.tsx          # Portfolio card badge (< 7 days)
+│   │   └── EarningsCard.tsx           # Full earnings detail card
+│   └── heatmap/
+│       ├── MaterialityHeatmap.tsx     # Calendar grid with sentiment colors
+│       ├── HeatmapCell.tsx            # Individual day cell with color/dot
+│       └── HeatmapLegend.tsx          # Color band legend
 ├── constants/sectorEtf.constants.ts   # GICS sector to SPDR ETF mapping
 ├── services/api/backendClient.ts      # Shared axios client
 ├── ml/prediction/
@@ -318,10 +336,16 @@ backend/src/
 └── ml/sentiment/analyzer.ts           # AFINN + financial lexicon (server-side)
 
 backend/python/
-├── handlers/earnings.py               # GET /earnings, POST /batch/earnings
-├── services/earnings_service.py       # yfinance calendar fetch + parsing
+├── handlers/
+│   ├── earnings.py                    # GET /earnings, POST /batch/earnings
+│   └── etf_holdings.py               # GET /etf-holdings
+├── services/
+│   ├── earnings_service.py            # yfinance calendar fetch + parsing
+│   └── etf_holdings_service.py        # ETF holdings with 3-level cache fallback
 ├── repositories/earnings_cache.py     # EARN# DynamoDB cache (24h TTL)
-├── constants/sector_etf_map.py        # GICS sector to SPDR ETF mapping
+├── constants/
+│   ├── sector_etf_map.py              # GICS sector to SPDR ETF mapping
+│   └── etf_holdings.py               # Static top 10 ETF holdings fallback
 └── utils/transform.py                 # Metadata enrichment (sector, industry, sectorEtf)
 
 backend/services/ml/

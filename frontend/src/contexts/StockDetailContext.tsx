@@ -14,6 +14,7 @@ import { differenceInDays } from 'date-fns';
 import { useStock } from './StockContext';
 import type { StockDetails, CombinedWordDetails, WordCountDetails } from '@/types/database.types';
 import type { SentimentJobStatus } from '@/services/api/lambdaSentiment.service';
+import type { DiagnosticsOutput } from '@/ml/prediction/types';
 
 interface StockDetailContextType {
   ticker: string;
@@ -28,6 +29,9 @@ interface StockDetailContextType {
   sentimentData: CombinedWordDetails[];
   sentimentLoading: boolean;
   sentimentError: Error | null;
+
+  // Prediction diagnostics (feature importance)
+  diagnostics: DiagnosticsOutput | null;
 
   // Article sentiment data
   articleSentimentData: WordCountDetails[];
@@ -71,6 +75,7 @@ export function StockDetailProvider({
     data: sentimentData = [],
     isLoading: sentimentLoading,
     error: sentimentError,
+    diagnostics,
   } = useSentimentData(ticker, { days });
   const {
     data: articleSentimentData = [],
@@ -111,6 +116,7 @@ export function StockDetailProvider({
       sentimentData,
       sentimentLoading,
       sentimentError: sentimentError as Error | null,
+      diagnostics: diagnostics ?? null,
       articleSentimentData,
       articleSentimentLoading,
       articleSentimentError: articleSentimentError as Error | null,
@@ -129,6 +135,7 @@ export function StockDetailProvider({
       sentimentData,
       sentimentLoading,
       sentimentError,
+      diagnostics,
       articleSentimentData,
       articleSentimentLoading,
       articleSentimentError,

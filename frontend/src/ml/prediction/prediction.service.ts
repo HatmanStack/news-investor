@@ -17,7 +17,8 @@ import {
   FEATURE_NAMES,
   PRICE_ONLY_FEATURE_NAMES,
 } from './preprocessing';
-import type { PredictionInput, PredictionOutput } from './types';
+import type { PredictionInput, PredictionOutput, DiagnosticsOutput } from './types';
+import { normalizeFStats } from './diagnostics';
 import type { EventType } from '../../types/database.types';
 import {
   HORIZONS,
@@ -281,6 +282,7 @@ export async function getStockPredictions(
 
     // Make predictions for each horizon using ensemble
     const predictions: { [key: string]: number | null } = {};
+    const diagnostics: DiagnosticsOutput = {};
 
     for (const [name, horizon] of Object.entries(HORIZONS)) {
       // Generate labels for this horizon
@@ -458,6 +460,16 @@ export async function getStockPredictions(
           : pricePred;
         predictions[name] = mergedPred;
 
+        // Capture diagnostics for NEXT horizon
+        diagnostics.NEXT = {
+          featureImportance: normalizeFStats(fStats),
+          modelType: useEnsemble ? 'ensemble' : 'price_only',
+          ensembleWeight: useEnsemble ? sentimentAvailability : undefined,
+          sampleCount: y.length,
+          cvScore: cvScore ?? undefined,
+          holdoutScore: holdoutScore ?? undefined,
+        };
+
         console.log(
           `[Ensemble] ${ticker} ${name}: full=${fullPred.toFixed(4)}, price=${pricePred.toFixed(4)}, ` +
             `weight=${useEnsemble ? sentimentAvailability.toFixed(2) : '0 (rejected)'}, merged=${mergedPred.toFixed(4)}` +
@@ -477,6 +489,14 @@ export async function getStockPredictions(
         const X_price_recent = priceScaler.transform([priceFeatures[priceFeatures.length - 1]!]);
         const pricePred = priceModel.predictProba(X_price_recent)[0]![1]!;
         predictions[name] = pricePred;
+
+        // Capture diagnostics for WEEK/MONTH horizons
+        const priceFStatsForHorizon = computeFeatureFStats(X_price, y, PRICE_ONLY_FEATURE_NAMES);
+        diagnostics[name as 'WEEK' | 'MONTH'] = {
+          featureImportance: normalizeFStats(priceFStatsForHorizon),
+          modelType: 'price_only',
+          sampleCount: y.length,
+        };
 
         console.log(
           `[Ensemble] ${ticker} ${name}: price-only=${pricePred.toFixed(4)} (${y.length} samples, 5 features)`,
@@ -499,6 +519,7 @@ export async function getStockPredictions(
       week: predictions.WEEK != null ? predictions.WEEK.toFixed(4) : null,
       month: predictions.MONTH != null ? predictions.MONTH.toFixed(4) : null,
       ticker,
+      diagnostics,
     };
   } catch (error) {
     console.error('[PredictionService] Error generating predictions:', error);

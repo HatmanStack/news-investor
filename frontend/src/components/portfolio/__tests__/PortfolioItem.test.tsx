@@ -12,6 +12,15 @@ jest.mock('@/hooks', () => ({
   useStockData: jest.fn(),
 }));
 
+jest.mock('@/hooks/useDailyHistory', () => ({
+  useDailyHistory: jest.fn(() => ({
+    data: [{ date: '2026-02-15', sentimentScore: 0.5, materialEventCount: 1 }],
+    isLoading: false,
+    hasNextPage: false,
+    fetchNextPage: jest.fn(),
+  })),
+}));
+
 // Mock Ionicons
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
@@ -237,5 +246,71 @@ describe('PortfolioItem', () => {
     // We use getAllByText because '--' might appear multiple times (price loading, prediction placeholder)
     const placeholders = getAllByText('--');
     expect(placeholders.length).toBeGreaterThan(0);
+  });
+
+  describe('accordion heatmap', () => {
+    beforeEach(() => {
+      mockUseLatestStockPrice.mockReturnValue({
+        data: mockLatestPrice,
+        isLoading: false,
+        error: null,
+      } as any);
+    });
+
+    it('should render heatmap when expanded', () => {
+      const { getByTestId } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          isExpanded={true}
+          onToggleExpand={jest.fn()}
+        />,
+        { wrapper },
+      );
+      expect(getByTestId('materiality-heatmap')).toBeTruthy();
+    });
+
+    it('should not render heatmap when collapsed', () => {
+      const { queryByTestId } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          isExpanded={false}
+          onToggleExpand={jest.fn()}
+        />,
+        { wrapper },
+      );
+      expect(queryByTestId('materiality-heatmap')).toBeNull();
+    });
+
+    it('should render chevron toggle when onToggleExpand is provided', () => {
+      const { getByLabelText } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          isExpanded={false}
+          onToggleExpand={jest.fn()}
+        />,
+        { wrapper },
+      );
+      expect(getByLabelText('Expand heatmap')).toBeTruthy();
+    });
+
+    it('should show collapse label when expanded', () => {
+      const { getByLabelText } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          isExpanded={true}
+          onToggleExpand={jest.fn()}
+        />,
+        { wrapper },
+      );
+      expect(getByLabelText('Collapse heatmap')).toBeTruthy();
+    });
   });
 });

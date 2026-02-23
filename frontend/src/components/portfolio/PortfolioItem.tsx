@@ -6,10 +6,10 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Chip, IconButton } from 'react-native-paper';
+import { Chip, IconButton, Divider } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import Animated, { FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import type { PortfolioDetails } from '@/types/database.types';
 import { MonoText, AnimatedCard, AnimatedNumber } from '@/components/common';
@@ -20,14 +20,46 @@ import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelo
 import { EarningsBadge } from '@/components/earnings/EarningsBadge';
 import { useSymbolDetails } from '@/hooks/useSymbolSearch';
 import { FeatureGate } from '@/features/tier';
+import { MaterialityHeatmap } from '@/components/heatmap';
+import { useDailyHistory } from '@/hooks/useDailyHistory';
 
 interface PortfolioItemProps {
   item: PortfolioDetails;
   onPress: () => void;
   onDelete: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
-export function PortfolioItem({ item, onPress, onDelete }: PortfolioItemProps) {
+function ExpandedHeatmapSection({ ticker }: { ticker: string }) {
+  const { data, isLoading, hasNextPage, fetchNextPage } = useDailyHistory(ticker);
+
+  return (
+    <View style={expandedStyles.heatmapSection}>
+      <Divider />
+      <MaterialityHeatmap
+        data={data}
+        isLoading={isLoading}
+        hasMore={hasNextPage}
+        onLoadMore={fetchNextPage}
+      />
+    </View>
+  );
+}
+
+const expandedStyles = StyleSheet.create({
+  heatmapSection: {
+    paddingTop: 8,
+  },
+});
+
+export function PortfolioItem({
+  item,
+  onPress,
+  onDelete,
+  isExpanded,
+  onToggleExpand,
+}: PortfolioItemProps) {
   const theme = useAppTheme();
   const { cardSpacing, cardPadding, fontSize } = useLayoutDensity();
 
@@ -274,7 +306,26 @@ export function PortfolioItem({ item, onPress, onDelete }: PortfolioItemProps) {
                   </Chip>
                 </FeatureGate>
               )}
+              {onToggleExpand && (
+                <FeatureGate feature="materiality_heatmap" fallback={null}>
+                  <Ionicons
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={theme.colors.onSurfaceVariant}
+                    onPress={onToggleExpand}
+                    accessibilityLabel={isExpanded ? 'Collapse heatmap' : 'Expand heatmap'}
+                  />
+                </FeatureGate>
+              )}
             </View>
+
+            {isExpanded && (
+              <FeatureGate feature="materiality_heatmap" fallback={null}>
+                <Animated.View entering={FadeIn.duration(200)}>
+                  <ExpandedHeatmapSection ticker={item.ticker} />
+                </Animated.View>
+              </FeatureGate>
+            )}
           </View>
         </AnimatedCard>
       </Swipeable>

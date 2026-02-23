@@ -16,6 +16,7 @@ import { SentimentListHeader } from '@/components/sentiment/SentimentListHeader'
 import { SentimentListItem } from '@/components/sentiment/SentimentListItem';
 import { SingleWordItem } from '@/components/sentiment/SingleWordItem';
 import { PredictionSummaryCard } from '@/components/sentiment/PredictionSummaryCard';
+import { ComparativeSentimentCard } from '@/components/sentiment/ComparativeSentimentCard';
 import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
 import { TrackRecordCard } from '@/components/predictions/TrackRecordCard';
 import { PredictionHistory } from '@/components/predictions/PredictionHistory';
@@ -113,6 +114,7 @@ export default function SentimentScreen() {
               />
               <SentimentVelocityIndicator ticker={ticker} />
               <TrackRecordCard ticker={ticker} />
+              <ComparativeSentimentCard ticker={ticker} />
               <PredictionHistory ticker={ticker} limit={5} />
               <View style={styles.chartContainer}>
                 {isAggregateLoading ? (

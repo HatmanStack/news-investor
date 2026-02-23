@@ -1,0 +1,1 @@
+export { MaterialityHeatmap } from './MaterialityHeatmap';

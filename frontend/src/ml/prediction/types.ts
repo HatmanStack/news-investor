@@ -45,11 +45,34 @@ export interface PredictionInput {
 /**
  * Prediction output for three time horizons
  */
+export interface FeatureImportance {
+  name: string; // Human-readable name (e.g., "News Impact")
+  internalName: string; // Internal name (e.g., "event_impact")
+  percentage: number; // Relative importance as percentage (0-100, sums to 100)
+  category: 'sentiment' | 'price'; // Grouping for simplified view
+}
+
+export interface HorizonDiagnostics {
+  featureImportance: FeatureImportance[]; // Sorted by percentage descending
+  modelType: 'ensemble' | 'price_only'; // Which model was used
+  ensembleWeight?: number; // Sentiment weight (0-1), only for ensemble
+  sampleCount: number; // Number of training samples
+  cvScore?: number; // Walk-forward CV accuracy (0-1), if computed
+  holdoutScore?: number; // Holdout validation accuracy (0-1), if computed
+}
+
+export interface DiagnosticsOutput {
+  NEXT?: HorizonDiagnostics;
+  WEEK?: HorizonDiagnostics;
+  MONTH?: HorizonDiagnostics;
+}
+
 export interface PredictionOutput {
   next: string | null; // Next day prediction (0=up, 1=down), null if insufficient data
   week: string | null; // 2-week prediction (0=up, 1=down), null if insufficient data
   month: string | null; // 1-month prediction (0=up, 1=down), null if insufficient data
   ticker: string;
+  diagnostics?: DiagnosticsOutput;
 }
 
 /**

@@ -468,3 +468,46 @@ export async function handleSentimentResultsRequest(
     return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
   }
 }
+
+/**
+ * GET /sentiment/daily-history - Get pre-aggregated daily sentiment for heatmap
+ *
+ * Query parameters: ticker (required), startDate (required), endDate (required)
+ * Response: { data: [{ date, sentimentScore, materialEventCount, eventCounts, avgSignalScore }] }
+ */
+export async function handleDailyHistoryRequest(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayResponse> {
+  try {
+    const ticker = validateTicker(event.queryStringParameters?.ticker);
+    const startDate = event.queryStringParameters?.startDate;
+    const endDate = event.queryStringParameters?.endDate;
+
+    if (!ticker || !startDate || !endDate) {
+      return errorResponse('Valid ticker, startDate, and endDate are required', 400);
+    }
+
+    const dailyData = await DailySentimentAggregateRepository.queryByTickerAndDateRange(
+      ticker,
+      startDate,
+      endDate,
+    );
+
+    const result = dailyData.map((d) => ({
+      date: d.date,
+      sentimentScore: d.avgAspectScore ?? d.avgMlScore ?? 0,
+      materialEventCount: d.materialEventCount ?? 0,
+      eventCounts: d.eventCounts,
+      avgSignalScore: d.avgSignalScore,
+    }));
+
+    return successResponse(result);
+  } catch (error) {
+    logError('SentimentHandler', error, {
+      requestId: event.requestContext.requestId,
+    });
+
+    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
+    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
+  }
+}

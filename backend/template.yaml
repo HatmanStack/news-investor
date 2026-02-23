@@ -258,6 +258,13 @@ Resources:
       RouteKey: 'GET /sentiment/articles'
       Target: !Sub 'integrations/${ReactStocksIntegration}'
 
+  DailyHistoryRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /sentiment/daily-history'
+      Target: !Sub 'integrations/${ReactStocksIntegration}'
+
   PredictRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -299,6 +306,13 @@ Resources:
       ApiId: !Ref ReactStocksApi
       RouteKey: 'POST /batch/sentiment'
       Target: !Sub 'integrations/${ReactStocksIntegration}'
+
+  EtfHoldingsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ReactStocksApi
+      RouteKey: 'GET /etf-holdings'
+      Target: !Sub 'integrations/${PythonStocksIntegration}'
 
   # Lambda Permission for API Gateway (Node.js)
   ApiGatewayInvokePermission:

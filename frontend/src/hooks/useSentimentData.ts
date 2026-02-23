@@ -5,6 +5,7 @@
  * Predictions generated client-side using browser-based logistic regression.
  */
 
+import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as CombinedWordRepository from '@/database/repositories/combinedWord.repository';
 import { updatePredictions } from '@/services/sync/sentimentDataSync';
@@ -17,6 +18,7 @@ import {
 import { generateBrowserPredictions } from '@/ml/prediction/browserPredictions';
 import { submitPredictionSnapshot } from '@/services/sync/predictionSnapshotService';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
+import type { DiagnosticsOutput } from '@/ml/prediction/types';
 import { MIN_SENTIMENT_DATA } from '@/constants/ml.constants';
 
 export interface UseSentimentDataOptions {
@@ -38,8 +40,9 @@ export interface UseSentimentDataOptions {
  */
 export function useSentimentData(ticker: string, options: UseSentimentDataOptions = {}) {
   const { days = 30, enabled = true, staleTime } = options;
+  const diagnosticsRef = useRef<DiagnosticsOutput | null>(null);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['sentimentData', ticker, days],
     queryFn: async (): Promise<CombinedWordDetails[]> => {
       const endDate = formatDateForDB(new Date());
@@ -57,6 +60,11 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
         const predictions = await generateBrowserPredictions(ticker, sentimentData, days);
 
         if (predictions) {
+          // Capture diagnostics from prediction result
+          if (predictions.diagnostics) {
+            diagnosticsRef.current = predictions.diagnostics;
+          }
+
           // Attach predictions to latest record
           const latestRecord = sentimentData.reduce((latest, current) =>
             current.date > latest.date ? current : latest,
@@ -92,6 +100,8 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
+
+  return { ...query, diagnostics: diagnosticsRef.current };
 }
 
 /**

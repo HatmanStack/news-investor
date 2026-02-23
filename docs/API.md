@@ -11,6 +11,7 @@ All endpoints served via API Gateway v2 (HTTP API). Base URL stored in `frontend
 | GET    | `/stocks`         | Historical OHLCV price data          |
 | GET    | `/search`         | Symbol search                        |
 | GET    | `/earnings`       | Upcoming earnings dates              |
+| GET    | `/etf-holdings`   | Top 10 ETF holdings                  |
 | POST   | `/batch/stocks`   | Bulk price data for multiple tickers |
 | POST   | `/batch/earnings` | Bulk earnings for multiple tickers   |
 
@@ -22,22 +23,27 @@ All endpoints served via API Gateway v2 (HTTP API). Base URL stored in `frontend
 
 **POST /batch/earnings** body: `{ tickers: ["AAPL", "MSFT"] }` — Bulk fetch for portfolio.
 
+**GET /etf-holdings** query params: `etf` — Returns top 10 holdings for a SPDR sector ETF. Three-level fallback: DynamoDB cache (7-day TTL) → yfinance → static map.
+
 ### Node.js Lambda (Finnhub + Sentiment)
 
-| Method | Path                     | Description                         |
-| ------ | ------------------------ | ----------------------------------- |
-| GET    | `/news`                  | Financial news articles             |
-| POST   | `/sentiment`             | Trigger sentiment analysis job      |
-| GET    | `/sentiment`             | Get cached sentiment results        |
-| GET    | `/sentiment/job/{jobId}` | Poll job status                     |
-| GET    | `/sentiment/articles`    | Get analyzed articles               |
-| POST   | `/predict`               | Server-side prediction (legacy)     |
-| POST   | `/batch/news`            | Bulk news for multiple tickers      |
-| POST   | `/batch/sentiment`       | Bulk sentiment for multiple tickers |
+| Method | Path                       | Description                            |
+| ------ | -------------------------- | -------------------------------------- |
+| GET    | `/news`                    | Financial news articles                |
+| POST   | `/sentiment`               | Trigger sentiment analysis job         |
+| GET    | `/sentiment`               | Get cached sentiment results           |
+| GET    | `/sentiment/job/{jobId}`   | Poll job status                        |
+| GET    | `/sentiment/articles`      | Get analyzed articles                  |
+| POST   | `/predict`                 | Server-side prediction (legacy)        |
+| POST   | `/batch/news`              | Bulk news for multiple tickers         |
+| POST   | `/batch/sentiment`         | Bulk sentiment for multiple tickers    |
+| GET    | `/sentiment/daily-history` | Daily sentiment aggregates for heatmap |
 
 All endpoints are public. No authentication required.
 
-Additional endpoints for stock notes, prediction track record, and user tiers are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro).
+**GET /sentiment/daily-history** query params: `ticker`, `startDate`, `endDate` — Returns pre-aggregated daily sentiment data. Reads `DAILY#` entities directly. Response includes date, sentimentScore, materialEventCount, eventCounts, avgSignalScore.
+
+Additional endpoints for model diagnostics, comparative sentiment, email reports, stock notes, prediction track record, and user tiers are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro).
 
 ### Sentiment Job Flow
 

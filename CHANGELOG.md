@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.3.0] - 2026-02-22
+
+### Added
+
+- **[Pro]** Model diagnostics — ML prediction feature importance percentages per horizon, converting raw ANOVA F-statistics into relative percentages grouped into Sentiment Signals and Price Signals
+- **[Pro]** Materiality heatmap — calendar grid on portfolio cards showing daily sentiment intensity (color-coded) with material event dot markers, backwards pagination via `useInfiniteQuery`
+- **[Pro]** Comparative sentiment — stock sentiment percentile ranking vs sector ETF top 10 holdings, with three-level ETF holdings fallback (DynamoDB cache → yfinance → static map)
+- **[Pro]** Email reports — personalized HTML email digests via SES with portfolio summaries, predictions, sentiment, and track record; on-demand delivery + weekly EventBridge schedule (Monday 8 AM UTC)
+- **[Pro]** `GET /etf-holdings` endpoint with ETF holdings cache (`ETF#` entity, 7-day TTL)
+- **[Pro]** `GET /sentiment/peers` endpoint with peer sentiment cache (`PEERS#` entity, 24-hour TTL)
+- **[Pro]** `GET /sentiment/daily-history` endpoint reading pre-aggregated `DAILY#` entities
+- **[Pro]** `GET/PUT /reports/preferences` and `POST /reports/send` email report endpoints (auth + tier required)
+- **[Pro]** `REPORT_PREFS` DynamoDB entity for weekly report opt-in and ticker list
+- **[Pro]** 4 new feature flags: `model_diagnostics`, `materiality_heatmap`, `comparative_sentiment`, `email_reports`
+- **[Pro]** `SES_FROM_EMAIL` environment variable for configurable sender address
+
+### Fixed
+
+- Peer sentiment `batchFetchAverageSentiment` reading nonexistent `sentimentScore` field — changed to `avgAspectScore ?? avgMlScore`
+- Report handler missing tier enforcement — free-tier users now receive 403 on report endpoints
+- Report handler error responses leaking raw exception messages — now uses `sanitizeErrorMessage()`
+- Report HTML template missing escaping for user-derived strings (`escapeHtml()` applied)
+- Report `priceChange` never populated — now fetches 2 price records and computes delta
+- Report `peerPercentile` referenced but never populated — removed dead field from interface and template
+- ETF holdings handler leaking raw Python exception in 500 responses
+- ETF holdings handler not validating `etf` query parameter format — added `^[A-Z]{1,6}$` regex
+- ETF holdings handler/service passing dead `table_name` argument — removed
+- Peer sentiment handler missing `validateTicker()` — now validates both `ticker` and `sectorEtf`
+- Peer sentiment handler `sectorName` unbounded — capped at 50 characters
+- Daily-history handler missing `validateTicker()` — now uses shared validation
+- Comparative sentiment bar width overflow — clamped to 100% max
+- Heatmap prev-month button missing `disabled` state when no more data
+- Weekly report processing changed from sequential to parallel batches of 10
+
 ## [2.2.2] - 2026-02-22
 
 ### Changed

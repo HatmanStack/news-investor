@@ -112,14 +112,15 @@ backend/
 
 **DynamoDB Entity Types**:
 
-| PK          | SK                | Purpose                     |
-| ----------- | ----------------- | --------------------------- |
-| `STOCK#XYZ` | `DATE#YYYY-MM-DD` | Stock price cache           |
-| `NEWS#XYZ`  | `HASH#abc123`     | News articles               |
-| `SENT#XYZ`  | `HASH#abc123`     | Sentiment analysis cache    |
-| `DAILY#XYZ` | `DATE#YYYY-MM-DD` | Daily sentiment aggregates  |
-| `HIST#XYZ`  | `DATE#YYYY-MM-DD` | Historical price data (ML)  |
-| `EARN#XYZ`  | `DATE#YYYY-MM-DD` | Earnings calendar (24h TTL) |
+| PK          | SK                | Purpose                      |
+| ----------- | ----------------- | ---------------------------- |
+| `STOCK#XYZ` | `DATE#YYYY-MM-DD` | Stock price cache            |
+| `NEWS#XYZ`  | `HASH#abc123`     | News articles                |
+| `SENT#XYZ`  | `HASH#abc123`     | Sentiment analysis cache     |
+| `DAILY#XYZ` | `DATE#YYYY-MM-DD` | Daily sentiment aggregates   |
+| `HIST#XYZ`  | `DATE#YYYY-MM-DD` | Historical price data (ML)   |
+| `EARN#XYZ`  | `DATE#YYYY-MM-DD` | Earnings calendar (24h TTL)  |
+| `ETF#XLK`   | `HOLDINGS`        | Top 10 ETF holdings (7d TTL) |
 
 ## Testing Notes
 

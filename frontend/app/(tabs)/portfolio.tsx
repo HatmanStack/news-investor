@@ -29,6 +29,7 @@ import { differenceInDays } from 'date-fns';
 export default function PortfolioScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const theme = useTheme();
   const { contentWidth } = useContentWidth();
   const { portfolio, isLoading, error, refetch, removeFromPortfolio } = usePortfolio();
@@ -67,6 +68,10 @@ export default function PortfolioScreen() {
     },
     [removeFromPortfolio, toast],
   );
+
+  const handleToggleExpand = useCallback((ticker: string) => {
+    setExpandedTicker((prev) => (prev === ticker ? null : ticker));
+  }, []);
 
   const handleAddStock = useCallback(() => {
     setModalVisible(true);
@@ -137,10 +142,12 @@ export default function PortfolioScreen() {
           item={item}
           onPress={() => handleStockPress(item)}
           onDelete={() => handleDeleteStock(item)}
+          isExpanded={expandedTicker === item.ticker}
+          onToggleExpand={() => handleToggleExpand(item.ticker)}
         />
       </Animated.View>
     ),
-    [handleStockPress, handleDeleteStock],
+    [handleStockPress, handleDeleteStock, expandedTicker, handleToggleExpand],
   );
 
   const renderSkeletonItem = useCallback(

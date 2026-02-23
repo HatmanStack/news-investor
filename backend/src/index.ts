@@ -142,6 +142,19 @@ export async function handler(
           break;
         }
 
+        case '/sentiment/daily-history': {
+          if (method !== 'GET') {
+            response = errorResponse(
+              `Method ${method} not allowed for /sentiment/daily-history`,
+              405,
+            );
+            break;
+          }
+          const { handleDailyHistoryRequest } = await import('./handlers/sentiment.handler');
+          response = await handleDailyHistoryRequest(event);
+          break;
+        }
+
         default: {
           // Check if it's a job status request (/sentiment/job/:jobId)
           if (path.startsWith('/sentiment/job/')) {

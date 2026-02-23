@@ -12,7 +12,12 @@ import { subDays } from 'date-fns';
 import { getStockPredictions, parsePredictionResponse } from '@/ml/prediction/prediction.service';
 import type { CombinedWordDetails, EventType } from '@/types/database.types';
 import type { Predictions } from '@/utils/sentiment/dataTransformer';
+import type { DiagnosticsOutput } from '@/ml/prediction/types';
 import { MIN_SENTIMENT_DATA, MIN_STOCK_DATA } from '@/constants/ml.constants';
+
+export interface PredictionsWithDiagnostics extends Predictions {
+  diagnostics?: DiagnosticsOutput;
+}
 
 /**
  * Generate predictions using browser-based logistic regression.
@@ -30,7 +35,7 @@ export async function generateBrowserPredictions(
   ticker: string,
   sentimentData: CombinedWordDetails[],
   days: number,
-): Promise<Predictions | null> {
+): Promise<PredictionsWithDiagnostics | null> {
   try {
     if (sentimentData.length < MIN_SENTIMENT_DATA) {
       return null;
@@ -167,10 +172,11 @@ export async function generateBrowserPredictions(
       };
     };
 
-    const predictions: Predictions = {
+    const predictions: PredictionsWithDiagnostics = {
       nextDay: toPrediction(parsed.nextDay),
       twoWeek: toPrediction(parsed.twoWeeks),
       oneMonth: toPrediction(parsed.oneMonth),
+      diagnostics: response.diagnostics,
     };
 
     return predictions;

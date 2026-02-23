@@ -1,6 +1,6 @@
 {
   "name": "news-investor-backend",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "AWS Lambda backend for NewsInvestor - yfinance stock data, Finnhub news, DynamoDB caching",
   "main": "dist/index.js",
   "type": "module",
@@ -33,6 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.995.0",
+    "@aws-sdk/client-ses": "^3.995.0",
     "@aws-sdk/lib-dynamodb": "^3.995.0",
     "sentiment": "^5.0.2",
     "zod": "^3.24.3"
