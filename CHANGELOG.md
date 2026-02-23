@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.3.1] - 2026-02-22
+
+### Fixed
+
+- Fix race condition between release and sync workflows — sync now creates community repo tag and release directly instead of depending on pro repo tag propagation
+
 ## [2.3.0] - 2026-02-22
 
 ### Added
