@@ -32,9 +32,9 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.995.0",
-    "@aws-sdk/client-ses": "^3.995.0",
-    "@aws-sdk/lib-dynamodb": "^3.995.0",
+    "@aws-sdk/client-dynamodb": "^3.999.0",
+    "@aws-sdk/client-ses": "^3.999.0",
+    "@aws-sdk/lib-dynamodb": "^3.999.0",
     "sentiment": "^5.0.2",
     "zod": "^3.24.3"
   },
