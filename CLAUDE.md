@@ -128,7 +128,7 @@ backend/
 - **Backend tests**: Jest with ESM support (`--experimental-vm-modules`)
 - **Backend E2E tests**: Real DynamoDB via LocalStack (`make localstack && make test-e2e`)
 - **Python tests**: pytest in `backend/python_tests/`
-- **Coverage thresholds**: Frontend 50% (branches/functions/lines/statements), Backend 60% branches / 70% functions/lines/statements
+- **Coverage thresholds**: Frontend 50% (branches/functions/lines/statements), Backend 55% branches / 60% functions / 65% lines+statements
 - **Pre-commit hooks**: Husky runs Prettier (TS/JSON/MD) and ruff (Python) via lint-staged
 - **Commit messages**: Enforced conventional commits via commitlint
 

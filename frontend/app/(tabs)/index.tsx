@@ -25,6 +25,7 @@ import { useToast } from '@/components/common';
 import { syncAllData } from '@/services/sync/syncOrchestrator';
 import type { SymbolDetails } from '@/types/database.types';
 import { differenceInDays } from 'date-fns';
+import { logger } from '@/utils/logger';
 
 export default function SearchScreen() {
   const theme = useTheme();
@@ -86,17 +87,17 @@ export default function SearchScreen() {
         setIsSyncing(true);
         setSyncMessage(`Syncing data for ${symbol.ticker}...`);
 
-        console.log(`[SearchScreen] Starting sync for ${symbol.ticker} (${days} days)`);
+        logger.debug(`[SearchScreen] Starting sync for ${symbol.ticker} (${days} days)`);
 
         const syncResult = await syncAllData(symbol.ticker, days, (progress) => {
           setSyncMessage(`${progress.message} (${progress.progress}/${progress.total})`);
         });
 
-        console.log(`[SearchScreen] Sync complete for ${symbol.ticker}`);
+        logger.debug(`[SearchScreen] Sync complete for ${symbol.ticker}`);
 
         // Show message if sentiment is processing asynchronously
         if (syncResult.sentimentJobId) {
-          console.log(
+          logger.debug(
             `[SearchScreen] Sentiment analysis in progress: Job ${syncResult.sentimentJobId}`,
           );
           toast.show({
@@ -131,9 +132,9 @@ export default function SearchScreen() {
         });
         queryClient.invalidateQueries({ queryKey: ['stockData', symbol.ticker], exact: false });
 
-        console.log(`[SearchScreen] Invalidated queries for ${symbol.ticker}`);
+        logger.debug(`[SearchScreen] Invalidated queries for ${symbol.ticker}`);
       } catch (error) {
-        console.error('[SearchScreen] Error syncing data:', error);
+        logger.error('[SearchScreen] Error syncing data:', error);
         setIsSyncing(false);
         setSyncMessage('');
         toast.show({ message: 'Failed to sync stock data', variant: 'error' });

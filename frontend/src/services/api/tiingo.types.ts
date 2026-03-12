@@ -31,12 +31,6 @@ export interface TiingoSymbolMetadata {
   sectorEtf?: string | null;
 }
 
-export interface TiingoApiConfig {
-  apiKey: string;
-  baseURL?: string;
-  timeout?: number;
-}
-
 export interface TiingoSearchResult {
   ticker: string;
   name: string;

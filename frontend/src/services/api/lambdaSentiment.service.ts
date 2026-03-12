@@ -40,18 +40,6 @@ export interface SentimentJobStatus extends SentimentJobResponse {
 }
 
 /**
- * Breakdown of sentiment scores for individual financial aspects
- */
-export interface AspectBreakdown {
-  REVENUE?: number;
-  EARNINGS?: number;
-  GUIDANCE?: number;
-  MARGINS?: number;
-  GROWTH?: number;
-  DEBT?: number;
-}
-
-/**
  * Daily sentiment data point with three-signal architecture
  *
  * **Schema Evolution:**

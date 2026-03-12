@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.3.2] - 2026-03-12
+
+### Added
+
+- **[Pro]** Atomic quota enforcement — `checkAndRecordUsage` replaces non-atomic `checkQuota` + `recordUsage` with single DynamoDB `ConditionExpression` to eliminate TOCTOU race at quota boundary
+- **[Pro]** `conditionalIncrementUsage` repository method using DynamoDB conditional writes
+- DynamoDB `WriteThrottleEvents` CloudWatch alarm to detect batch write data loss risk
+- Sync integrity verification step in `.sync/sync.sh` — scans for pro-only file leaks before pushing to community repo
+- Backend CI coverage enforcement (`--coverage` flag on backend tests, `--cov-fail-under=70` on Python tests)
+- Python type checking in CI via mypy
+- Backend unit tests for dynamodb client, finnhub service, mlSentiment service, newsCache service, signalScore service, and 7 utility modules (cache, cacheTransform, dynamodb, error, hash, logger, metrics)
+
+### Changed
+
+- Migrated from deprecated `@testing-library/jest-native` to built-in matchers in `@testing-library/react-native`
+- Pinned `react-test-renderer` as direct devDependency to keep in sync with React via Dependabot
+- Moved Lambda `MemorySize`/`Timeout` from SAM `Globals` to per-function config for right-sized resources
+- Scoped SES IAM policy from `Resource: '*'` to specific identity ARN
+- Escalated `@typescript-eslint/no-explicit-any` from `warn` to `error`
+- Routed `console.log` calls through logger utility
+- Removed 14 unused type exports across frontend and backend
+- Removed unused Python exports and whitelisted tested-but-uncalled functions
+
+### Fixed
+
+- Frontend CI failures on Dependabot PRs caused by `react-test-renderer` version mismatch
+- `TierContext` defaulting `isFeatureEnabled` to `false` for unauthenticated users — now returns `true` per auth-optional design
+- `MaterialityHeatmap` initializing to current month instead of data's month, causing time-dependent test failures
+- 9 npm audit vulnerabilities resolved
+- Removed committed `__pycache__` bytecode from tracking
+
 ## [2.3.1] - 2026-02-22
 
 ### Fixed

@@ -7,6 +7,12 @@ handler  # backend/python/index.py
 # pytest fixtures (called by pytest, not directly)
 api_event  # backend/python_tests/conftest.py
 
+# Tested API functions (not yet called from production handlers, but have test coverage)
+get_stock  # backend/python/repositories/stocks_cache.py
+put_stock  # backend/python/repositories/stocks_cache.py
+batch_get_stocks  # backend/python/repositories/stocks_cache.py
+validate_date  # backend/python/utils/validation.py
+
 # Lambda handler parameters required by AWS signature
 context  # Lambda context parameter (required but often unused)
 

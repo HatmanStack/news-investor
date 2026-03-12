@@ -13,7 +13,3 @@ SECTOR_TO_ETF: dict[str, str] = {
     "Real Estate": "XLRE",
     "Basic Materials": "XLB",
 }
-
-ETF_TO_SECTOR: dict[str, str] = {v: k for k, v in SECTOR_TO_ETF.items()}
-
-ALL_SECTOR_ETFS: list[str] = list(SECTOR_TO_ETF.values())

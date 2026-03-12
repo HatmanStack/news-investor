@@ -75,5 +75,3 @@ export const colors = {
     shimmer: ['transparent', 'rgba(255, 255, 255, 0.08)', 'transparent'] as const,
   },
 };
-
-export type ColorName = Exclude<keyof typeof colors, 'gradients'>;

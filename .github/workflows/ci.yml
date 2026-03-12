@@ -67,8 +67,8 @@ jobs:
         run: cd backend && npm ci
       - name: Type check
         run: cd backend && npx tsc --noEmit
-      - name: Run tests
-        run: cd backend && npm test -- --ci --forceExit
+      - name: Run tests with coverage enforcement
+        run: cd backend && npm test -- --ci --forceExit --coverage
 
   python-stocks-lint:
     runs-on: ubuntu-latest
@@ -77,10 +77,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install lint tools
+        run: pip install ruff mypy
       - name: Lint Python stocks Lambda
         run: ruff check backend/python backend/python_tests
+      - name: Type check Python
+        run: mypy backend/python --ignore-missing-imports --disable-error-code=import-untyped --no-error-summary
 
   python-stocks-tests:
     runs-on: ubuntu-latest
@@ -93,10 +95,10 @@ jobs:
         run: |
           pip install -r backend/python/requirements.txt
           pip install -r backend/python/requirements-dev.txt
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           PYTHONPATH: backend/python
-        run: pytest backend/python_tests --maxfail=1 -v --ignore=backend/python_tests/test_yfinance_service.py
+        run: pytest backend/python_tests --maxfail=1 -v --ignore=backend/python_tests/test_yfinance_service.py --cov=backend/python --cov-report=term-missing --cov-fail-under=70
 
   ml-service-lint:
     runs-on: ubuntu-latest

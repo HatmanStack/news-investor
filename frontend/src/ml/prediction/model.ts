@@ -6,6 +6,7 @@
  */
 
 import type { FeatureMatrix, Labels, TrainingOptions, SampleWeights } from './types';
+import { logger } from '../../utils/logger';
 
 /**
  * Sigmoid activation function
@@ -179,7 +180,7 @@ export class LogisticRegression {
       loss += (alpha / 2) * l2Penalty;
 
       if (verbose && (iter % 100 === 0 || iter === maxIterations - 1)) {
-        console.log(`[LogisticRegression] Iteration ${iter}: loss=${loss.toFixed(6)}`);
+        logger.debug(`[LogisticRegression] Iteration ${iter}: loss=${loss.toFixed(6)}`);
       }
 
       // Check convergence
@@ -187,7 +188,7 @@ export class LogisticRegression {
         this.converged = true;
         this.iterations = iter + 1;
         if (verbose) {
-          console.log(`[LogisticRegression] Converged after ${this.iterations} iterations`);
+          logger.debug(`[LogisticRegression] Converged after ${this.iterations} iterations`);
         }
         break;
       }

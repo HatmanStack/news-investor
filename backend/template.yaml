@@ -101,9 +101,6 @@ Parameters:
 
 Globals:
   Function:
-    # Set to max required for now since we use single function
-    Timeout: !Ref PredictTimeout
-    MemorySize: !Ref PredictMemory
     Runtime: nodejs24.x
     Architectures:
       - x86_64
@@ -377,6 +374,10 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-api'
       CodeUri: ./
       Handler: dist/index.handler
+      # Sentiment is the heaviest API Gateway path; predictions run via
+      # self-invocation and inherit the same function's config.
+      MemorySize: !Ref SentimentMemory
+      Timeout: !Ref SentimentTimeout
       Description: Backend proxy for Finnhub news and ML services
       Environment:
         Variables:
@@ -455,6 +456,25 @@ Resources:
       AlarmActions:
         - !Ref CostAnomalySNSTopic
       OKActions:
+        - !Ref CostAnomalySNSTopic
+
+  DynamoDBWriteThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'DynamoDB write throttle events detected - batch writes may lose data'
+      MetricName: WriteThrottleEvents
+      Namespace: AWS/DynamoDB
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ReactStocksTable
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
         - !Ref CostAnomalySNSTopic
 
   LambdaDurationAlarm:

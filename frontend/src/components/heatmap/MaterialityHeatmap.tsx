@@ -40,7 +40,13 @@ export function MaterialityHeatmap({
   onLoadMore,
 }: MaterialityHeatmapProps) {
   const theme = useTheme();
-  const [viewMonth, setViewMonth] = useState(new Date());
+  const [viewMonth, setViewMonth] = useState(() => {
+    if (data.length > 0) {
+      const latest = data.reduce((a, b) => (a.date > b.date ? a : b));
+      return new Date(latest.date + 'T00:00:00');
+    }
+    return new Date();
+  });
 
   // Build a map of date -> data for quick lookup
   const dataByDate = useMemo(() => {

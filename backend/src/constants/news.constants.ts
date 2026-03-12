@@ -48,6 +48,3 @@ export const NEWS_COVERAGE = {
    */
   LONG_RANGE_MIN_UNIQUE_DAYS: 15,
 } as const;
-
-/** Type for NEWS_COVERAGE object */
-export type NewsCoverageConfig = typeof NEWS_COVERAGE;

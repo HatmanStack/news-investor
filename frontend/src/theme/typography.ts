@@ -123,5 +123,3 @@ export const typography = {
     },
   },
 };
-
-export type TypographyStyleName = keyof typeof typography.styles;

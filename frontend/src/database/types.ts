@@ -6,12 +6,6 @@
 /** SQL parameter types supported by both platforms */
 export type SqlParam = string | number | null | boolean | undefined;
 
-/** Result of a run operation */
-export interface RunResult {
-  changes: number;
-  lastInsertRowId: number;
-}
-
 /**
  * Common database interface that works across both native and web platforms
  * - Native: Uses expo-sqlite SQLiteDatabase

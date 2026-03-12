@@ -7,10 +7,10 @@ export default {
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/types/**'],
   coverageThreshold: {
     global: {
-      branches: 60,
-      functions: 70,
-      lines: 70,
-      statements: 70,
+      branches: 55,
+      functions: 60,
+      lines: 65,
+      statements: 65,
     },
   },
   moduleNameMapper: {

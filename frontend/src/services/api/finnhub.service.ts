@@ -8,6 +8,7 @@ import { isAxiosError } from 'axios';
 import type { FinnhubNewsArticle } from './finnhub.types';
 import type { NewsDetails } from '@/types/database.types';
 import { createBackendClient } from './backendClient';
+import { logger } from '@/utils/logger';
 
 /**
  * Generate simple hash for URL (used for deduplication)
@@ -42,7 +43,7 @@ export async function fetchNews(
   const client = createBackendClient();
 
   try {
-    console.log(`[FinnhubService] Fetching news for ${ticker} from ${startDate} to ${endDate}`);
+    logger.debug(`[FinnhubService] Fetching news for ${ticker} from ${startDate} to ${endDate}`);
 
     const params = {
       ticker,
@@ -52,7 +53,7 @@ export async function fetchNews(
 
     const response = await client.get<{ data: FinnhubNewsArticle[] }>('/news', { params });
 
-    console.log(`[FinnhubService] Fetched ${response.data.data.length} articles for ${ticker}`);
+    logger.debug(`[FinnhubService] Fetched ${response.data.data.length} articles for ${ticker}`);
     return response.data.data;
   } catch (error) {
     if (isAxiosError(error)) {
@@ -64,7 +65,7 @@ export async function fetchNews(
       }
 
       if (status === 404) {
-        console.warn(`[FinnhubService] No news found for ticker ${ticker}`);
+        logger.warn(`[FinnhubService] No news found for ticker ${ticker}`);
         return []; // Return empty array instead of error
       }
 
@@ -77,7 +78,7 @@ export async function fetchNews(
       }
     }
 
-    console.error('[FinnhubService] Error fetching news:', error);
+    logger.error('[FinnhubService] Error fetching news:', error);
     throw new Error(`Failed to fetch news for ${ticker}: ${error}`);
   }
 }

@@ -40,14 +40,6 @@ export interface ArticleSentiment {
 }
 
 /**
- * Financial domain lexicon entry
- */
-export interface LexiconEntry {
-  word: string;
-  score: number; // Sentiment score (-5 to +5)
-}
-
-/**
  * Configuration options for sentiment analyzer
  */
 export interface SentimentAnalyzerConfig {

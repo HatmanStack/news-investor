@@ -20,11 +20,6 @@ import { transformLambdaToLocal, transformArticleToLocal } from '@/utils/sentime
 import { hydrateCombinedWordData, hydrateArticleData } from '@/services/data/databaseHydrator';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
 
-export interface FetchSentimentOptions {
-  /** Whether fetching article-level data (vs daily aggregated) */
-  articles?: boolean;
-}
-
 /**
  * Fetch combined (daily) sentiment data with local-first fallback to backend.
  */
