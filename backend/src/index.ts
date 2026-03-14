@@ -1,6 +1,6 @@
 /**
  * AWS Lambda entry point for React Stocks backend
- * Routes requests to appropriate handlers
+ * Routes requests to appropriate handlers via declarative route table
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
@@ -19,6 +19,114 @@ let isFirstInvocation = true;
 interface DirectInvocationEvent {
   ticker: string;
   days?: number;
+}
+
+/** Route definition with lazy handler import for cold start optimization */
+interface RouteDefinition {
+  path: string;
+  method: string;
+  prefix?: boolean;
+  importHandler: () => Promise<(event: APIGatewayProxyEventV2) => Promise<APIGatewayResponse>>;
+}
+
+/**
+ * Declarative route table. Each entry maps a path + method to a lazy-loaded handler.
+ * Prefix routes go at the end so exact matches take priority.
+ * Note: /stocks, /search, /batch/stocks are handled by Python Lambda.
+ */
+const ROUTES: RouteDefinition[] = [
+  // ── News ──
+  {
+    path: '/news',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleNewsRequest } = await import('./handlers/news.handler');
+      return handleNewsRequest;
+    },
+  },
+
+  // ── Sentiment ──
+  {
+    path: '/sentiment',
+    method: 'POST',
+    importHandler: async () => {
+      const { handleSentimentRequest } = await import('./handlers/sentiment.handler');
+      return handleSentimentRequest;
+    },
+  },
+  {
+    path: '/sentiment',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleSentimentResultsRequest } = await import('./handlers/sentiment.handler');
+      return handleSentimentResultsRequest;
+    },
+  },
+  {
+    path: '/sentiment/articles',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleArticleSentimentRequest } = await import('./handlers/sentiment.handler');
+      return handleArticleSentimentRequest;
+    },
+  },
+  {
+    path: '/sentiment/daily-history',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleDailyHistoryRequest } = await import('./handlers/sentiment.handler');
+      return handleDailyHistoryRequest;
+    },
+  },
+
+  // ── Prediction ──
+  {
+    path: '/predict',
+    method: 'POST',
+    importHandler: async () => {
+      const { predictionHandler } = await import('./handlers/prediction.handler');
+      return predictionHandler;
+    },
+  },
+
+  // ── Batch ──
+  {
+    path: '/batch/news',
+    method: 'POST',
+    importHandler: async () => {
+      const { handleBatchNewsRequest } = await import('./handlers/batch.handler');
+      return handleBatchNewsRequest;
+    },
+  },
+  {
+    path: '/batch/sentiment',
+    method: 'POST',
+    importHandler: async () => {
+      const { handleBatchSentimentRequest } = await import('./handlers/batch.handler');
+      return handleBatchSentimentRequest;
+    },
+  },
+
+  // ── Prefix routes (parameterized) — must come after exact matches ──
+  {
+    path: '/sentiment/job/',
+    method: 'GET',
+    prefix: true,
+    importHandler: async () => {
+      const { handleSentimentJobStatusRequest } = await import('./handlers/sentiment.handler');
+      return handleSentimentJobStatusRequest;
+    },
+  },
+];
+
+/**
+ * Find a matching route for the given path and method.
+ * Exact matches take priority over prefix matches.
+ */
+function findRoute(path: string, method: string): RouteDefinition | undefined {
+  const exact = ROUTES.find((r) => r.path === path && r.method === method && !r.prefix);
+  if (exact) return exact;
+  return ROUTES.find((r) => r.prefix === true && path.startsWith(r.path) && r.method === method);
 }
 
 /** Type guard for direct invocation events */
@@ -68,109 +176,20 @@ export async function handler(
     }
 
     try {
-      // Route to appropriate handler based on path (wrap in blocks to prevent scope leakage)
-      // Note: /stocks, /search, /batch/stocks are now handled by Python Lambda
       let response: APIGatewayResponse;
 
-      switch (path) {
-        case '/news': {
-          // GET only
-          if (method !== 'GET') {
-            response = errorResponse(`Method ${method} not allowed for /news`, 405);
-            break;
-          }
-          const { handleNewsRequest } = await import('./handlers/news.handler');
-          response = await handleNewsRequest(event);
-          break;
-        }
-
-        case '/sentiment': {
-          // POST and GET supported
-          if (method === 'POST') {
-            const { handleSentimentRequest } = await import('./handlers/sentiment.handler');
-            response = await handleSentimentRequest(event);
-          } else if (method === 'GET') {
-            const { handleSentimentResultsRequest } = await import('./handlers/sentiment.handler');
-            response = await handleSentimentResultsRequest(event);
-          } else {
-            response = errorResponse(`Method ${method} not allowed for /sentiment`, 405);
-          }
-          break;
-        }
-
-        case '/predict': {
-          // POST only
-          if (method !== 'POST') {
-            response = errorResponse(`Method ${method} not allowed for /predict`, 405);
-            break;
-          }
-          const { predictionHandler } = await import('./handlers/prediction.handler');
-          response = await predictionHandler(event);
-          break;
-        }
-
-        case '/batch/news': {
-          // POST only
-          if (method !== 'POST') {
-            response = errorResponse(`Method ${method} not allowed for /batch/news`, 405);
-            break;
-          }
-          const { handleBatchNewsRequest } = await import('./handlers/batch.handler');
-          response = await handleBatchNewsRequest(event);
-          break;
-        }
-
-        case '/batch/sentiment': {
-          // POST only
-          if (method !== 'POST') {
-            response = errorResponse(`Method ${method} not allowed for /batch/sentiment`, 405);
-            break;
-          }
-          const { handleBatchSentimentRequest } = await import('./handlers/batch.handler');
-          response = await handleBatchSentimentRequest(event);
-          break;
-        }
-
-        case '/sentiment/articles': {
-          // GET only
-          if (method !== 'GET') {
-            response = errorResponse(`Method ${method} not allowed for /sentiment/articles`, 405);
-            break;
-          }
-          const { handleArticleSentimentRequest } = await import('./handlers/sentiment.handler');
-          response = await handleArticleSentimentRequest(event);
-          break;
-        }
-
-        case '/sentiment/daily-history': {
-          if (method !== 'GET') {
-            response = errorResponse(
-              `Method ${method} not allowed for /sentiment/daily-history`,
-              405,
-            );
-            break;
-          }
-          const { handleDailyHistoryRequest } = await import('./handlers/sentiment.handler');
-          response = await handleDailyHistoryRequest(event);
-          break;
-        }
-
-        default: {
-          // Check if it's a job status request (/sentiment/job/:jobId)
-          if (path.startsWith('/sentiment/job/')) {
-            if (method !== 'GET') {
-              response = errorResponse(
-                `Method ${method} not allowed for /sentiment/job/:jobId`,
-                405,
-              );
-              break;
-            }
-            const { handleSentimentJobStatusRequest } =
-              await import('./handlers/sentiment.handler');
-            response = await handleSentimentJobStatusRequest(event);
-            break;
-          }
-
+      const route = findRoute(path, method);
+      if (route) {
+        const routeHandler = await route.importHandler();
+        response = await routeHandler(event);
+      } else {
+        // Distinguish 405 (path exists, wrong method) from 404 (unknown path)
+        const pathExists = ROUTES.some((r) =>
+          r.prefix ? path.startsWith(r.path) : r.path === path,
+        );
+        if (pathExists) {
+          response = errorResponse(`Method ${method} not allowed for ${path}`, 405);
+        } else {
           logger.warn('Unknown route', { path });
           response = errorResponse(`Route ${path} not found`, 404);
         }

@@ -151,9 +151,6 @@ export async function generateBrowserPredictions(
       ticker,
       closePrices,
       volumes,
-      [],
-      [],
-      [], // deprecated params
       eventTypes,
       aspectScores,
       mlScores,

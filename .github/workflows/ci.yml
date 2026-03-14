@@ -98,7 +98,7 @@ jobs:
       - name: Run tests with coverage
         env:
           PYTHONPATH: backend/python
-        run: pytest backend/python_tests --maxfail=1 -v --ignore=backend/python_tests/test_yfinance_service.py --cov=backend/python --cov-report=term-missing --cov-fail-under=70
+        run: pytest backend/python_tests --maxfail=1 -v --cov=backend/python --cov-report=term-missing --cov-fail-under=70
 
   ml-service-lint:
     runs-on: ubuntu-latest
@@ -149,7 +149,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       localstack:
-        image: localstack/localstack:latest
+        # Pinned to prevent breakage from upstream changes. Update deliberately.
+        image: localstack/localstack:4.4.0
         ports:
           - 4566:4566
         env:

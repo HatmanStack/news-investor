@@ -5,14 +5,9 @@ import os
 import sys
 import time
 from decimal import Decimal
+from unittest.mock import patch
 
-# Set AWS credentials before any boto3 imports
-os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-os.environ["AWS_SECURITY_TOKEN"] = "testing"
-os.environ["AWS_SESSION_TOKEN"] = "testing"
-os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-os.environ["STOCKS_CACHE_TABLE"] = "StocksCache"
+# AWS env vars set in conftest.py (DYNAMODB_TABLE_NAME, credentials)
 
 import boto3
 from moto import mock_aws
@@ -22,19 +17,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 @pytest.fixture
 def dynamodb_table():
-    """Create mock DynamoDB table."""
+    """Create mock DynamoDB table with pk/sk composite keys."""
     with mock_aws():
-        # Create the table
+        # Create the table with pk/sk keys (single-table design)
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
             TableName="StocksCache",
             KeySchema=[
-                {"AttributeName": "ticker", "KeyType": "HASH"},
-                {"AttributeName": "date", "KeyType": "RANGE"},
+                {"AttributeName": "pk", "KeyType": "HASH"},
+                {"AttributeName": "sk", "KeyType": "RANGE"},
             ],
             AttributeDefinitions=[
-                {"AttributeName": "ticker", "AttributeType": "S"},
-                {"AttributeName": "date", "AttributeType": "S"},
+                {"AttributeName": "pk", "AttributeType": "S"},
+                {"AttributeName": "sk", "AttributeType": "S"},
             ],
             BillingMode="PAY_PER_REQUEST",
         )
@@ -42,6 +37,7 @@ def dynamodb_table():
 
         # Reset the module's cached client so it uses the mock
         import repositories.stocks_cache as cache_module
+
         cache_module._dynamodb = dynamodb
 
         yield table
@@ -54,9 +50,11 @@ class TestGetStock:
         """Returns cache item when it exists."""
         from repositories.stocks_cache import get_stock
 
-        # Insert test item
+        # Insert test item using pk/sk keys
         dynamodb_table.put_item(
             Item={
+                "pk": "STOCK#AAPL",
+                "sk": "DATE#2024-01-15",
                 "ticker": "AAPL",
                 "date": "2024-01-15",
                 "priceData": {"open": "150.0", "close": "154.0"},
@@ -67,6 +65,8 @@ class TestGetStock:
         result = get_stock("AAPL", "2024-01-15")
 
         assert result is not None
+        assert result["pk"] == "STOCK#AAPL"
+        assert result["sk"] == "DATE#2024-01-15"
         assert result["ticker"] == "AAPL"
         assert result["priceData"]["open"] == "150.0"
 
@@ -84,6 +84,8 @@ class TestGetStock:
 
         dynamodb_table.put_item(
             Item={
+                "pk": "STOCK#AAPL",
+                "sk": "DATE#2024-01-15",
                 "ticker": "AAPL",
                 "date": "2024-01-15",
                 "priceData": {"close": "154.0"},
@@ -99,8 +101,8 @@ class TestGetStock:
 class TestPutStock:
     """Tests for put_stock function."""
 
-    def test_stores_item_with_ttl(self, dynamodb_table):
-        """Stores item with calculated TTL."""
+    def test_stores_item_with_pk_sk_keys(self, dynamodb_table):
+        """Stores item with pk/sk composite keys and calculated TTL."""
         from repositories.stocks_cache import put_stock
 
         put_stock(
@@ -111,35 +113,173 @@ class TestPutStock:
             }
         )
 
-        response = dynamodb_table.get_item(Key={"ticker": "AAPL", "date": "2024-01-15"})
+        response = dynamodb_table.get_item(
+            Key={"pk": "STOCK#AAPL", "sk": "DATE#2024-01-15"}
+        )
         item = response.get("Item")
 
         assert item is not None
+        assert item["pk"] == "STOCK#AAPL"
+        assert item["sk"] == "DATE#2024-01-15"
+        assert item["ticker"] == "AAPL"
+        assert item["date"] == "2024-01-15"
         assert "ttl" in item
         assert "fetchedAt" in item
+
+
+class TestBatchGetStocks:
+    """Tests for batch_get_stocks function."""
+
+    def test_returns_items_for_dates(self, dynamodb_table):
+        """Returns cached items for requested dates."""
+        from repositories.stocks_cache import batch_get_stocks
+
+        # Insert test items with pk/sk keys
+        for day in ["15", "16", "17"]:
+            dynamodb_table.put_item(
+                Item={
+                    "pk": "STOCK#AAPL",
+                    "sk": f"DATE#2024-01-{day}",
+                    "ticker": "AAPL",
+                    "date": f"2024-01-{day}",
+                    "priceData": {"close": "150.0"},
+                    "ttl": int(time.time()) + 86400,
+                }
+            )
+
+        result = batch_get_stocks("AAPL", ["2024-01-15", "2024-01-16", "2024-01-17"])
+
+        assert len(result) == 3
+
+    def test_handles_empty_dates(self, dynamodb_table):
+        """Handles empty dates list gracefully."""
+        from repositories.stocks_cache import batch_get_stocks
+
+        result = batch_get_stocks("AAPL", [])
+
+        assert result == []
+
+    def test_handles_unprocessed_keys(self, dynamodb_table):
+        """Retries when DynamoDB returns UnprocessedKeys."""
+        from repositories.stocks_cache import batch_get_stocks, _get_dynamodb
+
+        dynamodb = _get_dynamodb()
+
+        # Mock batch_get_item to return UnprocessedKeys on first call
+        original_batch_get = dynamodb.batch_get_item
+
+        call_count = 0
+
+        def mock_batch_get(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            result = original_batch_get(**kwargs)
+            if call_count == 1:
+                # Simulate UnprocessedKeys on first call
+                table_name = list(kwargs["RequestItems"].keys())[0]
+                keys = kwargs["RequestItems"][table_name]["Keys"]
+                if len(keys) > 1:
+                    # Return first item, mark rest as unprocessed
+                    result["UnprocessedKeys"] = {table_name: {"Keys": keys[1:]}}
+                    # Keep only first item in responses
+                    items = result.get("Responses", {}).get(table_name, [])
+                    if items:
+                        result["Responses"][table_name] = items[:1]
+            return result
+
+        # Insert items
+        for day in ["15", "16"]:
+            dynamodb_table.put_item(
+                Item={
+                    "pk": "STOCK#AAPL",
+                    "sk": f"DATE#2024-01-{day}",
+                    "ticker": "AAPL",
+                    "date": f"2024-01-{day}",
+                    "priceData": {"close": "150.0"},
+                    "ttl": int(time.time()) + 86400,
+                }
+            )
+
+        with patch.object(dynamodb, "batch_get_item", side_effect=mock_batch_get):
+            result = batch_get_stocks("AAPL", ["2024-01-15", "2024-01-16"])
+
+        # Should have retried and gotten all items
+        assert call_count >= 2
+        assert len(result) >= 1  # At least first batch returned
+
+    def test_retries_exhausted(self, dynamodb_table):
+        """Returns partial results when max retries exhausted."""
+        from repositories.stocks_cache import batch_get_stocks, _get_dynamodb
+
+        dynamodb = _get_dynamodb()
+
+        # Insert items
+        for day in ["15", "16"]:
+            dynamodb_table.put_item(
+                Item={
+                    "pk": "STOCK#AAPL",
+                    "sk": f"DATE#2024-01-{day}",
+                    "ticker": "AAPL",
+                    "date": f"2024-01-{day}",
+                    "priceData": {"close": "150.0"},
+                    "ttl": int(time.time()) + 86400,
+                }
+            )
+
+        original_batch_get = dynamodb.batch_get_item
+
+        def always_unprocessed(**kwargs):
+            result = original_batch_get(**kwargs)
+            table_name = list(kwargs["RequestItems"].keys())[0]
+            keys = kwargs["RequestItems"][table_name]["Keys"]
+            if len(keys) > 0:
+                # Always return some unprocessed keys
+                result["UnprocessedKeys"] = {table_name: {"Keys": keys[-1:]}}
+            return result
+
+        with patch.object(dynamodb, "batch_get_item", side_effect=always_unprocessed):
+            # Should not raise, returns what it can
+            result = batch_get_stocks("AAPL", ["2024-01-15", "2024-01-16"])
+
+        assert isinstance(result, list)
 
 
 class TestBatchPutStocks:
     """Tests for batch_put_stocks function."""
 
-    def test_stores_multiple_items(self, dynamodb_table):
-        """Stores multiple items in batch."""
+    def test_stores_multiple_items_with_pk_sk(self, dynamodb_table):
+        """Stores multiple items in batch with pk/sk keys."""
         from repositories.stocks_cache import batch_put_stocks
 
         items = [
-            {"ticker": "AAPL", "date": "2024-01-15", "priceData": {"close": Decimal("150.0")}},
-            {"ticker": "AAPL", "date": "2024-01-16", "priceData": {"close": Decimal("151.0")}},
-            {"ticker": "AAPL", "date": "2024-01-17", "priceData": {"close": Decimal("152.0")}},
+            {
+                "ticker": "AAPL",
+                "date": "2024-01-15",
+                "priceData": {"close": Decimal("150.0")},
+            },
+            {
+                "ticker": "AAPL",
+                "date": "2024-01-16",
+                "priceData": {"close": Decimal("151.0")},
+            },
+            {
+                "ticker": "AAPL",
+                "date": "2024-01-17",
+                "priceData": {"close": Decimal("152.0")},
+            },
         ]
 
         batch_put_stocks(items)
 
-        # Verify all items stored
+        # Verify all items stored with pk/sk keys
         for item in items:
             response = dynamodb_table.get_item(
-                Key={"ticker": "AAPL", "date": item["date"]}
+                Key={"pk": f"STOCK#{item['ticker']}", "sk": f"DATE#{item['date']}"}
             )
-            assert response.get("Item") is not None
+            stored = response.get("Item")
+            assert stored is not None
+            assert stored["pk"] == f"STOCK#{item['ticker']}"
+            assert stored["sk"] == f"DATE#{item['date']}"
 
     def test_handles_empty_list(self, dynamodb_table):
         """Handles empty list gracefully."""
@@ -155,10 +295,12 @@ class TestQueryStocksByDateRange:
         """Returns items within date range."""
         from repositories.stocks_cache import query_stocks_by_date_range
 
-        # Insert test items
+        # Insert test items with pk/sk keys
         for day in range(15, 20):
             dynamodb_table.put_item(
                 Item={
+                    "pk": "STOCK#AAPL",
+                    "sk": f"DATE#2024-01-{day}",
                     "ticker": "AAPL",
                     "date": f"2024-01-{day}",
                     "priceData": {"close": str(150.0 + day)},

@@ -4,11 +4,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-
 from services.yfinance_service import (
     fetch_stock_prices,
     fetch_symbol_metadata,
@@ -17,13 +12,23 @@ from services.yfinance_service import (
 from utils.error import APIError
 
 
+def _preload_yfinance():
+    """Pre-load the lazy _yf module so we can patch it."""
+    import services.yfinance_service as svc
+
+    if svc._yf is None:
+        import yfinance
+
+        svc._yf = yfinance
+
+
 class TestFetchStockPrices:
     """Tests for fetch_stock_prices function."""
 
-    @patch("services.yfinance_service.yf.Ticker")
+    @patch("yfinance.Ticker")
     def test_returns_dataframe_with_valid_ticker(self, mock_ticker_class):
         """Valid ticker returns DataFrame with price data."""
-        # Create mock DataFrame
+        _preload_yfinance()
         mock_data = pd.DataFrame(
             {
                 "Open": [150.0, 151.0],
@@ -46,13 +51,16 @@ class TestFetchStockPrices:
         assert len(result) == 2
         assert "Open" in result.columns
         assert "Close" in result.columns
-        mock_ticker.history.assert_called_once_with(start="2024-01-01", end="2024-01-02")
+        mock_ticker.history.assert_called_once_with(
+            start="2024-01-01", end="2024-01-02"
+        )
 
-    @patch("services.yfinance_service.yf.Ticker")
+    @patch("yfinance.Ticker")
     def test_raises_404_for_invalid_ticker(self, mock_ticker_class):
         """Invalid ticker raises APIError with 404."""
+        _preload_yfinance()
         mock_ticker = MagicMock()
-        mock_ticker.history.return_value = pd.DataFrame()  # Empty DataFrame
+        mock_ticker.history.return_value = pd.DataFrame()
         mock_ticker_class.return_value = mock_ticker
 
         with pytest.raises(APIError) as exc_info:
@@ -61,9 +69,10 @@ class TestFetchStockPrices:
         assert exc_info.value.status_code == 404
         assert "not found" in exc_info.value.message.lower()
 
-    @patch("services.yfinance_service.yf.Ticker")
+    @patch("yfinance.Ticker")
     def test_handles_yfinance_exception(self, mock_ticker_class):
         """yfinance exceptions are wrapped in APIError."""
+        _preload_yfinance()
         mock_ticker = MagicMock()
         mock_ticker.history.side_effect = Exception("Network error")
         mock_ticker_class.return_value = mock_ticker
@@ -77,9 +86,10 @@ class TestFetchStockPrices:
 class TestFetchSymbolMetadata:
     """Tests for fetch_symbol_metadata function."""
 
-    @patch("services.yfinance_service.yf.Ticker")
+    @patch("yfinance.Ticker")
     def test_returns_metadata_for_valid_ticker(self, mock_ticker_class):
         """Valid ticker returns metadata dict."""
+        _preload_yfinance()
         mock_info = {
             "shortName": "Apple Inc.",
             "longName": "Apple Inc.",
@@ -96,11 +106,12 @@ class TestFetchSymbolMetadata:
         assert result["shortName"] == "Apple Inc."
         assert result["exchange"] == "NMS"
 
-    @patch("services.yfinance_service.yf.Ticker")
+    @patch("yfinance.Ticker")
     def test_raises_404_for_invalid_ticker(self, mock_ticker_class):
         """Invalid ticker raises APIError with 404."""
+        _preload_yfinance()
         mock_ticker = MagicMock()
-        mock_ticker.info = {}  # Empty info
+        mock_ticker.info = {}
         mock_ticker_class.return_value = mock_ticker
 
         with pytest.raises(APIError) as exc_info:
@@ -166,3 +177,44 @@ class TestSearchTickers:
 
         assert exc_info.value.status_code == 504
         assert "timed out" in exc_info.value.message.lower()
+
+
+class TestRetryWithBackoff:
+    """Tests for retry_with_backoff decorator."""
+
+    @patch("services.yfinance_service.time.sleep")
+    @patch("services.yfinance_service.requests.get")
+    def test_retries_twice_on_server_error(self, mock_get, mock_sleep):
+        """Function is called max 3 times (1 initial + 2 retries) with MAX_RETRIES=2."""
+        import requests as req
+
+        mock_get.side_effect = req.exceptions.Timeout()
+
+        with pytest.raises(APIError):
+            search_tickers("AAPL")
+
+        # 1 initial call + 2 retries = 3 total calls
+        assert mock_get.call_count == 3
+        # sleep called twice (between retries)
+        assert mock_sleep.call_count == 2
+
+    @patch("services.yfinance_service.time.sleep")
+    @patch("services.yfinance_service.requests.get")
+    def test_no_retry_on_client_error(self, mock_get, mock_sleep):
+        """4xx errors (except 429) are not retried."""
+        import requests as req
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+            response=mock_response
+        )
+        mock_get.return_value = mock_response
+
+        with pytest.raises(APIError) as exc_info:
+            search_tickers("AAPL")
+
+        assert exc_info.value.status_code == 400
+        # Should not have retried
+        assert mock_get.call_count == 1
+        assert mock_sleep.call_count == 0

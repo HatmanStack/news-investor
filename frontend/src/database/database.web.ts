@@ -115,6 +115,32 @@ interface StoredPortfolio {
   oneMonthProbability?: number;
 }
 
+/** Result of a write operation */
+interface DbResult {
+  changes: number;
+}
+
+/** Union of all stored record types */
+type StoredRecord =
+  | StoredSymbol
+  | StoredStock
+  | StoredNews
+  | StoredSentiment
+  | StoredArticleSentiment
+  | StoredNote
+  | StoredPortfolio;
+
+/** Allowlist of valid table names for DROP TABLE validation */
+const VALID_TABLES = new Set([
+  'symbol_details',
+  'stock_details',
+  'news_details',
+  'combined_word_count_details',
+  'word_count_details',
+  'portfolio_details',
+  'notes',
+]);
+
 /** Type-safe storage structure */
 interface StorageData {
   symbols: Record<string, StoredSymbol>;
@@ -197,14 +223,13 @@ class WebDatabase {
 
   private performSave(): void {
     try {
-      const dataString = JSON.stringify(this.data);
-
       // Use requestIdleCallback if available, otherwise fallback to immediate save
       if ('requestIdleCallback' in window) {
         requestIdleCallback(
           () => {
             try {
-              localStorage.setItem(this.storageKey, dataString);
+              // Snapshot inside callback so writes between schedule and execution are included
+              localStorage.setItem(this.storageKey, JSON.stringify(this.data));
             } catch (cbError) {
               this.handleSaveError(cbError);
             }
@@ -213,7 +238,7 @@ class WebDatabase {
           { timeout: 1000 },
         ); // Force save after 1s if browser is busy
       } else {
-        localStorage.setItem(this.storageKey, dataString);
+        localStorage.setItem(this.storageKey, JSON.stringify(this.data));
         this.pendingSave = false;
       }
     } catch (error) {
@@ -287,7 +312,7 @@ class WebDatabase {
     this.performSaveSync();
   }
 
-  async runAsync(sql: string, params?: any[]): Promise<any> {
+  async runAsync(sql: string, params?: unknown[]): Promise<DbResult> {
     // Parse SQL and execute appropriate operation
     const sqlLower = sql.toLowerCase().trim();
 
@@ -318,7 +343,7 @@ class WebDatabase {
     return { changes: 0 };
   }
 
-  async getAllAsync(sql: string, params?: any[]): Promise<any[]> {
+  async getAllAsync(sql: string, params?: unknown[]): Promise<StoredRecord[]> {
     const sqlLower = sql.toLowerCase().trim();
 
     if (sqlLower.includes('from symbol_details')) {
@@ -340,7 +365,7 @@ class WebDatabase {
     return [];
   }
 
-  async getFirstAsync(sql: string, params?: any[]): Promise<any> {
+  async getFirstAsync(sql: string, params?: unknown[]): Promise<StoredRecord | null> {
     const results = await this.getAllAsync(sql, params);
     return results[0] || null;
   }
@@ -380,8 +405,8 @@ class WebDatabase {
     if (sqlLower.startsWith('drop table')) {
       // Handle table drops by clearing data
       const match = sql.match(/drop table if exists (\w+)/i) || sql.match(/drop table (\w+)/i);
-      if (match) {
-        const tableName = match[1];
+      const tableName = match?.[1];
+      if (tableName && VALID_TABLES.has(tableName.toLowerCase())) {
         // Map table names to data structure keys
         if (tableName === 'symbol_details') this.data.symbols = {};
         else if (tableName === 'stock_details') this.data.stocks = {};
@@ -391,13 +416,15 @@ class WebDatabase {
         else if (tableName === 'portfolio_details') this.data.portfolio = {};
         else if (tableName === 'notes') this.data.notes = {};
         this.saveData();
+      } else if (tableName) {
+        console.warn(`[WebDB] Ignoring DROP TABLE for unknown table: ${tableName}`);
       }
       return;
     }
   }
 
   // Symbol operations
-  private insertSymbol(params: any[]): any {
+  private insertSymbol(params: unknown[]): DbResult {
     const [
       longDescription,
       exchangeCode,
@@ -410,30 +437,32 @@ class WebDatabase {
       sectorEtf,
     ] = params;
 
+    const tickerStr = String(ticker);
+
     // Check if symbol already exists
-    if (this.data.symbols[ticker]) {
+    if (this.data.symbols[tickerStr]) {
       return { changes: 0 };
     }
 
-    this.data.symbols[ticker] = {
-      ticker,
-      name,
-      exchangeCode,
-      longDescription,
-      startDate,
-      endDate,
-      sector,
-      industry,
-      sectorEtf,
+    this.data.symbols[tickerStr] = {
+      ticker: tickerStr,
+      name: String(name),
+      exchangeCode: String(exchangeCode),
+      longDescription: longDescription != null ? String(longDescription) : undefined,
+      startDate: startDate != null ? String(startDate) : undefined,
+      endDate: endDate != null ? String(endDate) : undefined,
+      sector: sector != null ? String(sector) : undefined,
+      industry: industry != null ? String(industry) : undefined,
+      sectorEtf: sectorEtf != null ? String(sectorEtf) : undefined,
     };
     this.saveData();
     return { changes: 1 };
   }
 
-  private getSymbols(params: any[]): any[] {
+  private getSymbols(params: unknown[]): StoredSymbol[] {
     if (params.length === 1) {
       // Get specific symbol by ticker
-      const ticker = params[0];
+      const ticker = String(params[0]);
       const symbol = this.data.symbols[ticker];
       return symbol ? [symbol] : [];
     }
@@ -442,7 +471,7 @@ class WebDatabase {
   }
 
   // Stock operations
-  private insertStock(params: any[]): any {
+  private insertStock(params: unknown[]): DbResult {
     const [
       hash,
       date,
@@ -466,35 +495,38 @@ class WebDatabase {
       trailingPEG1Y,
     ] = params;
 
-    if (!this.data.stocks[ticker]) {
-      this.data.stocks[ticker] = [];
+    const tickerStr = String(ticker);
+    const dateStr = String(date);
+
+    if (!this.data.stocks[tickerStr]) {
+      this.data.stocks[tickerStr] = [];
     }
 
     // Check if already exists
-    const exists = this.data.stocks[ticker].some((s) => s.date === date);
+    const exists = this.data.stocks[tickerStr].some((s) => s.date === dateStr);
 
     if (!exists) {
-      this.data.stocks[ticker].push({
-        hash,
-        date,
-        ticker,
-        close,
-        high,
-        low,
-        open,
-        volume,
-        adjClose,
-        adjHigh,
-        adjLow,
-        adjOpen,
-        adjVolume,
-        divCash,
-        splitFactor,
-        marketCap,
-        enterpriseVal,
-        peRatio,
-        pbRatio,
-        trailingPEG1Y,
+      this.data.stocks[tickerStr].push({
+        hash: String(hash),
+        date: dateStr,
+        ticker: tickerStr,
+        close: safeParseFloat(close),
+        high: safeParseFloat(high),
+        low: safeParseFloat(low),
+        open: safeParseFloat(open),
+        volume: safeParseFloat(volume),
+        adjClose: adjClose != null ? safeParseFloat(adjClose) : undefined,
+        adjHigh: adjHigh != null ? safeParseFloat(adjHigh) : undefined,
+        adjLow: adjLow != null ? safeParseFloat(adjLow) : undefined,
+        adjOpen: adjOpen != null ? safeParseFloat(adjOpen) : undefined,
+        adjVolume: adjVolume != null ? safeParseFloat(adjVolume) : undefined,
+        divCash: divCash != null ? safeParseFloat(divCash) : undefined,
+        splitFactor: splitFactor != null ? safeParseFloat(splitFactor) : undefined,
+        marketCap: marketCap != null ? safeParseFloat(marketCap) : undefined,
+        enterpriseVal: enterpriseVal != null ? safeParseFloat(enterpriseVal) : undefined,
+        peRatio: peRatio != null ? safeParseFloat(peRatio) : undefined,
+        pbRatio: pbRatio != null ? safeParseFloat(pbRatio) : undefined,
+        trailingPEG1Y: trailingPEG1Y != null ? safeParseFloat(trailingPEG1Y) : undefined,
       });
     }
 
@@ -502,14 +534,14 @@ class WebDatabase {
     return { changes: exists ? 0 : 1 };
   }
 
-  private getStocks(params: any[]): any[] {
-    const ticker = params[0];
+  private getStocks(params: unknown[]): StoredStock[] {
+    const ticker = String(params[0]);
     let stocks = this.data.stocks[ticker] || [];
 
     // If date range params provided, filter by date
     if (params.length === 3) {
-      const startDate = params[1];
-      const endDate = params[2];
+      const startDate = String(params[1]);
+      const endDate = String(params[2]);
       stocks = stocks.filter((stock) => stock.date >= startDate && stock.date <= endDate);
     }
 
@@ -517,7 +549,7 @@ class WebDatabase {
   }
 
   // News operations
-  private insertNews(params: any[]): any {
+  private insertNews(params: unknown[]): DbResult {
     const [
       date,
       ticker,
@@ -530,24 +562,27 @@ class WebDatabase {
       articleDescription,
     ] = params;
 
-    if (!this.data.news[ticker]) {
-      this.data.news[ticker] = [];
+    const tickerStr = String(ticker);
+    const articleUrlStr = String(articleUrl);
+
+    if (!this.data.news[tickerStr]) {
+      this.data.news[tickerStr] = [];
     }
 
     // Check if article already exists by URL
-    const exists = this.data.news[ticker].some((n) => n.articleUrl === articleUrl);
+    const exists = this.data.news[tickerStr].some((n) => n.articleUrl === articleUrlStr);
 
     if (!exists) {
-      this.data.news[ticker].push({
-        date,
-        ticker,
-        articleTickers,
-        title,
-        articleDate,
-        articleUrl,
-        publisher,
-        ampUrl,
-        articleDescription,
+      this.data.news[tickerStr].push({
+        date: String(date),
+        ticker: tickerStr,
+        articleTickers: String(articleTickers),
+        title: String(title),
+        articleDate: String(articleDate),
+        articleUrl: articleUrlStr,
+        publisher: publisher != null ? String(publisher) : undefined,
+        ampUrl: ampUrl != null ? String(ampUrl) : undefined,
+        articleDescription: articleDescription != null ? String(articleDescription) : undefined,
       });
     }
 
@@ -555,15 +590,15 @@ class WebDatabase {
     return { changes: exists ? 0 : 1 };
   }
 
-  private getNews(params: any[]): any[] {
-    const ticker = params[0];
+  private getNews(params: unknown[]): StoredNews[] {
+    const ticker = String(params[0]);
 
     let news = this.data.news[ticker] || [];
 
     // If date range params provided, filter by articleDate
     if (params.length === 3) {
-      const startDate = params[1];
-      const endDate = params[2];
+      const startDate = String(params[1]);
+      const endDate = String(params[2]);
       news = news.filter(
         (article) => article.articleDate >= startDate && article.articleDate <= endDate,
       );
@@ -573,22 +608,7 @@ class WebDatabase {
   }
 
   // Combined sentiment operations (daily aggregated)
-  private upsertCombinedSentiment(params: any[]): any {
-    // params length depends on schema version. Basic is 10 params.
-    // For this simple implementation, we assume standard params or handle extension via repository logic
-    // The repository constructs the SQL. For localStorage we need to map params to object properties.
-    // But wait, the params array comes from `runAsync`. We need to know which param is which.
-    // The current implementation assumes fixed param order:
-    // ticker, date, positive, negative, sentimentNumber, sentiment, nextDay, twoWks, oneMnth, updateDate
-
-    // If more params are passed (e.g. prediction fields), we need to handle them.
-    // However, standard repository inserts usually name columns. `runAsync` here receives just values array?
-    // No, typically `runAsync` takes SQL + params.
-    // But here `upsertCombinedSentiment` takes `params` array.
-    // The caller `runAsync` just passes `params`.
-    // This implementation relies on knowing the param order which is fragile if SQL changes.
-    // For now, we assume the repository passes basic params first.
-
+  private upsertCombinedSentiment(params: unknown[]): DbResult {
     const [
       ticker,
       date,
@@ -608,55 +628,61 @@ class WebDatabase {
       oneMonthProbability,
     ] = params;
 
-    if (!this.data.sentiment[ticker]) {
-      this.data.sentiment[ticker] = [];
+    const tickerStr = String(ticker);
+    const dateStr = String(date);
+
+    if (!this.data.sentiment[tickerStr]) {
+      this.data.sentiment[tickerStr] = [];
     }
 
     // Find existing record and update or insert new
-    const existingIndex = this.data.sentiment[ticker].findIndex((s) => s.date === date);
+    const existingIndex = this.data.sentiment[tickerStr].findIndex((s) => s.date === dateStr);
 
-    const record: any = {
-      date,
-      ticker,
-      positive,
-      negative,
-      sentimentNumber,
-      sentiment,
-      nextDay,
-      twoWks,
-      oneMnth,
-      updateDate,
+    const record: StoredSentiment = {
+      date: dateStr,
+      ticker: tickerStr,
+      positive: safeParseFloat(positive),
+      negative: safeParseFloat(negative),
+      sentimentNumber: safeParseFloat(sentimentNumber),
+      sentiment: String(sentiment),
+      nextDay: nextDay != null ? safeParseFloat(nextDay) : undefined,
+      twoWks: twoWks != null ? safeParseFloat(twoWks) : undefined,
+      oneMnth: oneMnth != null ? safeParseFloat(oneMnth) : undefined,
+      updateDate: updateDate != null ? String(updateDate) : undefined,
     };
 
     // Add prediction fields if present
-    if (nextDayDirection !== undefined) record.nextDayDirection = nextDayDirection;
-    if (nextDayProbability !== undefined) record.nextDayProbability = nextDayProbability;
-    if (twoWeekDirection !== undefined) record.twoWeekDirection = twoWeekDirection;
-    if (twoWeekProbability !== undefined) record.twoWeekProbability = twoWeekProbability;
-    if (oneMonthDirection !== undefined) record.oneMonthDirection = oneMonthDirection;
-    if (oneMonthProbability !== undefined) record.oneMonthProbability = oneMonthProbability;
+    if (nextDayDirection !== undefined) record.nextDayDirection = String(nextDayDirection);
+    if (nextDayProbability !== undefined)
+      record.nextDayProbability = safeParseFloat(nextDayProbability);
+    if (twoWeekDirection !== undefined) record.twoWeekDirection = String(twoWeekDirection);
+    if (twoWeekProbability !== undefined)
+      record.twoWeekProbability = safeParseFloat(twoWeekProbability);
+    if (oneMonthDirection !== undefined) record.oneMonthDirection = String(oneMonthDirection);
+    if (oneMonthProbability !== undefined)
+      record.oneMonthProbability = safeParseFloat(oneMonthProbability);
 
     if (existingIndex >= 0) {
       // Preserve other fields if they exist (e.g. Phase 5 fields not in basic params)
-      const existing = this.data.sentiment[ticker][existingIndex];
-      this.data.sentiment[ticker][existingIndex] = { ...existing, ...record };
+      const existing = this.data.sentiment[tickerStr][existingIndex];
+      this.data.sentiment[tickerStr][existingIndex] = { ...existing, ...record };
     } else {
-      this.data.sentiment[ticker].push(record);
+      this.data.sentiment[tickerStr].push(record);
     }
 
     this.saveData();
     return { changes: 1 };
   }
 
-  private getSentiment(params: any[]): any[] {
-    const ticker = params[0];
+  private getSentiment(params: unknown[]): StoredSentiment[] {
+    const ticker = String(params[0]);
 
     let sentiment = this.data.sentiment[ticker] || [];
 
     // If date range params provided, filter by date
     if (params.length === 3) {
-      const startDate = params[1];
-      const endDate = params[2];
+      const startDate = String(params[1]);
+      const endDate = String(params[2]);
       sentiment = sentiment.filter((record) => record.date >= startDate && record.date <= endDate);
     }
 
@@ -664,7 +690,7 @@ class WebDatabase {
   }
 
   // Article sentiment operations
-  private insertArticleSentiment(params: unknown[]): { changes: number } {
+  private insertArticleSentiment(params: unknown[]): DbResult {
     // Parameters: date, hash, ticker, positive, negative, nextDay, twoWks, oneMnth, body, sentiment, sentimentNumber
     const [
       date,
@@ -708,23 +734,20 @@ class WebDatabase {
     return { changes: exists ? 0 : 1 };
   }
 
-  private getArticleSentiment(params: any[]): any[] {
-    const ticker = params[0];
+  private getArticleSentiment(params: unknown[]): StoredArticleSentiment[] {
+    const ticker = String(params[0]);
     const articles = this.data.articleSentiment[ticker] || [];
 
     // Filter to only return records with hash field (article-level data)
     const validArticles = articles.filter(
-      (record) => record.hasOwnProperty('hash') && typeof record.hash === 'number',
+      (record) => Object.hasOwn(record, 'hash') && typeof record.hash === 'number',
     );
-
-    // Debug log disabled - too noisy
-    // console.log(`[WebDB] Getting article sentiment for ${ticker}: ${validArticles.length} records`);
 
     return validArticles;
   }
 
   // Portfolio operations
-  private insertPortfolio(params: any[]): any {
+  private insertPortfolio(params: unknown[]): DbResult {
     // Parameters: ticker, next, name, wks, mnth (from repository upsert)
     // Extended params: ..., nextDayDirection, nextDayProbability, etc.
     const [
@@ -741,32 +764,37 @@ class WebDatabase {
       oneMonthProbability,
     ] = params;
 
-    const record: any = {
-      ticker,
-      next: next || '0',
-      name: name || ticker,
-      wks: wks || '0',
-      mnth: mnth || '0',
+    const tickerStr = String(ticker);
+
+    const record: StoredPortfolio = {
+      ticker: tickerStr,
+      next: next != null ? String(next) : '0',
+      name: name != null ? String(name) : tickerStr,
+      wks: wks != null ? String(wks) : '0',
+      mnth: mnth != null ? String(mnth) : '0',
     };
 
     // Add prediction fields if present
-    if (nextDayDirection !== undefined) record.nextDayDirection = nextDayDirection;
-    if (nextDayProbability !== undefined) record.nextDayProbability = nextDayProbability;
-    if (twoWeekDirection !== undefined) record.twoWeekDirection = twoWeekDirection;
-    if (twoWeekProbability !== undefined) record.twoWeekProbability = twoWeekProbability;
-    if (oneMonthDirection !== undefined) record.oneMonthDirection = oneMonthDirection;
-    if (oneMonthProbability !== undefined) record.oneMonthProbability = oneMonthProbability;
+    if (nextDayDirection !== undefined) record.nextDayDirection = String(nextDayDirection);
+    if (nextDayProbability !== undefined)
+      record.nextDayProbability = safeParseFloat(nextDayProbability);
+    if (twoWeekDirection !== undefined) record.twoWeekDirection = String(twoWeekDirection);
+    if (twoWeekProbability !== undefined)
+      record.twoWeekProbability = safeParseFloat(twoWeekProbability);
+    if (oneMonthDirection !== undefined) record.oneMonthDirection = String(oneMonthDirection);
+    if (oneMonthProbability !== undefined)
+      record.oneMonthProbability = safeParseFloat(oneMonthProbability);
 
     // Merge with existing to preserve other fields
-    const existing = this.data.portfolio[ticker] || {};
-    this.data.portfolio[ticker] = { ...existing, ...record };
+    const existing = this.data.portfolio[tickerStr] || ({} as StoredPortfolio);
+    this.data.portfolio[tickerStr] = { ...existing, ...record };
 
     this.saveData();
     return { changes: 1 };
   }
 
-  private deleteFromPortfolio(params: any[]): any {
-    const ticker = params[0];
+  private deleteFromPortfolio(params: unknown[]): DbResult {
+    const ticker = String(params[0]);
     if (this.data.portfolio[ticker]) {
       delete this.data.portfolio[ticker];
       this.saveData();
@@ -775,10 +803,10 @@ class WebDatabase {
     return { changes: 0 };
   }
 
-  private getPortfolio(params: any[]): any[] {
+  private getPortfolio(params: unknown[]): StoredPortfolio[] {
     if (params.length === 1) {
       // Get specific portfolio item
-      const ticker = params[0];
+      const ticker = String(params[0]);
       const item = this.data.portfolio[ticker];
       return item ? [item] : [];
     }
@@ -787,16 +815,24 @@ class WebDatabase {
   }
 
   // Notes operations
-  private upsertNote(params: any[]): any {
+  private upsertNote(params: unknown[]): DbResult {
     const [id, ticker, content, syncedAt, createdAt, updatedAt] = params;
 
-    this.data.notes[id] = { id, ticker, content, syncedAt, createdAt, updatedAt };
+    const idStr = String(id);
+    this.data.notes[idStr] = {
+      id: idStr,
+      ticker: String(ticker),
+      content: String(content),
+      syncedAt: syncedAt != null ? String(syncedAt) : null,
+      createdAt: String(createdAt),
+      updatedAt: String(updatedAt),
+    };
     this.saveData();
     return { changes: 1 };
   }
 
-  private deleteNote(params: any[]): any {
-    const id = params[0];
+  private deleteNote(params: unknown[]): DbResult {
+    const id = String(params[0]);
     if (this.data.notes[id]) {
       delete this.data.notes[id];
       this.saveData();
@@ -805,11 +841,12 @@ class WebDatabase {
     return { changes: 0 };
   }
 
-  private updateNote(sql: string, params: any[]): any {
+  private updateNote(sql: string, params: unknown[]): DbResult {
     // Handle "UPDATE notes SET syncedAt = ? WHERE id = ?"
     const sqlLower = sql.toLowerCase();
     if (sqlLower.includes('syncedat')) {
-      const [syncedAt, id] = params;
+      const syncedAt = params[0] != null ? String(params[0]) : null;
+      const id = String(params[1]);
       if (this.data.notes[id]) {
         this.data.notes[id].syncedAt = syncedAt;
         this.saveData();
@@ -819,16 +856,18 @@ class WebDatabase {
     return { changes: 0 };
   }
 
-  private getNotes(sql: string, params: any[]): any[] {
+  private getNotes(sql: string, params: unknown[]): StoredNote[] {
     const sqlLower = sql.toLowerCase();
     const allNotes = Object.values(this.data.notes);
 
     if (sqlLower.includes('where id = ?')) {
-      return allNotes.filter((n) => n.id === params[0]);
+      const id = String(params[0]);
+      return allNotes.filter((n) => n.id === id);
     }
     if (sqlLower.includes('where ticker = ?')) {
+      const ticker = String(params[0]);
       return allNotes
-        .filter((n) => n.ticker === params[0])
+        .filter((n) => n.ticker === ticker)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     }
     if (sqlLower.includes('syncedat is null')) {

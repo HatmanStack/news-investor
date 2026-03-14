@@ -1,6 +1,7 @@
 services:
   localstack:
-    image: localstack/localstack:latest
+    # Pinned to prevent breakage from upstream changes. Update deliberately.
+    image: localstack/localstack:4.4.0
     ports:
       - '4566:4566'
     environment:

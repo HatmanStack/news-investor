@@ -159,7 +159,7 @@ describe('browserPredictions', () => {
     // getStockPredictions should have been called with eventTypes array
     expect(getStockPredictions).toHaveBeenCalled();
     const callArgs = getStockPredictions.mock.calls[0];
-    const eventTypes = callArgs[6]; // 7th parameter
+    const eventTypes = callArgs[3]; // 4th parameter (after ticker, closePrices, volumes)
     expect(eventTypes[0]).toBe('EARNINGS'); // Dominant for first day
   });
 });

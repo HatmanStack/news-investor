@@ -182,33 +182,24 @@ function lnGamma(z: number): number {
 /**
  * Get stock price predictions using logistic regression model
  *
- * **Phase 5 Update:** Now accepts three-signal sentiment parameters for improved accuracy.
- * Legacy parameters (positiveCounts, negativeCounts, sentimentScores) are deprecated but
- * maintained for backward compatibility.
+ * Uses three-signal sentiment architecture (event types, aspect scores, ML scores)
+ * for improved accuracy when sentiment data is available.
  *
  * @param ticker - Stock ticker symbol
  * @param closePrices - Array of closing prices
  * @param volumes - Array of trading volumes
- * @param positiveCounts - (DEPRECATED) Array of positive word counts
- * @param negativeCounts - (DEPRECATED) Array of negative word counts
- * @param sentimentScores - (DEPRECATED) Array of sentiment categories
  * @param eventTypes - Array of event type classifications
  * @param aspectScores - Array of aspect sentiment scores (-1 to +1)
  * @param mlScores - Array of ML model scores (-1 to +1)
- * @param signalScores - Array of signal scores (0 to 1, metadata quality)
  * @returns Prediction results for next day, 2 weeks, and 1 month
  * @throws Error if insufficient data or invalid inputs
  *
  * @example
  * ```typescript
- * // New usage with three-signal sentiment
  * const predictions = await getStockPredictions(
  *   'AAPL',
  *   closePrices,
  *   volumes,
- *   [], // deprecated
- *   [], // deprecated
- *   [], // deprecated
  *   eventTypes,
  *   aspectScores,
  *   mlScores
@@ -219,9 +210,6 @@ export async function getStockPredictions(
   ticker: string,
   closePrices: number[],
   volumes: number[],
-  _positiveCounts: number[] = [],
-  _negativeCounts: number[] = [],
-  _sentimentScores: string[] = [],
   eventTypes?: EventType[],
   aspectScores?: number[],
   mlScores?: (number | null)[],

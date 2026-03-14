@@ -11,6 +11,17 @@ import { ALL_TABLES, CREATE_INDEXES, DROP_ALL_TABLES } from './schema';
 let database: SQLite.SQLiteDatabase | null = null;
 let isInitialized = false;
 
+/** Allowlist of valid table names to prevent SQL injection in PRAGMA queries */
+const VALID_TABLES = new Set([
+  'stock_details',
+  'symbol_details',
+  'news_details',
+  'word_count_details',
+  'combined_word_count_details',
+  'portfolio_details',
+  'notes',
+]);
+
 /**
  * Initialize the SQLite database
  * Creates all tables and indexes if they don't exist
@@ -110,6 +121,10 @@ async function checkTablesExist(): Promise<boolean> {
 async function columnExists(tableName: string, columnName: string): Promise<boolean> {
   if (!database) {
     throw new Error('Database is not initialized');
+  }
+
+  if (!VALID_TABLES.has(tableName)) {
+    throw new Error(`[Database] Invalid table name: ${tableName}`);
   }
 
   try {

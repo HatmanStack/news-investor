@@ -207,28 +207,16 @@ async function partitionArticlesByCache(
   return { articlesToAnalyze, articlesCached };
 }
 
+// ── Extracted pipeline steps for analyzeArticles ──
+
 /**
- * Analyze articles and return sentiment cache items
- *
- * NEW (Phase 1): Includes event classification before sentiment analysis
- *
- * Uses hybrid error handling:
- * 1. Classify events for all articles
- * 2. Try batch sentiment analysis
- * 3. If batch fails, retry once
- * 4. If still fails, analyze articles individually to get partial success
- *
- * @returns Successful cache items (may be partial if some articles failed)
+ * Classify events for all articles, returning a map of articleHash -> EventType.
+ * Defaults to GENERAL on classification failure.
  */
-async function analyzeArticles(
+async function classifyEvents(
   ticker: string,
   articles: NewsCacheItem[],
-): Promise<Omit<SentimentCacheItem, 'ttl'>[]> {
-  if (articles.length === 0) {
-    return [];
-  }
-
-  // NEW (Phase 1): Classify events for all articles first
+): Promise<Map<string, EventType>> {
   const articleClassifications = await Promise.allSettled(
     articles.map(async (item) => {
       try {
@@ -242,7 +230,6 @@ async function analyzeArticles(
           ticker,
           articleHash: item.articleHash,
         });
-        // Default to GENERAL on classification failure
         return {
           articleHash: item.articleHash,
           eventType: 'GENERAL' as EventType,
@@ -251,7 +238,6 @@ async function analyzeArticles(
     }),
   );
 
-  // Create map of articleHash -> eventType
   const eventTypeMap = new Map<string, EventType>();
   articleClassifications.forEach((result) => {
     if (result.status === 'fulfilled') {
@@ -270,7 +256,17 @@ async function analyzeArticles(
     eventTypes: eventTypeCounts,
   });
 
-  // Calculate signal scores for all articles (cheap, no API calls)
+  return eventTypeMap;
+}
+
+/**
+ * Calculate signal scores for all articles (cheap, no API calls).
+ * Returns a map of articleHash -> signal score.
+ */
+function calculateArticleSignalScores(
+  ticker: string,
+  articles: NewsCacheItem[],
+): Map<string, number> {
   const articleMetadata: ArticleMetadata[] = articles.map((item) => ({
     publisher: item.article.publisher,
     title: item.article.title || '',
@@ -278,7 +274,6 @@ async function analyzeArticles(
   }));
   const signalScoreResults = calculateSignalScoresBatch(articleMetadata);
 
-  // Create map of article index -> signal score
   const signalScoreMap = new Map<string, number>();
   articles.forEach((item, index) => {
     const result = signalScoreResults.get(index);
@@ -298,7 +293,18 @@ async function analyzeArticles(
         : 'N/A',
   });
 
-  // NEW (Phase 2): Analyze aspects for all articles
+  return signalScoreMap;
+}
+
+/**
+ * Analyze aspects for all articles.
+ * Returns a map of articleHash -> { aspectScore, aspectBreakdown }.
+ */
+async function analyzeAspectsBatch(
+  ticker: string,
+  articles: NewsCacheItem[],
+  eventTypeMap: Map<string, EventType>,
+): Promise<Map<string, { aspectScore: number; aspectBreakdown: AspectBreakdown }>> {
   const aspectAnalysisStartTime = Date.now();
   const aspectAnalysisResults = await Promise.allSettled(
     articles.map(async (item) => {
@@ -323,7 +329,6 @@ async function analyzeArticles(
           ticker,
           articleHash: item.articleHash,
         });
-        // Default to neutral aspect score on failure
         return {
           articleHash: item.articleHash,
           aspectScore: 0,
@@ -333,13 +338,12 @@ async function analyzeArticles(
     }),
   );
 
-  // Create map of articleHash -> aspect scores
-  const aspectScoreMap = new Map<string, { score: number; breakdown: AspectBreakdown }>();
+  const aspectMap = new Map<string, { aspectScore: number; aspectBreakdown: AspectBreakdown }>();
   aspectAnalysisResults.forEach((result) => {
     if (result.status === 'fulfilled') {
-      aspectScoreMap.set(result.value.articleHash, {
-        score: result.value.aspectScore,
-        breakdown: result.value.aspectBreakdown,
+      aspectMap.set(result.value.articleHash, {
+        aspectScore: result.value.aspectScore,
+        aspectBreakdown: result.value.aspectBreakdown,
       });
     }
   });
@@ -347,7 +351,6 @@ async function analyzeArticles(
   const aspectAnalysisDuration = Date.now() - aspectAnalysisStartTime;
   const avgAspectAnalysisTime = aspectAnalysisDuration / articles.length;
 
-  // Log performance metrics
   logger.info('Aspect analysis performance', {
     ticker,
     totalArticles: articles.length,
@@ -355,7 +358,6 @@ async function analyzeArticles(
     avgTimePerArticleMs: avgAspectAnalysisTime.toFixed(2),
   });
 
-  // Log warning if aspect analysis is slow
   if (avgAspectAnalysisTime > 30) {
     logger.warn('Aspect analysis slow', {
       ticker,
@@ -364,43 +366,41 @@ async function analyzeArticles(
     });
   }
 
-  // NEW (Phase 3): Analyze MlSentiment sentiment for material events
+  return aspectMap;
+}
+
+/**
+ * Analyze ML sentiment for material events only.
+ * Returns a map of articleHash -> ML score (null for non-material or failed).
+ */
+async function analyzeMlSentimentBatch(
+  ticker: string,
+  articles: NewsCacheItem[],
+  eventTypeMap: Map<string, EventType>,
+): Promise<Map<string, number | null>> {
   const mlSentimentStartTime = Date.now();
   const mlSentimentResults = await Promise.allSettled(
     articles.map(async (item) => {
       const eventType = eventTypeMap.get(item.articleHash) as EventType | undefined;
 
-      // Only run MlSentiment for material events
       if (eventType && isMaterialEvent(eventType)) {
         try {
           const text = `${item.article.title || ''} ${item.article.description || ''}`.trim();
           const score = await getMlSentiment(text);
-
-          return {
-            articleHash: item.articleHash,
-            mlScore: score, // null if service failed
-          };
+          return { articleHash: item.articleHash, mlScore: score };
         } catch (error) {
           logger.error('MlSentiment analysis failed', error, {
             ticker,
             articleHash: item.articleHash,
           });
-          return {
-            articleHash: item.articleHash,
-            mlScore: null,
-          };
+          return { articleHash: item.articleHash, mlScore: null };
         }
       }
 
-      // Non-material events: skip MlSentiment
-      return {
-        articleHash: item.articleHash,
-        mlScore: null,
-      };
+      return { articleHash: item.articleHash, mlScore: null };
     }),
   );
 
-  // Create map of articleHash -> MlSentiment scores
   const mlScoreMap = new Map<string, number | null>();
   mlSentimentResults.forEach((result) => {
     if (result.status === 'fulfilled') {
@@ -413,7 +413,6 @@ async function analyzeArticles(
     isMaterialEvent(eventType as EventType),
   ).length;
 
-  // Log MlSentiment performance metrics
   logger.info('MlSentiment analysis performance', {
     ticker,
     totalArticles: articles.length,
@@ -424,7 +423,6 @@ async function analyzeArticles(
       materialEventCount > 0 ? (mlSentimentDuration / materialEventCount).toFixed(2) : 'N/A',
   });
 
-  // Log MlSentiment success/failure rates
   const mlSentimentSuccessCount = Array.from(mlScoreMap.values()).filter(
     (score) => score !== null,
   ).length;
@@ -439,7 +437,21 @@ async function analyzeArticles(
     });
   }
 
-  // Prepare articles for batch analysis
+  return mlScoreMap;
+}
+
+/**
+ * Build cache items from all analysis results and AFINN sentiment.
+ * Handles batch sentiment with retry, falling back to per-article analysis.
+ */
+async function buildCacheItems(
+  ticker: string,
+  articles: NewsCacheItem[],
+  eventTypeMap: Map<string, EventType>,
+  signalScoreMap: Map<string, number>,
+  aspectMap: Map<string, { aspectScore: number; aspectBreakdown: AspectBreakdown }>,
+  mlScoreMap: Map<string, number | null>,
+): Promise<Omit<SentimentCacheItem, 'ttl'>[]> {
   const articlesForAnalysis = articles.map((item) => ({
     text: `${item.article.title || ''} ${item.article.description || ''}`.trim(),
     hash: item.articleHash,
@@ -450,9 +462,8 @@ async function analyzeArticles(
     try {
       const sentimentResults = await analyzeSentimentBatch(articlesForAnalysis);
 
-      // Convert to cache format (with event types, aspect scores, MlSentiment scores, and signal scores)
-      const cacheItems: Omit<SentimentCacheItem, 'ttl'>[] = sentimentResults.map((result) => {
-        const aspectData = aspectScoreMap.get(result.articleHash);
+      return sentimentResults.map((result) => {
+        const aspectData = aspectMap.get(result.articleHash);
         const mlScore = mlScoreMap.get(result.articleHash);
         const signalScore = signalScoreMap.get(result.articleHash);
 
@@ -460,25 +471,20 @@ async function analyzeArticles(
           ticker,
           articleHash: result.articleHash,
           sentiment: {
+            // positive/negative are [countStr, confidenceStr] arrays from AFINN analyzer
             positive: parseInt(result.sentiment.positive[0]),
             negative: parseInt(result.sentiment.negative[0]),
             sentimentScore: result.sentimentScore,
             classification: result.classification,
           },
           analyzedAt: Date.now(),
-          // NEW (Phase 1): Include event type
           eventType: eventTypeMap.get(result.articleHash) || 'GENERAL',
-          // NEW (Phase 2): Include aspect scores
-          aspectScore: aspectData?.score ?? 0,
-          aspectBreakdown: aspectData?.breakdown,
-          // NEW (Phase 3): Include MlSentiment score (undefined if not material event or failed)
+          aspectScore: aspectData?.aspectScore ?? 0,
+          aspectBreakdown: aspectData?.aspectBreakdown,
           mlScore: mlScore ?? undefined,
-          // Signal score from metadata analysis
           signalScore: signalScore,
         };
       });
-
-      return cacheItems;
     } catch (error) {
       if (attempt === 1) {
         logger.warn('Batch analysis failed, retrying', {
@@ -486,7 +492,6 @@ async function analyzeArticles(
           articleCount: articles.length,
           error: error instanceof Error ? error.message : String(error),
         });
-        // Will retry
       } else {
         logger.error(
           'Batch analysis failed after retry, switching to per-article analysis',
@@ -496,7 +501,6 @@ async function analyzeArticles(
             articleCount: articles.length,
           },
         );
-        // Fall through to per-article analysis
       }
     }
   }
@@ -505,7 +509,7 @@ async function analyzeArticles(
   const results = await Promise.allSettled(
     articlesForAnalysis.map(async (article) => {
       const sentimentResult = await analyzeSentiment(article.text, article.hash);
-      const aspectData = aspectScoreMap.get(sentimentResult.articleHash);
+      const aspectData = aspectMap.get(sentimentResult.articleHash);
       const mlScore = mlScoreMap.get(sentimentResult.articleHash);
       const signalScore = signalScoreMap.get(sentimentResult.articleHash);
 
@@ -519,20 +523,15 @@ async function analyzeArticles(
           classification: sentimentResult.classification,
         },
         analyzedAt: Date.now(),
-        // NEW (Phase 1): Include event type
         eventType: eventTypeMap.get(sentimentResult.articleHash) || 'GENERAL',
-        // NEW (Phase 2): Include aspect scores
-        aspectScore: aspectData?.score ?? 0,
-        aspectBreakdown: aspectData?.breakdown,
-        // NEW (Phase 3): Include MlSentiment score
+        aspectScore: aspectData?.aspectScore ?? 0,
+        aspectBreakdown: aspectData?.aspectBreakdown,
         mlScore: mlScore ?? undefined,
-        // Signal score from metadata analysis
         signalScore: signalScore,
       } as Omit<SentimentCacheItem, 'ttl'>;
     }),
   );
 
-  // Collect successful results and log failures
   const successfulItems: Omit<SentimentCacheItem, 'ttl'>[] = [];
   const failedHashes: string[] = [];
 
@@ -555,11 +554,42 @@ async function analyzeArticles(
       totalArticles: articles.length,
       successful: successfulItems.length,
       failed: failedHashes.length,
-      failedHashes: failedHashes.slice(0, 5), // Log first 5 failed hashes
+      failedHashes: failedHashes.slice(0, 5),
     });
   }
 
   return successfulItems;
+}
+
+// ── Main analysis orchestrator ──
+
+/**
+ * Analyze articles and return sentiment cache items.
+ *
+ * Pipeline steps:
+ * 1. Classify events for all articles
+ * 2. Calculate signal scores (cheap, no API calls)
+ * 3. Analyze aspects for all articles
+ * 4. Analyze ML sentiment for material events
+ * 5. Run AFINN batch sentiment with retry + per-article fallback
+ * 6. Build cache items from all results
+ */
+async function analyzeArticles(
+  ticker: string,
+  articles: NewsCacheItem[],
+): Promise<Omit<SentimentCacheItem, 'ttl'>[]> {
+  if (articles.length === 0) {
+    return [];
+  }
+
+  const eventTypeMap = await classifyEvents(ticker, articles);
+  const signalScoreMap = calculateArticleSignalScores(ticker, articles);
+  const [aspectMap, mlScoreMap] = await Promise.all([
+    analyzeAspectsBatch(ticker, articles, eventTypeMap),
+    analyzeMlSentimentBatch(ticker, articles, eventTypeMap),
+  ]);
+
+  return buildCacheItems(ticker, articles, eventTypeMap, signalScoreMap, aspectMap, mlScoreMap);
 }
 
 /**

@@ -99,6 +99,16 @@ Parameters:
     MaxValue: 900
     Description: Timeout for predict endpoint
 
+  ThrottlingBurstLimit:
+    Type: Number
+    Default: 50
+    Description: API Gateway burst limit (requests)
+
+  ThrottlingRateLimit:
+    Type: Number
+    Default: 25
+    Description: API Gateway steady-state rate limit (requests/second)
+
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -186,6 +196,9 @@ Resources:
       ApiId: !Ref ReactStocksApi
       StageName: $default
       AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: !Ref ThrottlingBurstLimit
+        ThrottlingRateLimit: !Ref ThrottlingRateLimit
 
   # Lambda Integration (Node.js - news, sentiment, predict)
   ReactStocksIntegration:

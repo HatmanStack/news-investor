@@ -20,6 +20,7 @@ import { submitPredictionSnapshot } from '@/services/sync/predictionSnapshotServ
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
 import type { DiagnosticsOutput } from '@/ml/prediction/types';
 import { MIN_SENTIMENT_DATA } from '@/constants/ml.constants';
+import { logger } from '@/utils/logger';
 
 export interface UseSentimentDataOptions {
   /** Number of days of sentiment data to fetch (default: 30) */
@@ -86,7 +87,7 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
           ]).then((results) => {
             for (const r of results) {
               if (r.status === 'rejected') {
-                console.error('[useSentimentData] Background write failed:', r.reason);
+                logger.error('[useSentimentData] Background write failed:', r.reason);
               }
             }
           });

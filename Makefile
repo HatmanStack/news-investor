@@ -1,4 +1,4 @@
-.PHONY: setup test test-e2e lint check localstack localstack-stop
+.PHONY: setup test test-e2e lint check localstack localstack-stop dev
 
 setup:
 	npm install --legacy-peer-deps
@@ -20,3 +20,6 @@ localstack:
 
 localstack-stop:
 	docker compose down
+
+dev: setup localstack  ## One-step local development setup
+	@echo "Ready. Run 'npm start' to start the Expo dev server."

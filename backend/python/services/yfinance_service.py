@@ -3,20 +3,27 @@ yfinance service layer.
 Wrapper around yfinance library for fetching stock data.
 """
 
+from __future__ import annotations
+
+import functools
 import logging
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import requests
 
 from utils.error import APIError
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # Lazy imports for heavy libraries (yfinance, pandas)
 # These are only imported when needed to reduce cold start time for search
 _yf = None
 
 
-def _get_yfinance():
+def _get_yfinance() -> Any:
     """Lazy import yfinance to reduce cold start time."""
     global _yf
     if _yf is None:
@@ -31,14 +38,15 @@ logger.setLevel(logging.INFO)
 
 # Configuration
 REQUEST_TIMEOUT = 10  # seconds
-MAX_RETRIES = 3
-BACKOFF_BASE = 2  # seconds
+MAX_RETRIES = 2  # Total retry delay: 1s + 1s = 2s (7% of 30s timeout)
+BACKOFF_BASE = 1  # seconds
 
 
-def retry_with_backoff(func):
-    """Decorator for retry logic with exponential backoff."""
+def retry_with_backoff[T](func: Callable[..., T]) -> Callable[..., T]:
+    """Decorator for retry logic with fixed-interval backoff."""
 
-    def wrapper(*args, **kwargs):
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> T:
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES + 1):
             try:
@@ -68,7 +76,7 @@ def fetch_stock_prices(
     ticker: str,
     start_date: str,
     end_date: str | None = None,
-) -> Any:
+) -> pd.DataFrame:
     """
     Fetch historical stock prices from yfinance.
 

@@ -1,6 +1,7 @@
 """
 StocksCache Repository.
 DynamoDB operations for caching stock price data.
+Uses pk/sk composite keys matching the single-table design.
 """
 
 import os
@@ -34,6 +35,10 @@ if not TABLE_NAME:
 # TTL configuration (in seconds)
 TTL_HISTORICAL = 90 * 24 * 60 * 60  # 90 days for historical data
 TTL_CURRENT = 1 * 24 * 60 * 60  # 1 day for current data
+
+# Retry configuration for batch operations
+BATCH_MAX_RETRIES = 3
+BATCH_BACKOFF_MS = [100, 200, 400]  # milliseconds
 
 # DynamoDB client (lazy initialization for Lambda cold start)
 _dynamodb = None
@@ -97,7 +102,7 @@ def get_stock(ticker: str, date: str) -> dict[str, Any] | None:
     """
     try:
         table = _get_table()
-        response = table.get_item(Key={"ticker": ticker.upper(), "date": date})
+        response = table.get_item(Key={"pk": f"STOCK#{ticker.upper()}", "sk": f"DATE#{date}"})
         return response.get("Item")
     except Exception as e:
         logger.error(f"[StocksCache] Error getting stock: {e}", exc_info=True)
@@ -113,11 +118,15 @@ def put_stock(item: dict[str, Any]) -> None:
     """
     try:
         table = _get_table()
-        cache_item = {
-            "ticker": item["ticker"].upper(),
-            "date": item["date"],
+        ticker_upper = item["ticker"].upper()
+        date = item["date"]
+        cache_item: dict[str, Any] = {
+            "pk": f"STOCK#{ticker_upper}",
+            "sk": f"DATE#{date}",
+            "ticker": ticker_upper,
+            "date": date,
             "priceData": _float_to_decimal(item["priceData"]),
-            "ttl": calculate_ttl(item["date"]),
+            "ttl": calculate_ttl(date),
             "fetchedAt": int(time.time() * 1000),
         }
         if "metadata" in item:
@@ -132,6 +141,7 @@ def put_stock(item: dict[str, Any]) -> None:
 def batch_get_stocks(ticker: str, dates: list[str]) -> list[dict[str, Any]]:
     """
     Batch get stock prices for multiple dates.
+    Handles UnprocessedKeys with exponential backoff.
 
     Args:
         ticker: Stock ticker symbol
@@ -145,19 +155,36 @@ def batch_get_stocks(ticker: str, dates: list[str]) -> list[dict[str, Any]]:
 
     try:
         dynamodb = _get_dynamodb()
-        results = []
+        results: list[dict[str, Any]] = []
 
         # Process in batches of 100 (DynamoDB BatchGetItem limit)
         for i in range(0, len(dates), 100):
             batch_dates = dates[i : i + 100]
-            keys = [{"ticker": ticker.upper(), "date": d} for d in batch_dates]
+            keys = [{"pk": f"STOCK#{ticker.upper()}", "sk": f"DATE#{d}"} for d in batch_dates]
 
-            response = dynamodb.batch_get_item(
-                RequestItems={TABLE_NAME: {"Keys": keys}}
-            )
+            response = dynamodb.batch_get_item(RequestItems={TABLE_NAME: {"Keys": keys}})
 
             items = response.get("Responses", {}).get(TABLE_NAME, [])
             results.extend(items)
+
+            # Handle UnprocessedKeys with exponential backoff
+            unprocessed = response.get("UnprocessedKeys", {})
+            retry = 0
+            while unprocessed.get(TABLE_NAME) and retry < BATCH_MAX_RETRIES:
+                delay_s = BATCH_BACKOFF_MS[retry] / 1000.0
+                time.sleep(delay_s)
+                retry += 1
+
+                response = dynamodb.batch_get_item(RequestItems=unprocessed)
+                items = response.get("Responses", {}).get(TABLE_NAME, [])
+                results.extend(items)
+                unprocessed = response.get("UnprocessedKeys", {})
+
+            if unprocessed.get(TABLE_NAME):
+                logger.warning(
+                    f"[StocksCache] {len(unprocessed[TABLE_NAME]['Keys'])} "
+                    f"unprocessed keys after {BATCH_MAX_RETRIES} retries"
+                )
 
         return results
     except Exception as e:
@@ -179,14 +206,18 @@ def batch_put_stocks(items: list[dict[str, Any]]) -> None:
     try:
         table = _get_table()
 
-        # Prepare items with TTL
-        cache_items = []
+        # Prepare items with pk/sk keys and TTL
+        cache_items: list[dict[str, Any]] = []
         for item in items:
-            cache_item = {
-                "ticker": item["ticker"].upper(),
-                "date": item["date"],
+            ticker_upper = item["ticker"].upper()
+            date = item["date"]
+            cache_item: dict[str, Any] = {
+                "pk": f"STOCK#{ticker_upper}",
+                "sk": f"DATE#{date}",
+                "ticker": ticker_upper,
+                "date": date,
                 "priceData": _float_to_decimal(item["priceData"]),
-                "ttl": calculate_ttl(item["date"]),
+                "ttl": calculate_ttl(date),
                 "fetchedAt": int(time.time() * 1000),
             }
             if "metadata" in item:
@@ -204,9 +235,7 @@ def batch_put_stocks(items: list[dict[str, Any]]) -> None:
         raise
 
 
-def query_stocks_by_date_range(
-    ticker: str, start_date: str, end_date: str
-) -> list[dict[str, Any]]:
+def query_stocks_by_date_range(ticker: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
     """
     Query stock prices by date range using DynamoDB Query API.
 
@@ -220,19 +249,26 @@ def query_stocks_by_date_range(
     """
     try:
         table = _get_table()
-        response = table.query(
-            KeyConditionExpression=Key("ticker").eq(ticker.upper())
-            & Key("date").between(start_date, end_date)
-        )
+        items: list[dict] = []
+        query_kwargs = {
+            "KeyConditionExpression": Key("pk").eq(f"STOCK#{ticker.upper()}")
+            & Key("sk").between(f"DATE#{start_date}", f"DATE#{end_date}")
+        }
 
-        items = response.get("Items", [])
+        while True:
+            response = table.query(**query_kwargs)
+            items.extend(response.get("Items", []))
+
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            query_kwargs["ExclusiveStartKey"] = last_key
+
         logger.info(
             f"[StocksCache] Query found {len(items)} items for {ticker} "
             f"from {start_date} to {end_date}"
         )
         return items
     except Exception as e:
-        logger.error(
-            f"[StocksCache] Error querying stocks by date range: {e}", exc_info=True
-        )
+        logger.error(f"[StocksCache] Error querying stocks by date range: {e}", exc_info=True)
         raise

@@ -3,21 +3,29 @@ ETF holdings service with cache-first pattern.
 Fetches top 10 holdings for SPDR sector ETFs.
 """
 
+from __future__ import annotations
+
 import json
 import time
-from typing import Any
-
-import yfinance as yf
+from typing import Any, Protocol
 
 from constants.etf_holdings import ETF_TOP_HOLDINGS
 from utils.logger import get_structured_logger
+
+
+class DynamoTable(Protocol):
+    """Minimal protocol for DynamoDB Table operations used in this module."""
+
+    def get_item(self, **kwargs: Any) -> dict: ...
+    def put_item(self, **kwargs: Any) -> dict: ...
+
 
 logger = get_structured_logger(__name__)
 
 CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
-def get_etf_holdings(etf_ticker: str, table: Any) -> list[str]:
+def get_etf_holdings(etf_ticker: str, table: DynamoTable) -> list[str]:
     """Get top 10 holdings for a SPDR ETF.
 
     Priority:
@@ -34,8 +42,10 @@ def get_etf_holdings(etf_ticker: str, table: Any) -> list[str]:
         if holdings and len(holdings) >= 5:
             _cache_holdings(etf_ticker, holdings[:10], table)
             return holdings[:10]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(
+            f"[ETFHoldings] yfinance fetch failed for {etf_ticker}, using static fallback: {e}"
+        )
 
     static = ETF_TOP_HOLDINGS.get(etf_ticker, [])
     if static:
@@ -45,17 +55,19 @@ def get_etf_holdings(etf_ticker: str, table: Any) -> list[str]:
 
 def _fetch_from_yfinance(etf_ticker: str) -> list[str]:
     """Fetch top holdings from yfinance."""
+    import yfinance as yf
+
     ticker = yf.Ticker(etf_ticker)
     try:
         holdings_df = ticker.funds_data.top_holdings
         if holdings_df is not None and not holdings_df.empty:
             return holdings_df.index.tolist()[:10]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[ETFHoldings] yfinance API error for {etf_ticker}: {e}")
     return []
 
 
-def _get_cached_holdings(etf_ticker: str, table: Any) -> list[str] | None:
+def _get_cached_holdings(etf_ticker: str, table: DynamoTable) -> list[str] | None:
     """Get cached holdings from DynamoDB. Returns None on miss or expiry."""
     try:
         result = table.get_item(Key={"pk": f"ETF#{etf_ticker}", "sk": "HOLDINGS"})
@@ -74,7 +86,7 @@ def _get_cached_holdings(etf_ticker: str, table: Any) -> list[str] | None:
         return None
 
 
-def _cache_holdings(etf_ticker: str, holdings: list[str], table: Any) -> None:
+def _cache_holdings(etf_ticker: str, holdings: list[str], table: DynamoTable) -> None:
     """Cache holdings in DynamoDB."""
     try:
         table.put_item(

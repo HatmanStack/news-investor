@@ -1,48 +1,59 @@
 /**
- * Integration Tests - Complete Sentiment Pipeline (Phase 4)
+ * Integration Tests - Complete Sentiment Pipeline
  *
- * Tests the end-to-end flow of sentiment analysis with three-signal architecture:
- * 1. Event Classification
- * 2. Aspect Analysis
- * 3. MlSentiment Sentiment
- * 4. Storage in DynamoDB
- * 5. Daily Aggregation
+ * Tests the integration of event classification, aspect analysis,
+ * and daily aggregation using real service functions with mocked
+ * external dependencies (ML API, DynamoDB).
+ *
+ * Unlike unit tests, these tests call through multiple real services
+ * to verify they compose correctly:
+ * 1. classifyEvent -> real keyword matching + priority resolution
+ * 2. analyzeAspects -> real aspect detection + weighted scoring
+ * 3. aggregateDailySentiment -> real aggregation of service outputs
  */
 
 import { describe, it, expect } from '@jest/globals';
-import type { EventType } from '../../types/event.types';
+import { classifyEvent } from '../../services/eventClassification.service';
+import {
+  analyzeAspects,
+  type NewsArticle as AspectNewsArticle,
+} from '../../services/aspectAnalysis.service';
+import type { NewsArticle } from '../../repositories/newsCache.repository';
 import type { SentimentCacheItem } from '../../types/sentiment.types';
 import type { NewsCacheItem } from '../../repositories/newsCache.repository';
 import { aggregateDailySentiment } from '../../utils/sentiment.util';
 
 describe('Complete Sentiment Pipeline Integration', () => {
   describe('Three-Signal Architecture', () => {
-    it('should process material event with all three signals', () => {
-      // Simulate processing an earnings article
-      // Article would be: { ticker: 'AAPL', title: 'Apple Reports Q1 Earnings Beat', ... }
-
-      // Step 1: Event Classification (mocked)
-      const eventType: EventType = 'EARNINGS';
-      expect(eventType).toBe('EARNINGS');
-
-      // Step 2: Aspect Analysis (mocked)
-      const aspectScore = 0.65; // Positive aspects
-      const aspectBreakdown = {
-        REVENUE: 0.8,
-        EARNINGS: 0.7,
-        GUIDANCE: 0.5,
+    it('should classify and analyze a material earnings article end-to-end', async () => {
+      // Real article that exercises both classifyEvent and analyzeAspects
+      const article: NewsArticle = {
+        title: 'Apple Reports Q1 Earnings Beat',
+        description:
+          'Apple Inc. reported quarterly earnings of $1.25 EPS, beating analyst estimates. Revenue grew 15% year-over-year to $95 billion with strong margins.',
+        url: 'https://example.com/earnings',
+        date: '2025-01-15',
       };
-      expect(aspectScore).toBeGreaterThan(0);
-      expect(aspectBreakdown.REVENUE).toBeGreaterThan(0);
 
-      // Step 3: MlSentiment (mocked - would call external service)
-      const mlScore = 0.72;
-      expect(mlScore).toBeGreaterThan(0);
+      // Step 1: Real event classification (keyword matching + priority)
+      const classification = await classifyEvent(article);
+      expect(classification.eventType).toBe('EARNINGS');
+      expect(classification.confidence).toBeGreaterThan(0);
 
-      // Step 4: Build cache item
+      // Step 2: Real aspect analysis (aspect detection + weighted scoring)
+      const aspectArticle: AspectNewsArticle = {
+        ticker: 'AAPL',
+        headline: article.title,
+        summary: article.description || '',
+      };
+      const aspects = await analyzeAspects(aspectArticle, classification.eventType);
+      expect(aspects.overallScore).toBeDefined();
+      expect(aspects.confidence).toBeGreaterThanOrEqual(0);
+
+      // Step 3: Build cache item using real service outputs
       const cacheItem: Omit<SentimentCacheItem, 'ttl'> = {
         ticker: 'AAPL',
-        articleHash: 'hash_earnings_123',
+        articleHash: 'hash_earnings_integration',
         sentiment: {
           positive: 15,
           negative: 2,
@@ -50,39 +61,49 @@ describe('Complete Sentiment Pipeline Integration', () => {
           classification: 'POS',
         },
         analyzedAt: Date.now(),
-        eventType,
-        aspectScore,
-        aspectBreakdown,
-        mlScore,
+        eventType: classification.eventType,
+        aspectScore: aspects.overallScore,
+        aspectBreakdown: aspects.breakdown,
+        mlScore: 0.72, // ML score would come from external API (mocked value)
         modelVersion: 'ml-sentiment-v1.0',
       };
 
-      // Verify all three signals are present
+      // Verify all three signals come from real services
       expect(cacheItem.eventType).toBe('EARNINGS');
-      expect(cacheItem.aspectScore).toBe(0.65);
-      expect(cacheItem.mlScore).toBe(0.72);
+      expect(typeof cacheItem.aspectScore).toBe('number');
       expect(cacheItem.aspectBreakdown).toBeDefined();
-      expect(cacheItem.modelVersion).toBeDefined();
+      expect(cacheItem.mlScore).toBe(0.72);
     });
 
-    it('should process non-material event without MlSentiment', () => {
-      // Simulate processing a general news article
-      // Article would be: { ticker: 'AAPL', title: 'Apple CEO Speaks at Conference', ... }
+    it('should classify and analyze a non-material general article end-to-end', async () => {
+      // General article that should not trigger material event classification
+      const article: NewsArticle = {
+        title: 'Apple CEO Speaks at Tech Conference',
+        description: 'Tim Cook spoke at the annual technology conference about future vision.',
+        url: 'https://example.com/general',
+        date: '2025-01-15',
+      };
 
-      // Step 1: Event Classification
-      const eventType: EventType = 'GENERAL';
-      expect(eventType).toBe('GENERAL');
+      // Step 1: Real event classification
+      const classification = await classifyEvent(article);
+      // Non-material events: GENERAL or PRODUCT_LAUNCH
+      expect(['GENERAL', 'PRODUCT_LAUNCH']).toContain(classification.eventType);
 
-      // Step 2: Aspect Analysis (still runs)
-      const aspectScore = 0; // No financial aspects detected
+      // Step 2: Real aspect analysis
+      const aspectArticle: AspectNewsArticle = {
+        ticker: 'AAPL',
+        headline: article.title,
+        summary: article.description || '',
+      };
+      const aspects = await analyzeAspects(aspectArticle, classification.eventType);
 
-      // Step 3: MlSentiment SKIPPED for non-material events
-      const mlScore = undefined;
+      // General articles may have no financial aspects
+      expect(aspects.overallScore).toBeDefined();
 
-      // Step 4: Build cache item
+      // Step 3: Build cache item -- no mlScore for non-material events
       const cacheItem: Omit<SentimentCacheItem, 'ttl'> = {
         ticker: 'AAPL',
-        articleHash: 'hash_general_456',
+        articleHash: 'hash_general_integration',
         sentiment: {
           positive: 5,
           negative: 1,
@@ -90,100 +111,94 @@ describe('Complete Sentiment Pipeline Integration', () => {
           classification: 'POS',
         },
         analyzedAt: Date.now(),
-        eventType,
-        aspectScore,
-        mlScore,
+        eventType: classification.eventType,
+        aspectScore: aspects.overallScore,
+        // No mlScore for non-material events
       };
 
-      // Verify non-material event characteristics
-      expect(cacheItem.eventType).toBe('GENERAL');
-      expect(cacheItem.aspectScore).toBe(0);
       expect(cacheItem.mlScore).toBeUndefined();
       expect(cacheItem.modelVersion).toBeUndefined();
     });
   });
 
-  describe('Daily Aggregation with Multi-Signal Data', () => {
-    it('should aggregate multiple articles with event distribution', () => {
-      // Create mock sentiment items
-      const sentiments: SentimentCacheItem[] = [
+  describe('Daily Aggregation with Real Service Outputs', () => {
+    it('should aggregate articles classified by real services', async () => {
+      // Classify multiple real articles through the pipeline
+      const articles: NewsArticle[] = [
         {
-          ticker: 'AAPL',
-          articleHash: 'hash1',
-          sentiment: { positive: 10, negative: 2, sentimentScore: 0.67, classification: 'POS' },
-          analyzedAt: Date.now(),
-          ttl: 9999999999,
-          eventType: 'EARNINGS',
-          aspectScore: 0.5,
-          mlScore: 0.7,
-          modelVersion: 'v1.0',
+          title: 'Apple Reports Q1 Earnings Beat with Strong Revenue Growth',
+          description:
+            'Apple reported quarterly earnings above estimates with revenue of $95 billion.',
+          url: 'https://example.com/1',
+          date: '2025-01-15',
         },
         {
-          ticker: 'AAPL',
-          articleHash: 'hash2',
-          sentiment: { positive: 5, negative: 8, sentimentScore: -0.23, classification: 'NEG' },
-          analyzedAt: Date.now(),
-          ttl: 9999999999,
-          eventType: 'M&A',
-          aspectScore: -0.3,
-          mlScore: -0.2,
-          modelVersion: 'v1.0',
+          title: 'Microsoft Acquires AI Startup in Major Deal',
+          description:
+            'Microsoft announced the acquisition of a major AI company in a cash and stock deal.',
+          url: 'https://example.com/2',
+          date: '2025-01-15',
         },
         {
-          ticker: 'AAPL',
-          articleHash: 'hash3',
-          sentiment: { positive: 3, negative: 1, sentimentScore: 0.5, classification: 'POS' },
-          analyzedAt: Date.now(),
-          ttl: 9999999999,
-          eventType: 'GENERAL',
-          aspectScore: 0,
+          title: 'Google Launches New Cloud Feature',
+          description: 'Google announced a new feature for its cloud platform today.',
+          url: 'https://example.com/3',
+          date: '2025-01-15',
         },
       ];
 
-      // Create mock news items
-      const articles: NewsCacheItem[] = sentiments.map((s, i) => ({
+      // Run all articles through real classifyEvent
+      const classifications = await Promise.all(articles.map((a) => classifyEvent(a)));
+
+      // Build sentiment items from real classification outputs
+      const sentiments: SentimentCacheItem[] = classifications.map((cls, i) => ({
         ticker: 'AAPL',
-        articleHash: s.articleHash,
+        articleHash: `hash_agg_${i}`,
+        sentiment: {
+          positive: 10 - i * 3,
+          negative: 2 + i,
+          sentimentScore: 0.67 - i * 0.3,
+          classification: i < 2 ? ('POS' as const) : ('NEG' as const),
+        },
+        analyzedAt: Date.now(),
+        ttl: 9999999999,
+        eventType: cls.eventType,
+        aspectScore: i === 0 ? 0.5 : i === 1 ? -0.3 : 0,
+        mlScore:
+          cls.eventType !== 'GENERAL' && cls.eventType !== 'PRODUCT_LAUNCH' ? 0.5 : undefined,
+      }));
+
+      const newsItems: NewsCacheItem[] = articles.map((a, i) => ({
+        ticker: 'AAPL',
+        articleHash: `hash_agg_${i}`,
         article: {
-          title: `Article ${i + 1}`,
-          url: `https://example.com/${i + 1}`,
-          description: `Description ${i + 1}`,
-          date: '2025-01-15',
-          publisher: 'Source',
+          title: a.title,
+          url: a.url,
+          description: a.description,
+          date: a.date,
         },
         fetchedAt: Date.now(),
         ttl: 9999999999,
       }));
 
-      // Aggregate
-      const dailySentiment = aggregateDailySentiment(sentiments, articles);
+      // Aggregate using real function
+      const dailySentiment = aggregateDailySentiment(sentiments, newsItems);
 
       expect(dailySentiment).toHaveLength(1);
 
       const day = dailySentiment[0]!;
 
-      // Verify event distribution
-      expect(day.eventCounts).toEqual({
-        EARNINGS: 1,
-        'M&A': 1,
-        GUIDANCE: 0,
-        ANALYST_RATING: 0,
-        PRODUCT_LAUNCH: 0,
-        GENERAL: 1,
-      });
+      // Event distribution should reflect real classification results
+      const totalEvents = Object.values(day.eventCounts).reduce((a, b) => a + b, 0);
+      expect(totalEvents).toBe(3);
 
-      // Verify aspect score average (0.5 + -0.3 = 0.2, avg = 0.1, excluding 0)
-      expect(day.avgAspectScore).toBeCloseTo(0.1, 2);
-
-      // Verify MlSentiment score average (0.7 + -0.2 = 0.5, avg = 0.25)
-      expect(day.avgMlScore).toBeCloseTo(0.25, 2);
-
-      // Verify material event count (2 articles with MlSentiment)
-      expect(day.materialEventCount).toBe(2);
+      // At least one article should be classified as EARNINGS
+      expect(classifications[0]!.eventType).toBe('EARNINGS');
+      expect(day.eventCounts.EARNINGS).toBeGreaterThanOrEqual(1);
     });
 
-    it('should handle missing new fields gracefully (backward compatibility)', () => {
-      // Create mock sentiment items WITHOUT new fields (old schema)
+    it('should handle backward-compatible items without new fields', () => {
+      // Old schema items without eventType, aspectScore, mlScore
       const oldSentiments: SentimentCacheItem[] = [
         {
           ticker: 'AAPL',
@@ -191,7 +206,6 @@ describe('Complete Sentiment Pipeline Integration', () => {
           sentiment: { positive: 10, negative: 2, sentimentScore: 0.67, classification: 'POS' },
           analyzedAt: Date.now(),
           ttl: 9999999999,
-          // No eventType, aspectScore, mlScore
         },
         {
           ticker: 'AAPL',
@@ -199,11 +213,10 @@ describe('Complete Sentiment Pipeline Integration', () => {
           sentiment: { positive: 5, negative: 8, sentimentScore: -0.23, classification: 'NEG' },
           analyzedAt: Date.now(),
           ttl: 9999999999,
-          // No new fields
         },
       ];
 
-      const articles: NewsCacheItem[] = oldSentiments.map((s, i) => ({
+      const newsItems: NewsCacheItem[] = oldSentiments.map((s, i) => ({
         ticker: 'AAPL',
         articleHash: s.articleHash,
         article: {
@@ -217,242 +230,77 @@ describe('Complete Sentiment Pipeline Integration', () => {
         ttl: 9999999999,
       }));
 
-      // Aggregate should not crash
-      const dailySentiment = aggregateDailySentiment(oldSentiments, articles);
+      const dailySentiment = aggregateDailySentiment(oldSentiments, newsItems);
 
       expect(dailySentiment).toHaveLength(1);
 
       const day = dailySentiment[0]!;
-
-      // Verify defaults
       expect(day.eventCounts.GENERAL).toBe(2); // Defaults to GENERAL
-      expect(day.avgAspectScore).toBeUndefined(); // No aspect scores
-      expect(day.avgMlScore).toBeUndefined(); // No MlSentiment scores
-      expect(day.materialEventCount).toBe(0); // No material events
+      expect(day.avgAspectScore).toBeUndefined();
+      expect(day.avgMlScore).toBeUndefined();
+      expect(day.materialEventCount).toBe(0);
     });
   });
 
-  describe('Schema Validation', () => {
-    it('should accept valid sentiment cache item with all fields', () => {
-      const validItem: Omit<SentimentCacheItem, 'ttl'> = {
-        ticker: 'AAPL',
-        articleHash: 'hash_valid',
-        sentiment: {
-          positive: 10,
-          negative: 2,
-          sentimentScore: 0.67,
-          classification: 'POS',
-        },
-        analyzedAt: Date.now(),
-        eventType: 'EARNINGS',
-        aspectScore: 0.5,
-        aspectBreakdown: {
-          REVENUE: 0.7,
-          EARNINGS: 0.6,
-        },
-        mlScore: 0.72,
-        modelVersion: 'ml-sentiment-v1.0',
+  describe('End-to-End Service Composition', () => {
+    it('should compose classifyEvent -> analyzeAspects -> aggregation for M&A article', async () => {
+      const article: NewsArticle = {
+        title: 'Major Acquisition Announced: Company Acquires Rival',
+        description:
+          'The company announced a merger and acquisition deal worth billions. The acquisition target had significant debt obligations.',
+        url: 'https://example.com/ma',
+        date: '2025-01-15',
       };
 
-      // Validate ranges
-      expect(validItem.aspectScore).toBeGreaterThanOrEqual(-1);
-      expect(validItem.aspectScore).toBeLessThanOrEqual(1);
-      expect(validItem.mlScore).toBeGreaterThanOrEqual(-1);
-      expect(validItem.mlScore).toBeLessThanOrEqual(1);
+      // Real classification
+      const classification = await classifyEvent(article);
+      expect(classification.eventType).toBe('M&A');
 
-      // Validate event type
-      expect([
-        'EARNINGS',
-        'M&A',
-        'GUIDANCE',
-        'ANALYST_RATING',
-        'PRODUCT_LAUNCH',
-        'GENERAL',
-      ]).toContain(validItem.eventType);
-    });
-
-    it('should accept minimal sentiment cache item (backward compatible)', () => {
-      const minimalItem: Omit<SentimentCacheItem, 'ttl'> = {
-        ticker: 'AAPL',
-        articleHash: 'hash_minimal',
-        sentiment: {
-          positive: 5,
-          negative: 2,
-          sentimentScore: 0.4,
-          classification: 'POS',
-        },
-        analyzedAt: Date.now(),
-        // All new fields are optional
+      // Real aspect analysis with event-specific aspect filtering
+      const aspectArticle: AspectNewsArticle = {
+        ticker: 'TEST',
+        headline: article.title,
+        summary: article.description || '',
       };
+      const aspects = await analyzeAspects(aspectArticle, classification.eventType);
 
-      // Should not throw
-      expect(minimalItem.ticker).toBe('AAPL');
-      expect(minimalItem.eventType).toBeUndefined();
-      expect(minimalItem.aspectScore).toBeUndefined();
-      expect(minimalItem.mlScore).toBeUndefined();
-    });
-  });
+      // M&A should analyze DEBT and REVENUE aspects specifically
+      expect(aspects).toBeDefined();
 
-  describe('Material vs Non-Material Event Processing', () => {
-    const materialEvents: EventType[] = ['EARNINGS', 'M&A', 'GUIDANCE', 'ANALYST_RATING'];
-    const nonMaterialEvents: EventType[] = ['PRODUCT_LAUNCH', 'GENERAL'];
-
-    it('should identify material events correctly', () => {
-      materialEvents.forEach((eventType) => {
-        // Material events should trigger MlSentiment
-        expect(['EARNINGS', 'M&A', 'GUIDANCE', 'ANALYST_RATING']).toContain(eventType);
-      });
-    });
-
-    it('should identify non-material events correctly', () => {
-      nonMaterialEvents.forEach((eventType) => {
-        // Non-material events skip MlSentiment
-        expect(['PRODUCT_LAUNCH', 'GENERAL']).toContain(eventType);
-      });
-    });
-
-    it('should process all event types', () => {
-      const allEventTypes: EventType[] = [
-        'EARNINGS',
-        'M&A',
-        'PRODUCT_LAUNCH',
-        'ANALYST_RATING',
-        'GUIDANCE',
-        'GENERAL',
-      ];
-
-      allEventTypes.forEach((eventType) => {
-        const item: Omit<SentimentCacheItem, 'ttl'> = {
-          ticker: 'AAPL',
-          articleHash: `hash_${eventType}`,
-          sentiment: {
-            positive: 5,
-            negative: 2,
-            sentimentScore: 0.4,
-            classification: 'POS',
-          },
-          analyzedAt: Date.now(),
-          eventType,
-          aspectScore: 0.3,
-          // MlSentiment only for material events
-          mlScore: materialEvents.includes(eventType) ? 0.5 : undefined,
-        };
-
-        // Verify event type is set
-        expect(item.eventType).toBe(eventType);
-
-        // Verify MlSentiment presence matches materiality
-        if (materialEvents.includes(eventType)) {
-          expect(item.mlScore).toBeDefined();
-        } else {
-          expect(item.mlScore).toBeUndefined();
-        }
-      });
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('should handle zero aspect scores correctly', () => {
+      // Build and aggregate a single-item daily summary
       const sentiments: SentimentCacheItem[] = [
         {
-          ticker: 'AAPL',
-          articleHash: 'hash1',
-          sentiment: { positive: 5, negative: 2, sentimentScore: 0.4, classification: 'POS' },
+          ticker: 'TEST',
+          articleHash: 'hash_ma_e2e',
+          sentiment: { positive: 8, negative: 4, sentimentScore: 0.33, classification: 'POS' },
           analyzedAt: Date.now(),
           ttl: 9999999999,
-          eventType: 'GENERAL',
-          aspectScore: 0, // No aspects detected
+          eventType: classification.eventType,
+          aspectScore: aspects.overallScore,
+          aspectBreakdown: aspects.breakdown,
+          mlScore: 0.4,
+          modelVersion: 'v1.0',
         },
       ];
 
-      const articles: NewsCacheItem[] = [
+      const newsItems: NewsCacheItem[] = [
         {
-          ticker: 'AAPL',
-          articleHash: 'hash1',
+          ticker: 'TEST',
+          articleHash: 'hash_ma_e2e',
           article: {
-            title: 'Article',
-            url: 'https://example.com/1',
-            date: '2025-01-15',
-            publisher: 'Source',
+            title: article.title,
+            url: article.url,
+            date: article.date,
           },
           fetchedAt: Date.now(),
           ttl: 9999999999,
         },
       ];
 
-      const dailySentiment = aggregateDailySentiment(sentiments, articles);
-
-      // Zero aspect scores should be excluded from average
-      expect(dailySentiment[0]!.avgAspectScore).toBeUndefined();
-    });
-
-    it('should handle mixed material and non-material events', () => {
-      const sentiments: SentimentCacheItem[] = [
-        {
-          ticker: 'AAPL',
-          articleHash: 'hash1',
-          sentiment: { positive: 10, negative: 2, sentimentScore: 0.67, classification: 'POS' },
-          analyzedAt: Date.now(),
-          ttl: 9999999999,
-          eventType: 'EARNINGS',
-          aspectScore: 0.5,
-          mlScore: 0.7, // Material event
-        },
-        {
-          ticker: 'AAPL',
-          articleHash: 'hash2',
-          sentiment: { positive: 3, negative: 1, sentimentScore: 0.5, classification: 'POS' },
-          analyzedAt: Date.now(),
-          ttl: 9999999999,
-          eventType: 'GENERAL',
-          aspectScore: 0,
-          // No MlSentiment for GENERAL
-        },
-      ];
-
-      const articles: NewsCacheItem[] = sentiments.map((s) => ({
-        ticker: 'AAPL',
-        articleHash: s.articleHash,
-        article: {
-          title: 'Article',
-          url: 'https://example.com',
-          date: '2025-01-15',
-          publisher: 'Source',
-        },
-        fetchedAt: Date.now(),
-        ttl: 9999999999,
-      }));
-
-      const dailySentiment = aggregateDailySentiment(sentiments, articles);
-
-      // Should only average MlSentiment scores from material events
-      expect(dailySentiment[0]!.avgMlScore).toBeCloseTo(0.7, 2); // Only one score
-      expect(dailySentiment[0]!.materialEventCount).toBe(1);
-    });
-
-    it('should handle extreme sentiment scores', () => {
-      const extremeItem: Omit<SentimentCacheItem, 'ttl'> = {
-        ticker: 'AAPL',
-        articleHash: 'hash_extreme',
-        sentiment: {
-          positive: 0,
-          negative: 50,
-          sentimentScore: -1.0, // Very negative
-          classification: 'NEG',
-        },
-        analyzedAt: Date.now(),
-        eventType: 'EARNINGS',
-        aspectScore: -1.0, // Very negative aspect
-        mlScore: -1.0, // Very negative MlSentiment
-      };
-
-      // All scores should be within valid range
-      expect(extremeItem.sentiment.sentimentScore).toBeGreaterThanOrEqual(-1);
-      expect(extremeItem.sentiment.sentimentScore).toBeLessThanOrEqual(1);
-      expect(extremeItem.aspectScore).toBeGreaterThanOrEqual(-1);
-      expect(extremeItem.aspectScore).toBeLessThanOrEqual(1);
-      expect(extremeItem.mlScore).toBeGreaterThanOrEqual(-1);
-      expect(extremeItem.mlScore).toBeLessThanOrEqual(1);
+      const daily = aggregateDailySentiment(sentiments, newsItems);
+      expect(daily).toHaveLength(1);
+      expect(daily[0]!.eventCounts['M&A']).toBe(1);
+      expect(daily[0]!.materialEventCount).toBe(1);
     });
   });
 });

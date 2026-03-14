@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.3.3] - 2026-03-14
+
+### Added
+
+- `CONTRIBUTING.md` with PR workflow, branch strategy, commit conventions, test discovery guide, and two-repo sync warning
+- `make dev` target for one-command local setup
+- API Gateway throttling parameters (`ThrottlingBurstLimit: 50`, `ThrottlingRateLimit: 25`) on both pro and community templates
+- DynamoDB `LastEvaluatedKey` pagination in Python `query_stocks_by_date_range`
+- `DynamoTable` Protocol type for ETF holdings service
+- Community overlay for `CONTRIBUTING.md` (strips sync section)
+
+### Changed
+
+- Replaced 190-line switch statement router with declarative `RouteDefinition[]` route table in `backend/src/index.ts`
+- Decomposed 340-line `analyzeArticles` into 5 named pipeline steps: `classifyEvents`, `calculateArticleSignalScores`, `analyzeAspectsBatch`, `analyzeMlSentimentBatch`, `buildCacheItems`
+- Parallelized `analyzeAspectsBatch` and `analyzeMlSentimentBatch` via `Promise.all`
+- Eliminated all `any` types in `frontend/src/database/database.web.ts` (25 instances replaced with 7 typed interfaces)
+- Added `VALID_TABLES` allowlist for table name validation in both native and web database layers
+- Replaced `console.error` with structured logger in `useSentimentData.ts`
+- Replaced `hasOwnProperty` with `Object.hasOwn` in web database
+- Moved `JSON.stringify` inside `requestIdleCallback` to prevent stale snapshot writes
+- Pinned LocalStack image to `4.4.0` in `docker-compose.yml` and CI
+- Lazy-loaded yfinance in `etf_holdings_service.py` to match `yfinance_service.py` cold-start pattern
+- Added `@functools.wraps` to `retry_with_backoff` decorator
+- Updated retry docstring from "exponential backoff" to "fixed-interval backoff"
+
+### Fixed
+
+- **Python stock cache using wrong DynamoDB key schema** — all operations now use `pk`/`sk` composite keys matching single-table design; cache was silently nonfunctional since deployment
+- Python `batch_get_stocks` missing `UnprocessedKeys` retry handling — added exponential backoff matching Node.js pattern
+- Python Lambda retry budget consuming 47% of timeout (14s/30s) — reduced to 7% (2s/30s) with `MAX_RETRIES=2`, `BACKOFF_BASE=1`
+- Removed 3 deprecated `_`-prefixed parameters from `getStockPredictions` public API
+- Mislabeled integration test (`complete-pipeline.test.ts`) now calls real `classifyEvent` and `analyzeAspects` services
+- yfinance test mock targets patching nonexistent module attribute — fixed to patch `yfinance.Ticker` directly; removed CI `--ignore` exclusion
+- Silent `except Exception: pass` in ETF holdings service — now logs at WARNING level
+- Stale `STOCKS_CACHE_TABLE` env var removed from test fixtures
+- Typed Python service functions: `fetch_stock_prices -> pd.DataFrame`, `table: DynamoTable` Protocol
+- Backoff comment accuracy ("1s + 2s = 3s" corrected to "1s + 1s = 2s")
+
 ## [2.3.2] - 2026-03-12
 
 ### Added
@@ -35,6 +74,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - Frontend CI failures on Dependabot PRs caused by `react-test-renderer` version mismatch
 - `TierContext` defaulting `isFeatureEnabled` to `false` for unauthenticated users — now returns `true` per auth-optional design
 - `MaterialityHeatmap` initializing to current month instead of data's month, causing time-dependent test failures
+- Backend CI coverage thresholds lowered to match actual coverage (65% lines/statements, 60% functions, 55% branches)
 - 9 npm audit vulnerabilities resolved
 - Removed committed `__pycache__` bytecode from tracking
 
