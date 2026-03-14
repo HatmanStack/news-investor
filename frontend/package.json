@@ -60,7 +60,7 @@
     "@types/sentiment": "^5.0.4",
     "babel-preset-expo": "^54.0.10",
     "eslint": "^9.0.0",
-    "eslint-config-expo": "^10.0.0",
+    "eslint-config-expo": "^55.0.0",
     "jest": "^30.3.0",
     "jest-expo": "^55.0.9",
     "typescript": "~5.9.2"
