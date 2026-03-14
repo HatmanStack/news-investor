@@ -6,16 +6,15 @@
         "src/hooks/*.ts",
         "src/contexts/*.tsx",
         "src/database/database.ts",
+        "src/database/database.web.ts",
         "src/database/index.ts",
         "src/features/tier/index.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"],
-      "ignore": ["**/__tests__/**", "**/*.test.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"]
     },
     "backend": {
       "entry": ["scripts/*.ts", "src/utils/dynamodb.util.ts"],
-      "project": ["src/**/*.ts"],
-      "ignore": ["**/__tests__/**", "**/*.test.ts", "src/types/dynamodb.types.ts"]
+      "project": ["src/**/*.ts"]
     }
   },
   "ignore": [".sync/**"],
