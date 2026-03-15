@@ -75,7 +75,7 @@ The planner reads `health-audit.md` instead of `brainstorm.md`. The planner crea
 - **Read** `planner.md` for the role prompt
 - Spawn an **Agent** with:
 
-```
+```xml
 <role_prompt>
 [Contents of planner.md]
 </role_prompt>
@@ -114,14 +114,14 @@ Loop until `PLAN_APPROVED` or max iterations.
 
 Process phases sequentially. The orchestrator determines which implementer role to use based on the phase title tag:
 
-### For [HYGIENIST] phases:
+### For [HYGIENIST] phases
 
 - **Read** `health-hygienist.md` for the role prompt
 - Spawn implementer agent with hygienist role prompt
 - After implementation, spawn **Health Reviewer** (`health-reviewer.md`) for review
 - Loop until `PHASE_APPROVED` or max iterations
 
-### For [FORTIFIER] phases:
+### For [FORTIFIER] phases
 
 - **Read** `health-fortifier.md` for the role prompt
 - Spawn implementer agent with fortifier role prompt
@@ -132,7 +132,7 @@ Process phases sequentially. The orchestrator determines which implementer role 
 
 Report between phases:
 
-```
+```text
 Phase N ([HYGIENIST|FORTIFIER]) approved after M iteration(s).
 Remaining phases: [list]
 ```
@@ -146,7 +146,7 @@ After all phases are implemented and approved, re-run the auditor:
 - **Read** `health-auditor.md` for the role prompt
 - Spawn an **Agent** with:
 
-```
+```xml
 <role_prompt>
 [Contents of health-auditor.md]
 </role_prompt>
@@ -183,7 +183,7 @@ MEDIUM and LOW findings are reported in the final summary as known debt.
 
 ### If all CRITICAL/HIGH resolved: Report success
 
-```
+```text
 Pipeline complete for $ARGUMENTS.
 
 Final verdict: CODEBASE HEALTHY
@@ -200,7 +200,7 @@ All remediation is committed and verified.
 
 Report between cycles:
 
-```
+```text
 Re-audit cycle N complete.
 Remaining critical/high findings: [count]
 Re-entering planning for remaining targets...

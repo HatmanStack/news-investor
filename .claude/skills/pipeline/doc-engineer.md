@@ -92,7 +92,7 @@ When you receive `CHANGES_REQUESTED` from the Doc Reviewer:
 
 ## Output Format
 
-```
+```text
 ## Phase [N] Documentation Complete
 
 Fixes applied:

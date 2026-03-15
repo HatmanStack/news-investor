@@ -75,7 +75,7 @@ The planner reads `doc-audit.md` instead of `brainstorm.md`. The planner creates
 - **Read** `planner.md` for the role prompt
 - Spawn an **Agent** with:
 
-```
+```xml
 <role_prompt>
 [Contents of planner.md]
 </role_prompt>
@@ -118,7 +118,7 @@ Process phases sequentially. Agent spawn format matches main SKILL.md Stage 2, s
 
 Report between phases:
 
-```
+```text
 Phase N approved after M iteration(s).
 Remaining phases: [list]
 ```
@@ -132,7 +132,7 @@ After all phases are implemented and approved, re-run the doc auditor:
 - **Read** `doc-auditor.md` for the role prompt
 - Spawn an **Agent** with:
 
-```
+```xml
 <role_prompt>
 [Contents of doc-auditor.md]
 </role_prompt>
@@ -158,7 +158,7 @@ The **orchestrator** (you) must:
 
 ### If all critical findings resolved: Report success
 
-```
+```text
 Pipeline complete for $ARGUMENTS.
 
 Final verdict: DOCUMENTATION HEALTHY

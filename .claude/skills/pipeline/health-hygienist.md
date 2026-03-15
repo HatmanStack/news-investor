@@ -94,7 +94,7 @@ When you receive `CHANGES_REQUESTED` from the Health Reviewer:
 
 ## Output Format
 
-```
+```text
 ## Phase [N] Cleanup Complete
 
 Baseline: [X tests passing, build OK]
