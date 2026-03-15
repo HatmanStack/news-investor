@@ -15,7 +15,11 @@ npm run test:backend             # Run backend tests
 npm run lint                     # Lint frontend (expo lint + tsc)
 npm run lint:backend             # Lint backend TypeScript
 npm run lint:ml                  # Lint Python ML code (ruff)
-npm run check                    # Full CI check (all lint + all tests)
+npm run lint:python-types        # Type-check Python code (mypy)
+npm run lint:docs                # Lint markdown files (markdownlint)
+npm run lint:docs:links          # Check links in markdown files (requires lychee)
+npm run format                   # Format all files (Prettier)
+npm run check                    # Full CI check (all lint + type-check + all tests + console-call check)
 npm run hygiene                  # Dead code detection (knip + vulture)
 
 # Frontend (cd frontend)

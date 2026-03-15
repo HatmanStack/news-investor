@@ -103,12 +103,17 @@ Table name: `${StackName}-Table`
 
 ### Backend (Lambda)
 
-| Variable              | Required | Source                     |
-| --------------------- | -------- | -------------------------- |
-| FINNHUB_API_KEY       | Yes      | Finnhub API                |
-| ALPHA_VANTAGE_API_KEY | No       | Alpha Vantage API          |
-| DISTILFINBERT_API_URL | No       | ML sentiment endpoint      |
-| ALLOWED_ORIGINS       | No       | CORS origins (default: \*) |
+| Variable              | Required | Source                                                                    |
+| --------------------- | -------- | ------------------------------------------------------------------------- |
+| FINNHUB_API_KEY       | Yes      | Finnhub API                                                               |
+| ALPHA_VANTAGE_API_KEY | No       | Alpha Vantage API                                                         |
+| DISTILFINBERT_API_URL | No       | ML sentiment endpoint                                                     |
+| ALLOWED_ORIGINS       | No       | CORS origins (default: \*)                                                |
+| ML_SENTIMENT_API_URL  | No       | Primary ML sentiment API endpoint (falls back to `DISTILFINBERT_API_URL`) |
+| LOG_LEVEL             | No       | Logging verbosity: debug, info, warn, error (default: info)               |
+| DYNAMODB_TABLE_NAME   | Yes\*    | DynamoDB table name (\*set automatically by SAM template)                 |
+| DYNAMODB_ENDPOINT     | No       | DynamoDB endpoint override (e.g., `http://localhost:4566` for LocalStack) |
+| AWS_REGION            | No       | AWS region for DynamoDB client (default: us-east-1)                       |
 
 ### Frontend
 

@@ -123,7 +123,7 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: '--no-progress *.md docs/*.md'
+          args: '--no-progress *.md docs/*.md .github/**/*.md'
           fail: true
 
   code-hygiene:

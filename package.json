@@ -16,7 +16,9 @@
     "lint:ml": "uvx ruff check backend/services/ml backend/python backend/python_tests",
     "lint:python-types": "cd backend/python && uvx mypy .",
     "test:e2e": "cd backend && npm run test:e2e",
-    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
+    "lint:docs": "markdownlint-cli2 '*.md' 'docs/*.md' '.github/**/*.md'",
+    "lint:docs:links": "command -v lychee > /dev/null 2>&1 && lychee --no-progress '*.md' 'docs/*.md' || echo 'Install lychee (https://github.com/lycheeverse/lychee) for local link checking'",
+    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:docs && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
     "deploy": "./backend/scripts/deploy.sh",
     "hygiene": "./scripts/code-hygiene.sh",
     "format": "prettier --write .",
@@ -26,21 +28,25 @@
   "engines": {
     "node": ">=24"
   },
-  "dependencies": {},
   "devDependencies": {
     "@commitlint/cli": "^20.4.4",
     "@commitlint/config-conventional": "^20.4.1",
     "husky": "^9.1.7",
     "knip": "^5.86.0",
     "lint-staged": "^16.2.7",
+    "markdownlint-cli2": "^0.21.0",
     "prettier": "^3.8.1"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
       "prettier --write"
     ],
-    "*.{json,md,yml,yaml}": [
+    "*.{json,yml,yaml}": [
       "prettier --write"
+    ],
+    "*.md": [
+      "prettier --write",
+      "markdownlint-cli2"
     ],
     "*.py": [
       "uvx ruff check --fix",

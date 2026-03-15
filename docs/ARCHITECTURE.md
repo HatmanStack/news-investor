@@ -237,16 +237,16 @@ Compares stock performance against corresponding GICS sector SPDR ETF.
 | Real Estate            | XLRE |
 | Basic Materials        | XLB  |
 
-**Data flow**: yfinance `ticker.info['sector']` → Python metadata response (`sector`, `industry`, `sectorEtf` fields) → `useSymbolDetails` → `useSectorBenchmark` → `SectorBenchmarkCard`.
+**Data flow**: yfinance `ticker.info['sector']` → Python metadata response (`sector`, `industry`, `sectorEtf` fields) → `useSymbolDetails` (from `useSymbolSearch.ts`) → `useSectorBenchmark` → `SectorBenchmarkCard`.
 
 **Metrics**:
 
 - Relative return: `stockReturn - sectorReturn` (% over period)
 - Sentiment differential: `stockSentiment - sectorSentiment`
 
-Sector data stored in SQLite `symbol_details` table. ETFs flow through the same price/sentiment pipelines as regular stocks.
+Sector data stored in SQLite `symbol_details` table (migration v6). ETFs flow through the same price/sentiment pipelines as regular stocks.
 
-Files: `backend/python/constants/sector_etf_map.py`, `frontend/src/constants/sectorEtf.constants.ts`, `frontend/src/hooks/useSectorBenchmark.ts`, `frontend/src/components/sector/SectorBenchmarkCard.tsx`
+Files: `backend/python/constants/sector_etf_map.py`, `frontend/src/hooks/useSectorBenchmark.ts`, `frontend/src/components/sector/SectorBenchmarkCard.tsx`
 
 ## Earnings Calendar
 
@@ -311,7 +311,6 @@ frontend/src/
 │       ├── MaterialityHeatmap.tsx     # Calendar grid with sentiment colors
 │       ├── HeatmapCell.tsx            # Individual day cell with color/dot
 │       └── HeatmapLegend.tsx          # Color band legend
-├── constants/sectorEtf.constants.ts   # GICS sector to SPDR ETF mapping
 ├── services/api/backendClient.ts      # Shared axios client
 ├── ml/prediction/
 │   ├── prediction.service.ts          # Ensemble orchestration, F-test diagnostics

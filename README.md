@@ -40,22 +40,25 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 
 ### Testing
 
-| Command                | Description                     |
-| ---------------------- | ------------------------------- |
-| `npm test`             | Frontend tests                  |
-| `npm run test:backend` | Backend unit tests (Jest + ESM) |
-| `npm run test:e2e`     | E2E tests (requires LocalStack) |
-| `npm run check`        | Full CI: all lint + all tests   |
+| Command                | Description                                                     |
+| ---------------------- | --------------------------------------------------------------- |
+| `npm test`             | Frontend tests                                                  |
+| `npm run test:backend` | Backend unit tests (Jest + ESM)                                 |
+| `npm run test:e2e`     | E2E tests (requires LocalStack)                                 |
+| `npm run check`        | Full CI: all lint + type-check + all tests + console-call check |
 
 ### Code Quality
 
-| Command                | Description                          |
-| ---------------------- | ------------------------------------ |
-| `npm run lint`         | Frontend lint (strict, 0 warnings)   |
-| `npm run lint:backend` | Backend lint + type-check            |
-| `npm run lint:ml`      | Python lint (ruff)                   |
-| `npm run format`       | Format all files (Prettier)          |
-| `npm run hygiene`      | Dead code detection (knip + vulture) |
+| Command                     | Description                               |
+| --------------------------- | ----------------------------------------- |
+| `npm run lint`              | Frontend lint (strict, 0 warnings)        |
+| `npm run lint:backend`      | Backend lint + type-check                 |
+| `npm run lint:ml`           | Python lint (ruff)                        |
+| `npm run lint:python-types` | Python type-check (mypy)                  |
+| `npm run lint:docs`         | Lint markdown files (markdownlint)        |
+| `npm run lint:docs:links`   | Check links in markdown (requires lychee) |
+| `npm run format`            | Format all files (Prettier)               |
+| `npm run hygiene`           | Dead code detection (knip + vulture)      |
 
 ### Makefile
 
@@ -99,7 +102,7 @@ See [docs/API.md](docs/API.md) for endpoints, DynamoDB schema, and environment v
 | Backend    | AWS Lambda (Node.js 24.x, Python 3.13) + API Gateway + DynamoDB              |
 | APIs       | yfinance (stock data), Finnhub (news) via Lambda                             |
 | ML         | Browser-based ensemble logistic regression + three-signal sentiment pipeline |
-| Testing    | Jest 30.2.0 + React Native Testing Library + pytest                          |
+| Testing    | Jest ^30.3.0 + React Native Testing Library + pytest                         |
 
 ## License
 
