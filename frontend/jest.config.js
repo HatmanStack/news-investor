@@ -26,6 +26,11 @@ module.exports = {
     '^@/database/index$': '<rootDir>/__mocks__/src/database/index.ts',
     'react-native-svg$': '<rootDir>/__mocks__/react-native-svg.ts',
     'react-native-svg-charts$': '<rootDir>/__mocks__/react-native-svg-charts.ts',
+    'react-native-worklets$': '<rootDir>/__mocks__/react-native-worklets.ts',
+    'react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.ts',
+    // react-test-renderer removed from deps (RN 0.81+ deprecates it), but RNTL
+    // still needs it internally — use jest-expo's vendored copy
+    '^react-test-renderer$': '<rootDir>/../node_modules/jest-expo/node_modules/react-test-renderer',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };

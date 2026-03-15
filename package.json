@@ -16,7 +16,7 @@
     "lint:ml": "uvx ruff check backend/services/ml backend/python backend/python_tests",
     "lint:python-types": "cd backend/python && uvx mypy .",
     "test:e2e": "cd backend && npm run test:e2e",
-    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:python-types && npm run test && npm run test:backend",
+    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
     "deploy": "./backend/scripts/deploy.sh",
     "hygiene": "./scripts/code-hygiene.sh",
     "format": "prettier --write .",

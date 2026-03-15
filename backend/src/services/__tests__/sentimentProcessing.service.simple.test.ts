@@ -6,21 +6,31 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 // Mock all heavy dependencies before importing
-const mockQueryArticlesByTicker = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
-const mockBatchCheckExistence = jest.fn<() => Promise<Set<string>>>().mockResolvedValue(new Set());
-const mockBatchPutSentiments = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+const mockQueryArticlesByTicker = jest
+  .fn<(...args: unknown[]) => Promise<unknown[]>>()
+  .mockResolvedValue([]);
+const mockBatchCheckExistence = jest
+  .fn<(...args: unknown[]) => Promise<Set<string>>>()
+  .mockResolvedValue(new Set());
+const mockBatchPutSentiments = jest
+  .fn<(...args: unknown[]) => Promise<void>>()
+  .mockResolvedValue(undefined);
 
 jest.unstable_mockModule('../../repositories/newsCache.repository.js', () => ({
   queryArticlesByTicker: mockQueryArticlesByTicker,
-  batchCheckExistence: jest.fn<() => Promise<Set<string>>>().mockResolvedValue(new Set()),
+  batchCheckExistence: jest
+    .fn<(...args: unknown[]) => Promise<Set<string>>>()
+    .mockResolvedValue(new Set()),
 }));
 jest.unstable_mockModule('../../repositories/sentimentCache.repository.js', () => ({
-  querySentimentsByTicker: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+  querySentimentsByTicker: jest
+    .fn<(...args: unknown[]) => Promise<unknown[]>>()
+    .mockResolvedValue([]),
   batchPutSentiments: mockBatchPutSentiments,
   batchCheckExistence: mockBatchCheckExistence,
 }));
 jest.unstable_mockModule('../../ml/sentiment/analyzer.js', () => ({
-  analyzeSentimentBatch: jest.fn<() => unknown[]>().mockReturnValue([]),
+  analyzeSentimentBatch: jest.fn<(...args: unknown[]) => unknown[]>().mockReturnValue([]),
   analyzeSentiment: jest
     .fn()
     .mockReturnValue({ positive: 1, negative: 0, sentimentScore: 0.5, classification: 'POS' }),
@@ -34,10 +44,10 @@ jest.unstable_mockModule('../aspectAnalysis.service.js', () => ({
   analyzeAspects: jest.fn().mockReturnValue({ aspects: [], overallScore: 0 }),
 }));
 jest.unstable_mockModule('../mlSentiment.service.js', () => ({
-  getMlSentiment: jest.fn<() => Promise<number>>().mockResolvedValue(0.5),
+  getMlSentiment: jest.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(0.5),
 }));
 jest.unstable_mockModule('../signalScore.service.js', () => ({
-  calculateSignalScoresBatch: jest.fn<() => unknown[]>().mockReturnValue([]),
+  calculateSignalScoresBatch: jest.fn<(...args: unknown[]) => unknown[]>().mockReturnValue([]),
 }));
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },

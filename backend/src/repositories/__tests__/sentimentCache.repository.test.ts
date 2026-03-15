@@ -8,11 +8,12 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import type { SentimentCacheItem as SingleTableSentimentItem } from '../../types/dynamodb.types.js';
 
 // Mock dynamodb.util before importing the repository
-const mockGetItem = jest.fn<() => Promise<SingleTableSentimentItem | null>>();
-const mockPutItemConditional = jest.fn<() => Promise<boolean>>();
-const mockQueryItems = jest.fn<() => Promise<SingleTableSentimentItem[]>>();
-const mockBatchPutItemsSingleTable = jest.fn<() => Promise<void>>();
-const mockBatchGetItemsSingleTable = jest.fn<() => Promise<SingleTableSentimentItem[]>>();
+const mockGetItem = jest.fn<(...args: unknown[]) => Promise<SingleTableSentimentItem | null>>();
+const mockPutItemConditional = jest.fn<(...args: unknown[]) => Promise<boolean>>();
+const mockQueryItems = jest.fn<(...args: unknown[]) => Promise<SingleTableSentimentItem[]>>();
+const mockBatchPutItemsSingleTable = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockBatchGetItemsSingleTable =
+  jest.fn<(...args: unknown[]) => Promise<SingleTableSentimentItem[]>>();
 
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: mockGetItem,

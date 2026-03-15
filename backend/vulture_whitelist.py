@@ -34,3 +34,6 @@ global_exception_handler  # backend/services/ml/app.py
 # Pydantic validators (decorated, appear unused)
 text_not_empty  # backend/services/ml/app.py
 texts_not_empty  # backend/services/ml/app.py
+
+# Enum members (used via enum access, vulture can't detect)
+MetricUnit.PERCENT  # Used via enum access, vulture can't detect

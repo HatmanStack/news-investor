@@ -8,11 +8,11 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import type { NewsCacheItem } from '../../types/dynamodb.types.js';
 
 // Mock dynamodb.util before importing the repository
-const mockGetItem = jest.fn<() => Promise<NewsCacheItem | null>>();
-const mockPutItemConditional = jest.fn<() => Promise<boolean>>();
-const mockQueryItems = jest.fn<() => Promise<NewsCacheItem[]>>();
-const mockBatchPutItemsSingleTable = jest.fn<() => Promise<void>>();
-const mockBatchGetItemsSingleTable = jest.fn<() => Promise<NewsCacheItem[]>>();
+const mockGetItem = jest.fn<(...args: unknown[]) => Promise<NewsCacheItem | null>>();
+const mockPutItemConditional = jest.fn<(...args: unknown[]) => Promise<boolean>>();
+const mockQueryItems = jest.fn<(...args: unknown[]) => Promise<NewsCacheItem[]>>();
+const mockBatchPutItemsSingleTable = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockBatchGetItemsSingleTable = jest.fn<(...args: unknown[]) => Promise<NewsCacheItem[]>>();
 
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: mockGetItem,

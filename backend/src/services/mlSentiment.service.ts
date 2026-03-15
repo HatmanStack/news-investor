@@ -10,6 +10,7 @@
  */
 
 import { logger } from '../utils/logger.util.js';
+import { fetchWithTimeout } from '../utils/http.util.js';
 import { logMlSentimentCall, logMlSentimentFallback } from '../utils/metrics.util.js';
 import {
   ML_TIMEOUT_MS,
@@ -49,24 +50,6 @@ interface MlSentimentResponse {
     neutral: number;
     positive: number;
   };
-}
-
-/**
- * Make a fetch request with timeout
- */
-async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 /**
@@ -186,13 +169,17 @@ export async function getMlSentiment(text: string): Promise<number | null> {
         url: apiUrl,
       });
 
-      const response = await fetchWithTimeout(`${apiUrl}/sentiment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithTimeout(
+        `${apiUrl}/sentiment`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text: processedText }),
         },
-        body: JSON.stringify({ text: processedText }),
-      });
+        ML_TIMEOUT_MS,
+      );
 
       const duration = Date.now() - startTime;
 

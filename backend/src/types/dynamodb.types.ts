@@ -275,26 +275,6 @@ export interface PredictionSnapshotItem extends BaseTableItem {
 // ============================================================
 
 // ============================================================
-// Union Type
-// ============================================================
-
-/**
- * Union type of all table items
- */
-export type TableItem =
-  | StockCacheItem
-  | NewsCacheItem
-  | SentimentCacheItem
-  | SentimentJobItem
-  | StockHistoricalItem
-  | ArticleAnalysisItem
-  | DailySentimentItem
-  | CircuitBreakerItem
-  | ModelCacheItem
-  | NoteItem
-  | PredictionSnapshotItem;
-
-// ============================================================
 // Key Construction Helper Functions
 // ============================================================
 

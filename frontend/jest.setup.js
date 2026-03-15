@@ -1,3 +1,5 @@
+process.env.RNTL_SKIP_DEPS_CHECK = '1';
+
 // Jest setup file - runs before any tests
 // This sets up the Expo winter runtime globals before any modules are loaded
 

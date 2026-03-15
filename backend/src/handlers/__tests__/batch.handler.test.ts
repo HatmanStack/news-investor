@@ -11,7 +11,7 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import type { NewsCacheResult } from '../../services/newsCache.service';
 
 // Declare mock functions
-const mockHandleNewsWithCache = jest.fn<() => Promise<NewsCacheResult>>();
+const mockHandleNewsWithCache = jest.fn<(...args: unknown[]) => Promise<NewsCacheResult>>();
 const mockGetSentimentResults = jest.fn<
   () => Promise<{
     ticker: string;

@@ -8,5 +8,3 @@ export interface VocabularyData {
   positive: SentimentWords;
   negative: SentimentWords;
 }
-
-export type SentimentLabel = 'POS' | 'NEUT' | 'NEG';

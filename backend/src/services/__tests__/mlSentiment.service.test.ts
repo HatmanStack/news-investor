@@ -10,9 +10,12 @@ import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals
 // --- Mocks (before dynamic import) ---
 
 const mockGetCircuitState =
-  jest.fn<() => Promise<{ consecutiveFailures: number; circuitOpenUntil: number }>>();
-const mockRecordSuccess = jest.fn<() => Promise<void>>();
-const mockRecordFailure = jest.fn<() => Promise<{ isOpen: boolean; openUntil: number }>>();
+  jest.fn<
+    (...args: unknown[]) => Promise<{ consecutiveFailures: number; circuitOpenUntil: number }>
+  >();
+const mockRecordSuccess = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockRecordFailure =
+  jest.fn<(...args: unknown[]) => Promise<{ isOpen: boolean; openUntil: number }>>();
 const mockLoggerInfo = jest.fn();
 const mockLoggerWarn = jest.fn();
 const mockLoggerError = jest.fn();

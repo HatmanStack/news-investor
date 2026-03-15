@@ -5,6 +5,7 @@
 
 import type { FinnhubNewsArticle } from '../types/finnhub.types';
 import { APIError } from '../utils/error.util';
+import { fetchWithTimeout } from '../utils/http.util.js';
 import * as CircuitBreakerRepo from '../repositories/circuitBreaker.repository.js';
 import {
   FINNHUB_FAILURE_THRESHOLD,
@@ -16,28 +17,6 @@ import { logger } from '../utils/logger.util.js';
 // Finnhub API configuration
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const FINNHUB_TIMEOUT = 10000; // 10 seconds
-
-/**
- * Make a fetch request with timeout
- */
-async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FINNHUB_TIMEOUT);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 /**
  * Retry logic with exponential backoff
@@ -112,7 +91,11 @@ export async function fetchCompanyNews(
       token: apiKey,
     });
     const url = `${FINNHUB_BASE_URL}/company-news?${params}`;
-    const response = await fetchWithTimeout(url);
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { 'Content-Type': 'application/json' } },
+      FINNHUB_TIMEOUT,
+    );
 
     if (!response.ok) {
       const status = response.status;

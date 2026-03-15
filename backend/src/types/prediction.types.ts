@@ -3,16 +3,6 @@
  */
 
 /**
- * Request payload for /predict endpoint
- */
-export interface PredictionRequest {
-  /** Stock ticker symbol */
-  ticker: string;
-  /** Number of historical days to use for training (minimum 30) */
-  days: number;
-}
-
-/**
  * Response payload for /predict endpoint
  */
 export interface PredictionResponse {

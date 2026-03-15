@@ -10,10 +10,12 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import type { NewsCacheResult } from '../../services/newsCache.service';
 
 // Declare mock functions
-const mockFetchNewsWithCache = jest.fn<() => Promise<NewsCacheResult>>();
+const mockFetchNewsWithCache = jest.fn<(...args: unknown[]) => Promise<NewsCacheResult>>();
 const mockLogError = jest.fn();
-const mockHasStatusCode = jest.fn<() => boolean>().mockReturnValue(false);
-const mockSanitizeErrorMessage = jest.fn<() => string>().mockReturnValue('Internal server error');
+const mockHasStatusCode = jest.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
+const mockSanitizeErrorMessage = jest
+  .fn<(...args: unknown[]) => string>()
+  .mockReturnValue('Internal server error');
 const mockLogMetrics = jest.fn();
 
 // Mock dependencies using unstable_mockModule for ESM compatibility

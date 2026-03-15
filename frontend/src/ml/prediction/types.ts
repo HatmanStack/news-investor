@@ -88,14 +88,6 @@ export type FeatureMatrix = number[][];
 export type Labels = number[];
 
 /**
- * StandardScaler parameters
- */
-export interface ScalerParams {
-  mean: number[] | null;
-  std: number[] | null;
-}
-
-/**
  * Sample weights for weighted training
  * Higher weights give more importance to specific samples
  */

@@ -159,16 +159,6 @@ export const eventClassificationRequestSchema = z.object({
 });
 
 /**
- * Type inference helpers
- */
-export type SentimentRequest = z.infer<typeof sentimentRequestSchema>;
-export type PredictionRequest = z.infer<typeof predictionRequestSchema>;
-export type BatchNewsRequest = z.infer<typeof batchNewsRequestSchema>;
-export type BatchSentimentRequest = z.infer<typeof batchSentimentRequestSchema>;
-export type NewsRequest = z.infer<typeof newsRequestSchema>;
-export type EventClassificationRequest = z.infer<typeof eventClassificationRequestSchema>;
-
-/**
  * Parse JSON body with Zod schema
  *
  * @param body - Raw request body string

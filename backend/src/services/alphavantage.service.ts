@@ -6,6 +6,7 @@
 
 import type { FinnhubNewsArticle } from '../types/finnhub.types';
 import { APIError } from '../utils/error.util';
+import { fetchWithTimeout } from '../utils/http.util.js';
 import * as CircuitBreakerRepo from '../repositories/circuitBreaker.repository.js';
 import {
   FINNHUB_FAILURE_THRESHOLD,
@@ -48,24 +49,6 @@ interface AlphaVantageResponse {
   feed?: AlphaVantageNewsItem[];
   Note?: string; // Rate limit message
   Information?: string; // API key issues
-}
-
-/**
- * Make a fetch request with timeout
- */
-async function fetchWithTimeout(url: string): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ALPHA_VANTAGE_TIMEOUT);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 /**
@@ -157,7 +140,11 @@ export async function fetchAlphaVantageNews(
   const url = `${ALPHA_VANTAGE_BASE_URL}?${params}`;
 
   try {
-    const response = await fetchWithTimeout(url);
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { 'Content-Type': 'application/json' } },
+      ALPHA_VANTAGE_TIMEOUT,
+    );
 
     if (!response.ok) {
       throw new APIError(`Alpha Vantage API error: ${response.status}`, response.status);

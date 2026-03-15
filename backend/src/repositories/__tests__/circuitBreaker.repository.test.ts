@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import type { CircuitBreakerItem } from '../../types/dynamodb.types.js';
 
 // Mock dynamodb.util before importing the repository
-const mockGetItem = jest.fn<() => Promise<CircuitBreakerItem | null>>();
-const mockPutItem = jest.fn<() => Promise<void>>();
+const mockGetItem = jest.fn<(...args: unknown[]) => Promise<CircuitBreakerItem | null>>();
+const mockPutItem = jest.fn<(...args: unknown[]) => Promise<void>>();
 
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: mockGetItem,

@@ -10,7 +10,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 // --- Mocks (before dynamic import) ---
 
 const mockLoggerError = jest.fn();
-const mockGetCorrelationId = jest.fn<() => string | undefined>();
+const mockGetCorrelationId = jest.fn<(...args: unknown[]) => string | undefined>();
 
 jest.unstable_mockModule('../logger.util.js', () => ({
   logger: {

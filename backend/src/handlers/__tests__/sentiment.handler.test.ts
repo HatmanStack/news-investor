@@ -14,17 +14,30 @@ import type { SentimentJob } from '../../repositories/sentimentJobs.repository';
 import type { SentimentProcessingResult } from '../../services/sentimentProcessing.service';
 
 // Declare mock functions
-const mockGetJob = jest.fn<() => Promise<SentimentJob | null>>();
-const mockCreateJob = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-const mockMarkJobCompleted = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-const mockMarkJobFailed = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-const mockQuerySentimentsByTicker = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
-const mockQueryArticlesByTicker = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
-const mockGetLatestDailyAggregate = jest.fn<() => Promise<null>>().mockResolvedValue(null);
-const mockProcessSentimentForTicker = jest.fn<() => Promise<SentimentProcessingResult>>();
+const mockGetJob = jest.fn<(...args: unknown[]) => Promise<SentimentJob | null>>();
+const mockCreateJob = jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(undefined);
+const mockMarkJobCompleted = jest
+  .fn<(...args: unknown[]) => Promise<void>>()
+  .mockResolvedValue(undefined);
+const mockMarkJobFailed = jest
+  .fn<(...args: unknown[]) => Promise<void>>()
+  .mockResolvedValue(undefined);
+const mockQuerySentimentsByTicker = jest
+  .fn<(...args: unknown[]) => Promise<unknown[]>>()
+  .mockResolvedValue([]);
+const mockQueryArticlesByTicker = jest
+  .fn<(...args: unknown[]) => Promise<unknown[]>>()
+  .mockResolvedValue([]);
+const mockGetLatestDailyAggregate = jest
+  .fn<(...args: unknown[]) => Promise<null>>()
+  .mockResolvedValue(null);
+const mockProcessSentimentForTicker =
+  jest.fn<(...args: unknown[]) => Promise<SentimentProcessingResult>>();
 const mockLogMlSentimentCacheHitRate = jest.fn();
-const mockHasStatusCode = jest.fn<() => boolean>().mockReturnValue(false);
-const mockSanitizeErrorMessage = jest.fn<() => string>().mockReturnValue('Internal server error');
+const mockHasStatusCode = jest.fn<(...args: unknown[]) => boolean>().mockReturnValue(false);
+const mockSanitizeErrorMessage = jest
+  .fn<(...args: unknown[]) => string>()
+  .mockReturnValue('Internal server error');
 const mockLogError = jest.fn();
 
 // Mock all repository and service dependencies

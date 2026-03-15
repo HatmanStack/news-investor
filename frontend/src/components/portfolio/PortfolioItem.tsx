@@ -231,7 +231,7 @@ export function PortfolioItem({
                   </MonoText>
                 ) : (
                   <AnimatedNumber
-                    value={latestPrice?.close || 0}
+                    value={latestPrice?.close ?? 0}
                     formatter={(val) => formatPrice(val)}
                     variant="price"
                     style={[

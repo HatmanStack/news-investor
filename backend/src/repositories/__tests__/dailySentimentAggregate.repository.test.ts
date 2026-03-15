@@ -8,9 +8,9 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import type { DailySentimentItem } from '../../types/dynamodb.types.js';
 
 // Mock dynamodb.util before importing the repository
-const mockGetItem = jest.fn<() => Promise<DailySentimentItem | null>>();
-const mockPutItem = jest.fn<() => Promise<void>>();
-const mockQueryItems = jest.fn<() => Promise<DailySentimentItem[]>>();
+const mockGetItem = jest.fn<(...args: unknown[]) => Promise<DailySentimentItem | null>>();
+const mockPutItem = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockQueryItems = jest.fn<(...args: unknown[]) => Promise<DailySentimentItem[]>>();
 
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: mockGetItem,

@@ -24,5 +24,6 @@
     "amazon-cognito-identity-js",
     "@aws-sdk/client-ses"
   ],
+  "ignoreBinaries": ["eslint", "tsc", "jest", "expo", "uvx"],
   "ignoreExportsUsedInFile": true
 }

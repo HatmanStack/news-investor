@@ -13,7 +13,7 @@ import { Environment } from '@/config/environment';
 import { differenceInDays } from 'date-fns';
 import { useStock } from './StockContext';
 import type { StockDetails, CombinedWordDetails, WordCountDetails } from '@/types/database.types';
-import type { SentimentJobStatus } from '@/services/api/lambdaSentiment.service';
+import type { SentimentJobStatus, DailySentiment } from '@/services/api/lambdaSentiment.service';
 import type { DiagnosticsOutput } from '@/ml/prediction/types';
 
 interface StockDetailContextType {
@@ -94,7 +94,7 @@ export function StockDetailProvider({
   } = useSentimentPolling(ticker, startDate, endDate, {
     enabled: Environment.USE_LAMBDA_SENTIMENT,
     onComplete: useCallback(
-      (data: any[]) => {
+      (_data: DailySentiment[]) => {
         // Invalidate React Query cache to re-fetch sentiment data
         queryClient.invalidateQueries({ queryKey: ['sentimentData', ticker] });
         queryClient.invalidateQueries({ queryKey: ['articleSentiment', ticker] });

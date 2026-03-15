@@ -9,11 +9,11 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
-const mockQueryArticlesByTicker = jest.fn<() => Promise<unknown>>();
-const mockBatchPutArticles = jest.fn<() => Promise<void>>();
-const mockBatchCheckExistence = jest.fn<() => Promise<Set<string>>>();
-const mockFetchCompanyNews = jest.fn<() => Promise<unknown[]>>();
-const mockFetchAlphaVantageNews = jest.fn<() => Promise<unknown[]>>();
+const mockQueryArticlesByTicker = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockBatchPutArticles = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockBatchCheckExistence = jest.fn<(...args: unknown[]) => Promise<Set<string>>>();
+const mockFetchCompanyNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
+const mockFetchAlphaVantageNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockGenerateArticleHash = jest.fn<(url: string) => string>();
 const mockTransformFinnhubToCache = jest.fn();
 const mockTransformCacheToFinnhub = jest.fn();

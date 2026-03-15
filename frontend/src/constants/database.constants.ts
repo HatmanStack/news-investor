@@ -15,5 +15,3 @@ export const TABLE_NAMES = {
   PORTFOLIO_DETAILS: 'portfolio_details',
   NOTES: 'notes',
 } as const;
-
-export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];

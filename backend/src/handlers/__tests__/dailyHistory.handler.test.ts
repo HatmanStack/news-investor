@@ -7,7 +7,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 
-const mockQueryByTickerAndDateRange = jest.fn<() => Promise<unknown[]>>();
+const mockQueryByTickerAndDateRange = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 
 jest.unstable_mockModule('../../repositories/dailySentimentAggregate.repository.js', () => ({
   queryByTickerAndDateRange: mockQueryByTickerAndDateRange,
@@ -16,8 +16,10 @@ jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.unstable_mockModule('../../utils/error.util.js', () => ({
-  hasStatusCode: jest.fn<() => boolean>().mockReturnValue(false),
-  sanitizeErrorMessage: jest.fn<() => string>().mockReturnValue('Internal server error'),
+  hasStatusCode: jest.fn<(...args: unknown[]) => boolean>().mockReturnValue(false),
+  sanitizeErrorMessage: jest
+    .fn<(...args: unknown[]) => string>()
+    .mockReturnValue('Internal server error'),
   logError: jest.fn(),
 }));
 
