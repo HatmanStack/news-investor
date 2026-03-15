@@ -45,7 +45,7 @@
     "@types/sentiment": "^5.0.4",
     "@jest/globals": "^30.3.0",
     "esbuild": "^0.27.4",
-    "eslint": "^9.16.0",
+    "eslint": "^10.0.3",
     "jest": "^30.3.0",
     "ts-jest": "^29.2.5",
     "tsx": "^4.21.0",

@@ -58,7 +58,7 @@
     "@types/react-native-svg-charts": "^5.0.16",
     "@types/sentiment": "^5.0.4",
     "babel-preset-expo": "^54.0.10",
-    "eslint": "^9.0.0",
+    "eslint": "^10.0.3",
     "eslint-config-expo": "^55.0.0",
     "jest": "^30.3.0",
     "jest-expo": "^55.0.9",
