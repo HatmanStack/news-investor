@@ -19,16 +19,23 @@ Shared contract defining stage sequencing, signals, and communication channels f
 
 ## Signals
 
-| Signal                  | Emitted By     | Triggers                                 | Action                                                         |
-| ----------------------- | -------------- | ---------------------------------------- | -------------------------------------------------------------- |
-| PLAN_COMPLETE           | Planner        | Plan Reviewer                            | Review plan files and verify against codebase                  |
-| REVISION_REQUIRED       | Plan Reviewer  | Planner                                  | Check feedback.md, revise plan, re-emit PLAN_COMPLETE          |
-| PLAN_APPROVED           | Plan Reviewer  | Implementer                              | Begin phase implementation                                     |
-| IMPLEMENTATION_COMPLETE | Implementer    | Reviewer                                 | Review code against plan                                       |
-| CHANGES_REQUESTED       | Reviewer       | Implementer                              | Check feedback.md, fix issues, re-emit IMPLEMENTATION_COMPLETE |
-| PHASE_APPROVED          | Reviewer       | Next phase Implementer or Final Reviewer | Start next phase or final review                               |
-| GO                      | Final Reviewer | Deploy pipeline                          | Production ready                                               |
-| NO-GO                   | Final Reviewer | Planner or Implementer                   | Check feedback.md for scope of rework                          |
+| Signal                  | Emitted By            | Triggers                                 | Action                                                         |
+| ----------------------- | --------------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| PLAN_COMPLETE           | Planner               | Plan Reviewer                            | Review plan files and verify against codebase                  |
+| REVISION_REQUIRED       | Plan Reviewer         | Planner                                  | Check feedback.md, revise plan, re-emit PLAN_COMPLETE          |
+| PLAN_APPROVED           | Plan Reviewer         | Implementer                              | Begin phase implementation                                     |
+| IMPLEMENTATION_COMPLETE | Implementer           | Reviewer                                 | Review code against plan                                       |
+| CHANGES_REQUESTED       | Reviewer              | Implementer                              | Check feedback.md, fix issues, re-emit IMPLEMENTATION_COMPLETE |
+| PHASE_APPROVED          | Reviewer              | Next phase Implementer or Final Reviewer | Start next phase or final review                               |
+| GO                      | Final Reviewer        | Deploy pipeline                          | Production ready                                               |
+| NO-GO                   | Final Reviewer        | Planner or Implementer                   | Check feedback.md for scope of rework                          |
+| VERIFIED                | Verification Reviewer | Pipeline complete                        | All findings from intake docs confirmed addressed              |
+| UNVERIFIED              | Verification Reviewer | Planner (re-entry)                       | Unverified items listed, orchestrator decides next step        |
+| EVAL_HIRE_COMPLETE      | Eval Hire agent       | Intake orchestrator                      | Hire evaluation finished (intake only)                         |
+| EVAL_STRESS_COMPLETE    | Eval Stress agent     | Intake orchestrator                      | Stress evaluation finished (intake only)                       |
+| EVAL_DAY2_COMPLETE      | Eval Day2 agent       | Intake orchestrator                      | Day 2 evaluation finished (intake only)                        |
+| AUDIT_COMPLETE          | Health Auditor        | Intake orchestrator                      | Health audit finished (intake only)                            |
+| DOC_AUDIT_COMPLETE      | Doc Auditor           | Intake orchestrator                      | Doc audit finished (intake only)                               |
 
 ## Communication Channel: feedback.md
 
@@ -73,9 +80,12 @@ All review feedback lives in `docs/plans/<plan_id>/feedback.md`. Plan documents 
 
 ## File Ownership
 
-| File        | Created By | Edited By                              | Purpose                                  |
-| ----------- | ---------- | -------------------------------------- | ---------------------------------------- |
-| README.md   | Planner    | Planner                                | Overview and navigation                  |
-| Phase-0.md  | Planner    | Planner                                | Architecture decisions (source of truth) |
-| Phase-N.md  | Planner    | Planner, Implementer (checkboxes only) | Implementation instructions              |
-| feedback.md | Planner    | Plan Reviewer, Reviewer                | All review feedback                      |
+| File            | Created By   | Edited By                                | Purpose                                    |
+| --------------- | ------------ | ---------------------------------------- | ------------------------------------------ |
+| README.md       | Planner      | Planner                                  | Overview and navigation                    |
+| Phase-0.md      | Planner      | Planner                                  | Architecture decisions (source of truth)   |
+| Phase-N.md      | Planner      | Planner, Implementer (checkboxes only)   | Implementation instructions                |
+| feedback.md     | Planner      | Plan Reviewer, Reviewer, Orchestrator    | All review feedback + verification results |
+| eval.md         | Intake skill | Orchestrator (read only during pipeline) | Repo evaluation scores and targets         |
+| health-audit.md | Intake skill | Orchestrator (read only during pipeline) | Tech debt findings                         |
+| doc-audit.md    | Intake skill | Orchestrator (read only during pipeline) | Documentation drift findings               |
