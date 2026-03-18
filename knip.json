@@ -17,9 +17,7 @@
       "project": ["src/**/*.ts"]
     }
   },
-  "ignoreDependencies": ["babel-preset-expo"],
+  "ignoreDependencies": ["babel-preset-expo", "amazon-cognito-identity-js", "@aws-sdk/client-ses"],
   "ignoreExportsUsedInFile": true,
-  "rules": {
-    "exports": "warn"
-  }
+  "exclude": ["exports"]
 }
