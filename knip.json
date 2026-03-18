@@ -17,13 +17,9 @@
       "project": ["src/**/*.ts"]
     }
   },
-  "ignore": [".sync/**"],
-  "ignoreDependencies": [
-    "babel-preset-expo",
-    "eslint-config-expo",
-    "amazon-cognito-identity-js",
-    "@aws-sdk/client-ses"
-  ],
-  "ignoreBinaries": ["eslint", "tsc", "jest", "expo", "uvx"],
-  "ignoreExportsUsedInFile": true
+  "ignoreDependencies": ["babel-preset-expo"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "exports": "warn"
+  }
 }
