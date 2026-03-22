@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.4.0] - 2026-03-21
+
+### Added
+
+- **[Pro]** Cloud-synced watchlist via DynamoDB with optimistic local writes
+- **[Pro]** Extended data retention (365 days for pro, 90 days for free)
+- **[Pro]** Data truncation metadata and upgrade prompt for free tier
+- Portfolio analytics tab with aggregate sentiment, sector exposure, and prediction confidence
+- Three new feature flags: watchlist_sync, extended_date_range, portfolio_analytics
+
 ## [2.3.3] - 2026-03-14
 
 ### Added

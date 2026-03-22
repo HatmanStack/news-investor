@@ -66,7 +66,7 @@ describe('useSentimentData', () => {
     const mockData = [
       { date: '2025-01-10', ticker: 'AAPL', positive: 5, negative: 2, sentimentNumber: 0.4 },
     ];
-    fetchCombinedSentiment.mockResolvedValue(mockData);
+    fetchCombinedSentiment.mockResolvedValue({ data: mockData });
     generateBrowserPredictions.mockResolvedValue(null);
 
     const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
@@ -78,7 +78,7 @@ describe('useSentimentData', () => {
   });
 
   it('returns empty array when no data', async () => {
-    fetchCombinedSentiment.mockResolvedValue([]);
+    fetchCombinedSentiment.mockResolvedValue({ data: [] });
 
     const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
 
@@ -95,7 +95,7 @@ describe('useSentimentData', () => {
       negative: 2,
       sentimentNumber: 0.4,
     }));
-    fetchCombinedSentiment.mockResolvedValue(mockData);
+    fetchCombinedSentiment.mockResolvedValue({ data: mockData });
     generateBrowserPredictions.mockResolvedValue({
       nextDay: { direction: 'up', probability: 0.7 },
       twoWeek: null,
@@ -121,7 +121,7 @@ describe('useSentimentData', () => {
       negative: 1,
       sentimentNumber: 0.3,
     }));
-    fetchCombinedSentiment.mockResolvedValue(mockData);
+    fetchCombinedSentiment.mockResolvedValue({ data: mockData });
 
     const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
 

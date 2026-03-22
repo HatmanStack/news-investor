@@ -12,12 +12,18 @@ jest.mock('@/hooks', () => ({
   useStockData: jest.fn(),
 }));
 
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+}));
+
 jest.mock('@/hooks/useDailyHistory', () => ({
   useDailyHistory: jest.fn(() => ({
     data: [{ date: '2026-02-15', sentimentScore: 0.5, materialEventCount: 1 }],
     isLoading: false,
     hasNextPage: false,
     fetchNextPage: jest.fn(),
+    truncated: false,
+    truncatedMaxDays: 90,
   })),
 }));
 

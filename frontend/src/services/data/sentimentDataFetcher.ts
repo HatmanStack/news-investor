@@ -18,7 +18,13 @@ import { Environment } from '@/config/environment';
 import { validateCombinedData, validateArticleData } from '@/utils/sentiment/dataValidator';
 import { transformLambdaToLocal, transformArticleToLocal } from '@/utils/sentiment/dataTransformer';
 import { hydrateCombinedWordData, hydrateArticleData } from '@/services/data/databaseHydrator';
+import type { TruncationMeta } from '@/services/api/lambdaSentiment.service';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
+
+export interface FetchCombinedSentimentResult {
+  data: CombinedWordDetails[];
+  truncationMeta?: TruncationMeta;
+}
 
 /**
  * Fetch combined (daily) sentiment data with local-first fallback to backend.
@@ -28,7 +34,7 @@ export async function fetchCombinedSentiment(
   startDate: string,
   endDate: string,
   days: number,
-): Promise<CombinedWordDetails[]> {
+): Promise<FetchCombinedSentimentResult> {
   // Step 1: Check local SQLite
   const localData = await CombinedWordRepository.findByTickerAndDateRange(
     ticker,
@@ -39,7 +45,7 @@ export async function fetchCombinedSentiment(
   const quality = validateCombinedData(localData, days);
 
   if (quality.isAcceptable) {
-    return localData;
+    return { data: localData };
   }
 
   // Step 2: Fall back to backend API
@@ -82,15 +88,15 @@ export async function fetchCombinedSentiment(
       if (lambdaResults.dailySentiment.length > 0) {
         const transformed = transformLambdaToLocal(lambdaResults.dailySentiment, ticker);
         hydrateCombinedWordData(transformed);
-        return transformed;
+        return { data: transformed, truncationMeta: lambdaResults._meta };
       }
     } catch (err) {
       logger.warn('[SentimentFetcher] Sentiment result fetch failed:', err);
-      if (localData.length > 0) return localData;
+      if (localData.length > 0) return { data: localData };
     }
   }
 
-  return localData;
+  return { data: localData };
 }
 
 /**

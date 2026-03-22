@@ -38,6 +38,10 @@ interface StockDetailContextType {
   articleSentimentLoading: boolean;
   articleSentimentError: Error | null;
 
+  // Truncation metadata (free tier data limits)
+  sentimentTruncated: boolean;
+  sentimentTruncatedMaxDays: number;
+
   // Sentiment polling state (for async Lambda sentiment)
   isSentimentPolling: boolean;
   sentimentJobId: string | null;
@@ -76,6 +80,8 @@ export function StockDetailProvider({
     isLoading: sentimentLoading,
     error: sentimentError,
     diagnostics,
+    truncated: sentimentTruncated,
+    truncatedMaxDays: sentimentTruncatedMaxDays,
   } = useSentimentData(ticker, { days });
   const {
     data: articleSentimentData = [],
@@ -117,6 +123,8 @@ export function StockDetailProvider({
       sentimentLoading,
       sentimentError: sentimentError as Error | null,
       diagnostics: diagnostics ?? null,
+      sentimentTruncated,
+      sentimentTruncatedMaxDays,
       articleSentimentData,
       articleSentimentLoading,
       articleSentimentError: articleSentimentError as Error | null,
@@ -136,6 +144,8 @@ export function StockDetailProvider({
       sentimentLoading,
       sentimentError,
       diagnostics,
+      sentimentTruncated,
+      sentimentTruncatedMaxDays,
       articleSentimentData,
       articleSentimentLoading,
       articleSentimentError,

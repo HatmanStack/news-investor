@@ -64,7 +64,8 @@ describe('sentimentDataFetcher', () => {
 
       const result = await fetchCombinedSentiment('AAPL', '2025-01-01', '2025-01-15', 30);
 
-      expect(result).toEqual(localData);
+      expect(result.data).toEqual(localData);
+      expect(result.truncationMeta).toBeUndefined();
       expect(lambdaService.getSentimentResults).not.toHaveBeenCalled();
     });
 
@@ -76,7 +77,7 @@ describe('sentimentDataFetcher', () => {
 
       const result = await fetchCombinedSentiment('AAPL', '2025-01-01', '2025-01-15', 30);
 
-      expect(result).toEqual(localData);
+      expect(result.data).toEqual(localData);
     });
 
     it('falls back to backend when local is insufficient', async () => {
@@ -94,7 +95,7 @@ describe('sentimentDataFetcher', () => {
 
       const result = await fetchCombinedSentiment('AAPL', '2025-01-01', '2025-01-15', 30);
 
-      expect(result).toEqual(transformed);
+      expect(result.data).toEqual(transformed);
       expect(hydrator.hydrateCombinedWordData).toHaveBeenCalledWith(transformed);
     });
 
@@ -109,7 +110,7 @@ describe('sentimentDataFetcher', () => {
 
       const result = await fetchCombinedSentiment('AAPL', '2025-01-01', '2025-01-15', 30);
 
-      expect(result).toEqual(localData);
+      expect(result.data).toEqual(localData);
     });
   });
 

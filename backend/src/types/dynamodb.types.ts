@@ -22,6 +22,7 @@ const EntityPrefix = {
   DAILY: 'DAILY', // Daily sentiment aggregate
   CIRCUIT: 'CIRCUIT', // Circuit breaker state
   PREDICTION: 'PRED', // Prediction snapshot
+  WATCHLIST: 'WATCHLIST', // User watchlist item
 } as const;
 
 /**
@@ -246,6 +247,18 @@ export interface NoteItem extends BaseTableItem {
   content: string;
 }
 
+/**
+ * User watchlist item
+ * PK: USER#{sub}, SK: WATCHLIST#{ticker}
+ */
+export interface WatchlistItem extends BaseTableItem {
+  entityType: 'WATCHLIST';
+  ticker: string;
+  name: string;
+  addedAt: string;
+  deletedAt?: string; // ISO timestamp when soft-deleted, null/undefined when active
+}
+
 // ============================================================
 // Prediction Snapshot Entity Type
 // ============================================================
@@ -340,6 +353,14 @@ export function makePredictionPK(ticker: string): string {
 
 export function makePredictionSnapshotSK(date: string, horizon: string): string {
   return `${SortKeyPrefix.SNAP}#${date}#${horizon}`;
+}
+
+export function makeWatchlistPK(userSub: string): string {
+  return `USER#${userSub}`;
+}
+
+export function makeWatchlistSK(ticker: string): string {
+  return `${EntityPrefix.WATCHLIST}#${ticker.toUpperCase()}`;
 }
 
 // ============================================================

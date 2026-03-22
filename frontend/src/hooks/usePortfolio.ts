@@ -2,14 +2,27 @@
  * React Query Hook for Portfolio Management
  */
 
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as PortfolioRepository from '@/database/repositories/portfolio.repository';
 import * as SymbolRepository from '@/database/repositories/symbol.repository';
 import { logger } from '@/utils/logger';
+import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import type { PortfolioDetails } from '@/types/database.types';
 
 export function usePortfolio() {
   const queryClient = useQueryClient();
+  const { syncAdd, syncRemove, pullAndMerge } = useWatchlistSync();
+  const hasPulled = useRef(false);
+
+  // Pull and merge cloud watchlist on mount
+  useEffect(() => {
+    if (hasPulled.current) return;
+    hasPulled.current = true;
+    pullAndMerge().then(() => {
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+    });
+  }, [pullAndMerge, queryClient]);
 
   const {
     data: portfolio = [],
@@ -40,14 +53,7 @@ export function usePortfolio() {
           err,
         );
       }
-      const entry: Omit<PortfolioDetails, 'id'> = {
-        ticker,
-        name: companyName,
-        next: '0',
-        wks: '0',
-        mnth: '0',
-      };
-      return await PortfolioRepository.upsert(entry as PortfolioDetails);
+      await syncAdd(ticker, companyName);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] }),
     onError: (err, ticker) => logger.error(`[usePortfolio] Error adding ${ticker}:`, err),
@@ -56,7 +62,7 @@ export function usePortfolio() {
   const removeMutation = useMutation({
     mutationFn: async (ticker: string) => {
       logger.debug(`[usePortfolio] Removing ${ticker}`);
-      return await PortfolioRepository.deleteByTicker(ticker);
+      await syncRemove(ticker);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] }),
     onError: (err, ticker) => logger.error(`[usePortfolio] Error removing ${ticker}:`, err),

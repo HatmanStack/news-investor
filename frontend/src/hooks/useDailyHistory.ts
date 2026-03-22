@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { createBackendClient } from '@/services/api/backendClient';
 import { subDays, differenceInDays, format } from 'date-fns';
+import type { TruncationMeta } from '@/services/api/lambdaSentiment.service';
 
 export interface DailyHistoryItem {
   date: string;
@@ -20,6 +21,7 @@ export interface DailyHistoryItem {
 
 const PAGE_SIZE_DAYS = 30;
 const MAX_LOOKBACK_DAYS = 365;
+const FREE_TIER_MAX_DAYS = 90;
 
 export function useDailyHistory(ticker: string, options?: { initialDays?: number }) {
   const days = options?.initialDays ?? PAGE_SIZE_DAYS;
@@ -31,17 +33,24 @@ export function useDailyHistory(ticker: string, options?: { initialDays?: number
       const startDate = format(subDays(new Date(endDate), days - 1), 'yyyy-MM-dd');
 
       const client = createBackendClient();
-      const response = await client.get('/sentiment/daily-history', {
-        params: { ticker, startDate, endDate },
-      });
+      const response = await client.get<{ data: DailyHistoryItem[]; _meta?: TruncationMeta }>(
+        '/sentiment/daily-history',
+        {
+          params: { ticker, startDate, endDate },
+        },
+      );
 
       return {
-        items: response.data.data as DailyHistoryItem[],
+        items: response.data.data,
         startDate,
         endDate,
+        truncationMeta: response.data._meta,
       };
     },
     getNextPageParam: (lastPage) => {
+      // Stop paginating if the backend truncated this page (free tier limit reached)
+      if (lastPage.truncationMeta?.truncated) return undefined;
+
       const nextEnd = subDays(new Date(lastPage.startDate), 1);
       if (differenceInDays(new Date(), nextEnd) > MAX_LOOKBACK_DAYS) return undefined;
       return format(nextEnd, 'yyyy-MM-dd');
@@ -58,8 +67,16 @@ export function useDailyHistory(ticker: string, options?: { initialDays?: number
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [query.data]);
 
+  // Surface truncation from any page (first truncated page signals the limit)
+  const truncationMeta = useMemo(() => {
+    if (!query.data?.pages) return undefined;
+    return query.data.pages.find((page) => page.truncationMeta?.truncated)?.truncationMeta;
+  }, [query.data]);
+
   return {
     ...query,
     data: allItems,
+    truncated: truncationMeta?.truncated ?? false,
+    truncatedMaxDays: truncationMeta?.maxDays ?? FREE_TIER_MAX_DAYS,
   };
 }

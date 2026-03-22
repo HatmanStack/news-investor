@@ -22,6 +22,7 @@ import { useSymbolDetails } from '@/hooks/useSymbolSearch';
 import { FeatureGate } from '@/features/tier';
 import { MaterialityHeatmap } from '@/components/heatmap';
 import { useDailyHistory } from '@/hooks/useDailyHistory';
+import { DataTruncationBanner } from '@/components/common/DataTruncationBanner';
 
 interface PortfolioItemProps {
   item: PortfolioDetails;
@@ -32,11 +33,20 @@ interface PortfolioItemProps {
 }
 
 function ExpandedHeatmapSection({ ticker }: { ticker: string }) {
-  const { data, isLoading, hasNextPage, fetchNextPage } = useDailyHistory(ticker);
+  const { data, isLoading, hasNextPage, fetchNextPage, truncated, truncatedMaxDays } =
+    useDailyHistory(ticker);
+  const [bannerVisible, setBannerVisible] = React.useState(true);
 
   return (
     <View style={expandedStyles.heatmapSection}>
       <Divider />
+      {truncated && (
+        <DataTruncationBanner
+          visible={bannerVisible}
+          maxDays={truncatedMaxDays}
+          onDismiss={() => setBannerVisible(false)}
+        />
+      )}
       <MaterialityHeatmap
         data={data}
         isLoading={isLoading}

@@ -8,6 +8,24 @@ import { CombinedWordDetails } from '@/types/database.types';
 import { TABLE_NAMES } from '@/constants/database.constants';
 
 /**
+ * Find the most recent combined word record for a ticker
+ * @param ticker - Stock ticker symbol
+ * @returns Latest combined word details or null
+ */
+export async function findLatestByTicker(ticker: string): Promise<CombinedWordDetails | null> {
+  const db = await getDatabase();
+  const sql = `SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS} WHERE ticker = ? ORDER BY date DESC LIMIT 1`;
+
+  try {
+    const result = await db.getFirstAsync<CombinedWordDetails>(sql, [ticker]);
+    return result ?? null;
+  } catch (error) {
+    console.error('[CombinedWordRepository] Error finding latest by ticker:', error);
+    return null;
+  }
+}
+
+/**
  * Find all combined word count records for a ticker
  * @param ticker - Stock ticker symbol
  * @returns Array of combined word details

@@ -5,7 +5,7 @@
  * Predictions generated client-side using browser-based logistic regression.
  */
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as CombinedWordRepository from '@/database/repositories/combinedWord.repository';
 import { updatePredictions } from '@/services/sync/sentimentDataSync';
@@ -42,6 +42,8 @@ export interface UseSentimentDataOptions {
 export function useSentimentData(ticker: string, options: UseSentimentDataOptions = {}) {
   const { days = 30, enabled = true, staleTime } = options;
   const diagnosticsRef = useRef<DiagnosticsOutput | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const [truncatedMaxDays, setTruncatedMaxDays] = useState(0);
 
   const query = useQuery({
     queryKey: ['sentimentData', ticker, days],
@@ -50,7 +52,17 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
       const startDate = formatDateForDB(subDays(new Date(), days));
 
       // Step 1: Fetch sentiment data (local-first with backend fallback)
-      const sentimentData = await fetchCombinedSentiment(ticker, startDate, endDate, days);
+      const fetchResult = await fetchCombinedSentiment(ticker, startDate, endDate, days);
+      const sentimentData = fetchResult.data;
+
+      // Track truncation metadata
+      if (fetchResult.truncationMeta?.truncated) {
+        setTruncated(true);
+        setTruncatedMaxDays(fetchResult.truncationMeta.maxDays);
+      } else {
+        setTruncated(false);
+        setTruncatedMaxDays(0);
+      }
 
       if (sentimentData.length === 0) {
         return sentimentData;
@@ -102,7 +114,7 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
     refetchOnWindowFocus: false,
   });
 
-  return { ...query, diagnostics: diagnosticsRef.current };
+  return { ...query, diagnostics: diagnosticsRef.current, truncated, truncatedMaxDays };
 }
 
 /**

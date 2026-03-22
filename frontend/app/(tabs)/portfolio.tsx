@@ -4,9 +4,17 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Alert, Platform } from 'react-native';
+import {
+  View,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  Alert,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'react-native-paper';
+import { SegmentedButtons, ActivityIndicator, useTheme } from 'react-native-paper';
 import { useContentWidth } from '@/hooks/useContentWidth';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -19,7 +27,12 @@ import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { EmptyState } from '@/components/common/EmptyState';
 import { OfflineIndicator } from '@/components/common/OfflineIndicator';
 import { StockCarousel, CarouselItem, useToast } from '@/components/common';
+import { FeatureGate } from '@/features/tier';
+import { AggregateSentimentCard } from '@/components/analytics/AggregateSentimentCard';
+import { SectorExposureCard } from '@/components/analytics/SectorExposureCard';
+import { PredictionConfidenceCard } from '@/components/analytics/PredictionConfidenceCard';
 import { usePortfolio } from '@/hooks/usePortfolio';
+import { usePortfolioAnalytics } from '@/hooks/usePortfolioAnalytics';
 import { useStock } from '@/contexts/StockContext';
 import { syncAllData } from '@/services/sync/syncOrchestrator';
 import { logger } from '@/utils/logger';
@@ -30,9 +43,11 @@ export default function PortfolioScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'holdings' | 'analytics'>('holdings');
   const theme = useTheme();
   const { contentWidth } = useContentWidth();
   const { portfolio, isLoading, error, refetch, removeFromPortfolio } = usePortfolio();
+  const { analytics, isLoading: analyticsLoading } = usePortfolioAnalytics();
   const { setSelectedTicker, startDate, endDate } = useStock();
   const toast = useToast();
 
@@ -224,29 +239,69 @@ export default function PortfolioScreen() {
       edges={['top']}
     >
       <OfflineIndicator />
+      <FeatureGate feature="portfolio_analytics">
+        <View style={styles.tabToggle}>
+          <SegmentedButtons
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as 'holdings' | 'analytics')}
+            buttons={[
+              { value: 'holdings', label: 'Holdings' },
+              { value: 'analytics', label: 'Analytics' },
+            ]}
+          />
+        </View>
+      </FeatureGate>
       <View style={[styles.centeredContent, { width: contentWidth }]}>
-        <FlatList
-          data={portfolio}
-          renderItem={renderPortfolioItem}
-          keyExtractor={(item) => item.ticker}
-          ListHeaderComponent={renderListHeader}
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={portfolio.length === 0 ? styles.emptyContent : styles.listContent}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={10}
-          windowSize={21}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={theme.colors.primary}
-              colors={[theme.colors.primary]}
-              progressBackgroundColor={theme.colors.surface}
+        {activeTab === 'analytics' ? (
+          portfolio.length < 2 ? (
+            <EmptyState
+              message="Not enough stocks"
+              description="Add at least 2 stocks to see portfolio analytics"
+              variant="data"
             />
-          }
-        />
+          ) : analyticsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" />
+            </View>
+          ) : !analytics ? (
+            <EmptyState
+              message="No analytics data"
+              description="Sync your stocks to populate sentiment and prediction data"
+              variant="data"
+            />
+          ) : (
+            <ScrollView contentContainerStyle={styles.analyticsContent}>
+              <AggregateSentimentCard data={analytics.sentiment} />
+              <SectorExposureCard data={analytics.sectors} />
+              <PredictionConfidenceCard data={analytics.predictions} />
+            </ScrollView>
+          )
+        ) : (
+          <FlatList
+            data={portfolio}
+            renderItem={renderPortfolioItem}
+            keyExtractor={(item) => item.ticker}
+            ListHeaderComponent={renderListHeader}
+            ListEmptyComponent={renderEmptyState}
+            contentContainerStyle={
+              portfolio.length === 0 ? styles.emptyContent : styles.listContent
+            }
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            updateCellsBatchingPeriod={50}
+            initialNumToRender={10}
+            windowSize={21}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+                colors={[theme.colors.primary]}
+                progressBackgroundColor={theme.colors.surface}
+              />
+            }
+          />
+        )}
       </View>
       <AddStockButton onPress={handleAddStock} />
       <AddStockModal visible={modalVisible} onDismiss={handleCloseModal} />
@@ -267,5 +322,18 @@ const styles = StyleSheet.create({
   },
   emptyContent: {
     flex: 1,
+  },
+  tabToggle: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  analyticsContent: {
+    padding: 16,
+    gap: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

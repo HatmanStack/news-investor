@@ -21,6 +21,19 @@ jest.mock('@/utils/logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
+// Mock watchlist sync
+const mockSyncAdd = jest.fn().mockResolvedValue(undefined);
+const mockSyncRemove = jest.fn().mockResolvedValue(undefined);
+const mockPullAndMerge = jest.fn().mockResolvedValue(undefined);
+
+jest.mock('@/hooks/useWatchlistSync', () => ({
+  useWatchlistSync: () => ({
+    syncAdd: mockSyncAdd,
+    syncRemove: mockSyncRemove,
+    pullAndMerge: mockPullAndMerge,
+  }),
+}));
+
 const PortfolioRepository = jest.requireMock('@/database/repositories/portfolio.repository');
 
 function createWrapper() {
@@ -53,7 +66,7 @@ describe('usePortfolio', () => {
     expect(result.current.portfolio).toEqual(mockPortfolio);
   });
 
-  it('addToPortfolio calls upsert and refetches', async () => {
+  it('addToPortfolio calls syncAdd and refetches', async () => {
     const initialPortfolio = [
       { id: 1, ticker: 'AAPL', name: 'Apple Inc', next: '0', wks: '0', mnth: '0' },
     ];
@@ -73,12 +86,12 @@ describe('usePortfolio', () => {
       await result.current.addToPortfolio('MSFT');
     });
 
-    expect(PortfolioRepository.upsert).toHaveBeenCalled();
+    expect(mockSyncAdd).toHaveBeenCalledWith('MSFT', 'MSFT');
 
     await waitFor(() => expect(result.current.portfolio).toEqual(updatedPortfolio));
   });
 
-  it('removeFromPortfolio calls deleteByTicker and refetches', async () => {
+  it('removeFromPortfolio calls syncRemove and refetches', async () => {
     const initialPortfolio = [
       { id: 1, ticker: 'AAPL', name: 'Apple Inc', next: '0', wks: '0', mnth: '0' },
       { id: 2, ticker: 'MSFT', name: 'Microsoft', next: '0', wks: '0', mnth: '0' },
@@ -98,7 +111,7 @@ describe('usePortfolio', () => {
       await result.current.removeFromPortfolio('MSFT');
     });
 
-    expect(PortfolioRepository.deleteByTicker).toHaveBeenCalledWith('MSFT');
+    expect(mockSyncRemove).toHaveBeenCalledWith('MSFT');
 
     await waitFor(() => expect(result.current.portfolio).toEqual(updatedPortfolio));
   });
@@ -125,5 +138,13 @@ describe('usePortfolio', () => {
     await waitFor(() => expect(result.current.error).toBeTruthy());
 
     expect(result.current.portfolio).toEqual([]);
+  });
+
+  it('calls pullAndMerge on mount', async () => {
+    PortfolioRepository.findAll.mockResolvedValue([]);
+
+    renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(mockPullAndMerge).toHaveBeenCalledTimes(1));
   });
 });

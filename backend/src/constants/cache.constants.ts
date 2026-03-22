@@ -67,3 +67,28 @@ export const TTL_JOB_DAYS = 1;
  * long-term caching of unexpected data types.
  */
 export const TTL_DEFAULT_DAYS = 1;
+
+// ============================================================
+// Pro Tier TTL Value (in days)
+// ============================================================
+
+/** Pro tier data retention: 365 days across all entity types. */
+const PRO_TIER_MAX_DAYS = 365;
+
+// ============================================================
+// Tier-Aware Helpers
+// ============================================================
+
+/**
+ * Maximum days for free tier data responses.
+ * Used in truncation metadata.
+ */
+export const FREE_TIER_MAX_DAYS = 90;
+
+/**
+ * Get the data retention limit in days for a given tier.
+ * Free tier: 90 days, Pro tier: 365 days.
+ */
+export function getDataRetentionDays(tier: string): number {
+  return tier === 'pro' ? PRO_TIER_MAX_DAYS : FREE_TIER_MAX_DAYS;
+}

@@ -103,6 +103,12 @@ export interface DailySentiment {
   avgSignalScore?: number;
 }
 
+/** Truncation metadata from tier-aware backend responses */
+export interface TruncationMeta {
+  truncated: boolean;
+  maxDays: number;
+}
+
 /**
  * Sentiment results response
  */
@@ -121,6 +127,8 @@ export interface SentimentResultsResponse {
     twoWeek: { direction: 'up' | 'down'; probability: number };
     oneMonth: { direction: 'up' | 'down'; probability: number };
   };
+  /** Truncation metadata when data is limited for free tier */
+  _meta?: TruncationMeta;
 }
 
 /**
@@ -358,11 +366,20 @@ export async function getSentimentResults(
   const client = createBackendClient();
 
   try {
-    const response = await client.get<{ data: SentimentResultsResponse }>('/sentiment', {
-      params: { ticker, startDate, endDate },
-    });
+    const response = await client.get<{ data: SentimentResultsResponse; _meta?: TruncationMeta }>(
+      '/sentiment',
+      {
+        params: { ticker, startDate, endDate },
+      },
+    );
 
-    return response.data.data;
+    // successResponse envelope: { data: {...}, _meta?: { truncated, maxDays } }
+    // Extract _meta from top-level envelope onto the result for downstream consumption.
+    const result = response.data.data;
+    if (response.data._meta) {
+      result._meta = response.data._meta;
+    }
+    return result;
   } catch (error) {
     if (isAxiosError(error)) {
       const status = error.response?.status;
