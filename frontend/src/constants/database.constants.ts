@@ -4,7 +4,7 @@
  */
 
 export const DB_NAME = 'stock_sentiment.db';
-export const DB_VERSION = 6; // Phase 2 pro: Added sector columns to symbol_details
+export const DB_VERSION = 7; // v2.7: Added annotations table
 
 export const TABLE_NAMES = {
   STOCK_DETAILS: 'stock_details',

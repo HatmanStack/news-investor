@@ -90,6 +90,22 @@ interface StoredArticleSentiment {
   sentimentNumber: number;
 }
 
+/** Stored annotation */
+interface StoredAnnotation {
+  id: string;
+  ticker: string;
+  type: 'horizontal_line' | 'trendline';
+  priceY: number;
+  timeX: string | null;
+  priceY2: number | null;
+  timeX2: string | null;
+  color: string;
+  label: string | null;
+  syncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Stored note */
 interface StoredNote {
   id: string;
@@ -128,6 +144,7 @@ type StoredRecord =
   | StoredSentiment
   | StoredArticleSentiment
   | StoredNote
+  | StoredAnnotation
   | StoredPortfolio;
 
 /** Allowlist of valid table names for DROP TABLE validation */
@@ -139,6 +156,7 @@ const VALID_TABLES = new Set([
   'word_count_details',
   'portfolio_details',
   'notes',
+  'annotations',
 ]);
 
 /** Type-safe storage structure */
@@ -150,6 +168,7 @@ interface StorageData {
   articleSentiment: Record<string, StoredArticleSentiment[]>;
   portfolio: Record<string, StoredPortfolio>;
   notes: Record<string, StoredNote>;
+  annotations: Record<string, StoredAnnotation>;
 }
 
 /**
@@ -198,6 +217,7 @@ class WebDatabase {
       articleSentiment: {},
       portfolio: {},
       notes: {},
+      annotations: {},
     };
   }
 
@@ -338,6 +358,12 @@ class WebDatabase {
       return this.deleteNote(params || []);
     } else if (sqlLower.includes('update notes')) {
       return this.updateNote(sql, params || []);
+    } else if (sqlLower.startsWith('insert or replace into annotations')) {
+      return this.upsertAnnotation(params || []);
+    } else if (sqlLower.includes('delete from annotations')) {
+      return this.deleteAnnotation(params || []);
+    } else if (sqlLower.includes('update annotations')) {
+      return this.updateAnnotation(sql, params || []);
     }
 
     return { changes: 0 };
@@ -360,6 +386,8 @@ class WebDatabase {
       return this.getPortfolio(params || []);
     } else if (sqlLower.includes('from notes')) {
       return this.getNotes(sql, params || []);
+    } else if (sqlLower.includes('from annotations')) {
+      return this.getAnnotations(sql, params || []);
     }
 
     return [];
@@ -415,6 +443,7 @@ class WebDatabase {
         else if (tableName === 'word_count_details') this.data.articleSentiment = {};
         else if (tableName === 'portfolio_details') this.data.portfolio = {};
         else if (tableName === 'notes') this.data.notes = {};
+        else if (tableName === 'annotations') this.data.annotations = {};
         this.saveData();
       } else if (tableName) {
         console.warn(`[WebDB] Ignoring DROP TABLE for unknown table: ${tableName}`);
@@ -877,6 +906,89 @@ class WebDatabase {
     }
 
     return allNotes;
+  }
+
+  // Annotations operations
+  private upsertAnnotation(params: unknown[]): DbResult {
+    const [
+      id,
+      ticker,
+      type,
+      priceY,
+      timeX,
+      priceY2,
+      timeX2,
+      color,
+      label,
+      syncedAt,
+      createdAt,
+      updatedAt,
+    ] = params;
+
+    const idStr = String(id);
+    this.data.annotations[idStr] = {
+      id: idStr,
+      ticker: String(ticker),
+      type: String(type) as 'horizontal_line' | 'trendline',
+      priceY: safeParseFloat(priceY),
+      timeX: timeX != null ? String(timeX) : null,
+      priceY2: priceY2 != null ? safeParseFloat(priceY2) : null,
+      timeX2: timeX2 != null ? String(timeX2) : null,
+      color: String(color),
+      label: label != null ? String(label) : null,
+      syncedAt: syncedAt != null ? String(syncedAt) : null,
+      createdAt: String(createdAt),
+      updatedAt: String(updatedAt),
+    };
+    this.saveData();
+    return { changes: 1 };
+  }
+
+  private deleteAnnotation(params: unknown[]): DbResult {
+    const id = String(params[0]);
+    if (this.data.annotations[id]) {
+      delete this.data.annotations[id];
+      this.saveData();
+      return { changes: 1 };
+    }
+    return { changes: 0 };
+  }
+
+  private updateAnnotation(sql: string, params: unknown[]): DbResult {
+    const sqlLower = sql.toLowerCase();
+    if (sqlLower.includes('syncedat')) {
+      const syncedAt = params[0] != null ? String(params[0]) : null;
+      const id = String(params[1]);
+      if (this.data.annotations[id]) {
+        this.data.annotations[id].syncedAt = syncedAt;
+        this.saveData();
+        return { changes: 1 };
+      }
+    }
+    return { changes: 0 };
+  }
+
+  private getAnnotations(sql: string, params: unknown[]): StoredAnnotation[] {
+    const sqlLower = sql.toLowerCase();
+    const allAnnotations = Object.values(this.data.annotations);
+
+    if (sqlLower.includes('where id = ?')) {
+      const id = String(params[0]);
+      return allAnnotations.filter((a) => a.id === id);
+    }
+    if (sqlLower.includes('where ticker = ?')) {
+      const ticker = String(params[0]);
+      return allAnnotations
+        .filter((a) => a.ticker === ticker)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+    if (sqlLower.includes('syncedat is null')) {
+      return allAnnotations
+        .filter((a) => a.syncedAt === null || a.syncedAt === undefined)
+        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+    }
+
+    return allAnnotations;
   }
 }
 

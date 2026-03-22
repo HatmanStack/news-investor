@@ -368,5 +368,25 @@ describe('PortfolioItem', () => {
       );
       expect(queryByTestId('alert-badge')).toBeNull();
     });
+
+    it('should navigate to stock detail with scrollTo=alerts when alert badge pressed', () => {
+      const { router } = jest.requireMock('expo-router');
+      mockUseRecentAlerts.mockReturnValue({
+        recentAlerts: [
+          { ticker: 'AAPL', alertType: 'sentiment_shift', sentAt: '2026-03-22T10:00:00Z' },
+        ],
+        hasAlertForTicker: jest.fn((t: string) => t === 'AAPL'),
+        isLoading: false,
+      });
+
+      const { getByTestId } = render(
+        <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
+        { wrapper },
+      );
+
+      const badge = getByTestId('alert-badge');
+      fireEvent.press(badge);
+      expect(router.push).toHaveBeenCalledWith('/(tabs)/stock/AAPL/sentiment?scrollTo=alerts');
+    });
   });
 });

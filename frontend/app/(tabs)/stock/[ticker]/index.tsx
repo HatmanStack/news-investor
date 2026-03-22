@@ -27,15 +27,16 @@ interface ChartSectionProps {
   data: StockDetails[];
   isLoading: boolean;
   chartHeight?: number;
+  ticker?: string;
 }
 
-function ChartSection({ data, isLoading, chartHeight = 250 }: ChartSectionProps) {
+function ChartSection({ data, isLoading, chartHeight = 250, ticker }: ChartSectionProps) {
   return (
     <View style={styles.chartContainer}>
       {isLoading ? (
         <Skeleton width="90%" height={chartHeight} style={styles.chartSkeleton} />
       ) : data.length > 0 ? (
-        <PriceChart data={data} />
+        <PriceChart data={data} ticker={ticker} />
       ) : null}
     </View>
   );
@@ -185,7 +186,7 @@ export default function PriceScreen() {
       >
         <View style={[styles.centeredContent, { width: contentWidth }]}>
           <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
-            <ChartSection data={sortedStockData} isLoading={isPriceLoading} />
+            <ChartSection data={sortedStockData} isLoading={isPriceLoading} ticker={ticker} />
             <View style={styles.desktopLayout}>
               <View style={styles.desktopLeftColumn}>
                 <DataTable
@@ -221,7 +222,7 @@ export default function PriceScreen() {
       >
         <View style={[styles.centeredContent, { width: contentWidth }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ChartSection data={sortedStockData} isLoading={isPriceLoading} />
+            <ChartSection data={sortedStockData} isLoading={isPriceLoading} ticker={ticker} />
             <StockMetadataCard symbol={symbol || null} isLoading={isSymbolLoading} />
             <SectorBenchmarkCard
               ticker={ticker as string}
@@ -257,7 +258,12 @@ export default function PriceScreen() {
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
         >
-          <ChartSection data={sortedStockData} isLoading={isPriceLoading} chartHeight={220} />
+          <ChartSection
+            data={sortedStockData}
+            isLoading={isPriceLoading}
+            chartHeight={220}
+            ticker={ticker}
+          />
           <View style={styles.contentRow}>
             <View style={styles.priceColumn}>
               <PriceListHeader />

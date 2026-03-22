@@ -13,6 +13,7 @@ import {
   computeAggregateSentiment,
   computeSectorExposure,
   computePredictionConfidence,
+  computeSectorSentiment,
   PortfolioStockData,
 } from '@/utils/portfolio/analyticsCalculator';
 
@@ -52,6 +53,7 @@ export function usePortfolioAnalytics() {
       sentiment: computeAggregateSentiment(analyticsData),
       sectors: computeSectorExposure(analyticsData),
       predictions: computePredictionConfidence(analyticsData),
+      sectorSentiment: computeSectorSentiment(analyticsData),
     };
   }, [analyticsData]);
 

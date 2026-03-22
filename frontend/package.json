@@ -1,6 +1,6 @@
 {
   "name": "news-investor-frontend",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -26,10 +26,12 @@
     "date-fns": "^4.1.0",
     "expo": "~54.0.23",
     "expo-constants": "~18.0.10",
+    "expo-file-system": "~19.0.21",
     "expo-font": "^14.0.11",
     "expo-haptics": "~13.0.1",
     "expo-linking": "~8.0.8",
     "expo-router": "~6.0.14",
+    "expo-sharing": "~14.0.8",
     "expo-sqlite": "^16.0.9",
     "expo-status-bar": "~3.0.8",
     "lightweight-charts": "^5.1.0",

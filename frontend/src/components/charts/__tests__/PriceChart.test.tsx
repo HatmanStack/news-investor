@@ -15,6 +15,38 @@ jest.mock('../PriceChartDom', () => {
   };
 });
 
+// Mock auth context
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: jest.fn(() => ({ isAuthenticated: false, user: null })),
+}));
+
+// Mock annotations hook
+jest.mock('@/hooks/useAnnotations', () => ({
+  useAnnotations: () => ({
+    annotations: [],
+    isLoading: false,
+    activeTool: null,
+    setActiveTool: jest.fn(),
+    saveAnnotation: jest.fn(),
+    deleteAnnotation: jest.fn(),
+    isSaving: false,
+  }),
+}));
+
+// Mock comparison chart hook
+jest.mock('@/hooks/useComparisonChart', () => ({
+  useComparisonChart: () => ({
+    comparisonTickers: [],
+    availableTickers: [],
+    addTicker: jest.fn(),
+    removeTicker: jest.fn(),
+    clearAll: jest.fn(),
+    comparisonData: [],
+    isComparing: false,
+  }),
+  normalizeToPercentage: jest.fn(() => []),
+}));
+
 // Mock tier context
 const mockIsFeatureEnabled = jest.fn(() => true);
 jest.mock('@/features/tier', () => ({
@@ -27,6 +59,7 @@ jest.mock('@/features/tier', () => ({
     error: null,
     isFeatureEnabled: mockIsFeatureEnabled,
   }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 function makeStockDetails(overrides: Partial<StockDetails> = {}): StockDetails {

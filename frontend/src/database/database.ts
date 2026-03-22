@@ -20,6 +20,7 @@ const VALID_TABLES = new Set([
   'combined_word_count_details',
   'portfolio_details',
   'notes',
+  'annotations',
 ]);
 
 /**
@@ -244,6 +245,29 @@ async function runMigrations(fromVersion: number): Promise<void> {
       if (!(await columnExists(tableName, 'sectorEtf'))) {
         await database.execAsync(`ALTER TABLE ${tableName} ADD COLUMN sectorEtf TEXT`);
       }
+    }
+
+    // Migration from version 6 to 7: Add annotations table
+    if (fromVersion < 7) {
+      await database.execAsync(`
+        CREATE TABLE IF NOT EXISTS annotations (
+          id TEXT PRIMARY KEY,
+          ticker TEXT NOT NULL,
+          type TEXT NOT NULL CHECK(type IN ('horizontal_line', 'trendline')),
+          priceY REAL NOT NULL,
+          timeX TEXT,
+          priceY2 REAL,
+          timeX2 TEXT,
+          color TEXT NOT NULL DEFAULT '#1a237e',
+          label TEXT,
+          syncedAt TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      `);
+      await database.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_annotations_ticker ON annotations(ticker)',
+      );
     }
   } catch (error) {
     console.error('[Database] Migration failed:', error);

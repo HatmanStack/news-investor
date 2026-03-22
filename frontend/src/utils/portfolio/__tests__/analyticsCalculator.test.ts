@@ -2,6 +2,7 @@ import {
   computeAggregateSentiment,
   computeSectorExposure,
   computePredictionConfidence,
+  computeSectorSentiment,
   PortfolioStockData,
 } from '../analyticsCalculator';
 
@@ -201,5 +202,85 @@ describe('computePredictionConfidence', () => {
     expect(day.upCount).toBe(1);
     expect(day.downCount).toBe(1);
     expect(day.stockCount).toBe(2);
+  });
+});
+
+describe('computeSectorSentiment', () => {
+  it('returns empty array for empty input', () => {
+    expect(computeSectorSentiment([])).toEqual([]);
+  });
+
+  it('groups by sector and computes averages', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.6 },
+      { ticker: 'MSFT', name: 'Microsoft', sector: 'Technology', sentimentScore: 0.4 },
+      { ticker: 'JPM', name: 'JPMorgan', sector: 'Financial Services', sentimentScore: -0.2 },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result).toHaveLength(2);
+
+    const tech = result.find((s) => s.sector === 'Technology')!;
+    expect(tech.averageSentiment).toBeCloseTo(0.5);
+    expect(tech.tickerCount).toBe(2);
+    expect(tech.trend).toBe('improving');
+
+    const fin = result.find((s) => s.sector === 'Financial Services')!;
+    expect(fin.averageSentiment).toBeCloseTo(-0.2);
+    expect(fin.tickerCount).toBe(1);
+    expect(fin.trend).toBe('worsening');
+  });
+
+  it('excludes stocks without sector', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.3 },
+      { ticker: 'XYZ', name: 'Unknown', sentimentScore: 0.5 },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result).toHaveLength(1);
+    expect(result[0].sector).toBe('Technology');
+  });
+
+  it('returns single entry when all stocks in one sector', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.1 },
+      { ticker: 'MSFT', name: 'Microsoft', sector: 'Technology', sentimentScore: 0.2 },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result).toHaveLength(1);
+    expect(result[0].tickerCount).toBe(2);
+    expect(result[0].averageSentiment).toBeCloseTo(0.15);
+  });
+
+  it('determines stable trend for small average', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.02 },
+      { ticker: 'MSFT', name: 'Microsoft', sector: 'Technology', sentimentScore: -0.01 },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result[0].trend).toBe('stable');
+  });
+
+  it('excludes stocks without sentiment score', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.3 },
+      { ticker: 'MSFT', name: 'Microsoft', sector: 'Technology' },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result).toHaveLength(1);
+    expect(result[0].tickerCount).toBe(1);
+    expect(result[0].averageSentiment).toBeCloseTo(0.3);
+  });
+
+  it('sorts by tickerCount descending', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'JPM', name: 'JPMorgan', sector: 'Financial', sentimentScore: 0.1 },
+      { ticker: 'AAPL', name: 'Apple', sector: 'Technology', sentimentScore: 0.2 },
+      { ticker: 'MSFT', name: 'Microsoft', sector: 'Technology', sentimentScore: 0.3 },
+      { ticker: 'GOOG', name: 'Alphabet', sector: 'Technology', sentimentScore: 0.4 },
+    ];
+    const result = computeSectorSentiment(stocks);
+    expect(result[0].sector).toBe('Technology');
+    expect(result[0].tickerCount).toBe(3);
+    expect(result[1].sector).toBe('Financial');
   });
 });

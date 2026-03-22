@@ -249,6 +249,29 @@ export interface NoteItem extends BaseTableItem {
 }
 
 /**
+ * Chart annotation item
+ * PK: USER#{sub}, SK: ANNOT#{ticker}#{annotationId}
+ */
+export interface AnnotationItem extends BaseTableItem {
+  entityType: 'ANNOTATION';
+  ticker: string;
+  annotationId: string;
+  type: 'horizontal_line' | 'trendline';
+  /** Y-axis price value for horizontal lines, or start Y for trendlines */
+  priceY: number;
+  /** X-axis timestamp (ISO string) for trendline start point */
+  timeX?: string;
+  /** End Y-axis price value for trendlines */
+  priceY2?: number;
+  /** End X-axis timestamp (ISO string) for trendlines */
+  timeX2?: string;
+  /** CSS color string (e.g., '#ff0000') */
+  color: string;
+  /** Line label (optional, user-set) */
+  label?: string;
+}
+
+/**
  * User watchlist item
  * PK: USER#{sub}, SK: WATCHLIST#{ticker}
  */
@@ -273,6 +296,7 @@ export interface AlertPrefsItem extends BaseTableItem {
   userSub: string;
   sentimentShiftEnabled: boolean;
   materialEventEnabled: boolean;
+  predictionFlipEnabled: boolean;
   optedOut: boolean;
   email: string;
 }
@@ -284,7 +308,7 @@ export interface AlertPrefsItem extends BaseTableItem {
 export interface AlertHistoryItem extends BaseTableItem {
   entityType: 'ALERT';
   ticker: string;
-  alertType: 'sentiment_shift' | 'material_event';
+  alertType: 'sentiment_shift' | 'material_event' | 'prediction_flip';
   zScore: number;
   baselineMean: number;
   baselineStdDev: number;
@@ -397,8 +421,8 @@ export function makeWatchlistSK(ticker: string): string {
   return `${EntityPrefix.WATCHLIST}#${ticker.toUpperCase()}`;
 }
 
-export function makeAlertPrefsSK(): string {
-  return 'ALERT_PREFS';
+export function makeAnnotSK(ticker: string, annotationId: string): string {
+  return `ANNOT#${ticker.toUpperCase()}#${annotationId}`;
 }
 
 export function makeAlertHistorySK(timestamp: string, ticker: string): string {

@@ -132,6 +132,23 @@ const CREATE_NOTES_TABLE = `
   );
 `;
 
+const CREATE_ANNOTATIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS annotations (
+    id TEXT PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('horizontal_line', 'trendline')),
+    priceY REAL NOT NULL,
+    timeX TEXT,
+    priceY2 REAL,
+    timeX2 TEXT,
+    color TEXT NOT NULL DEFAULT '#1a237e',
+    label TEXT,
+    syncedAt TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  )
+`;
+
 // Indexes for frequently queried columns
 export const CREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_stock_ticker ON stock_details(ticker);
@@ -151,6 +168,7 @@ export const CREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_combined_ticker ON combined_word_count_details(ticker);
 
   CREATE INDEX IF NOT EXISTS idx_notes_ticker ON notes(ticker);
+  CREATE INDEX IF NOT EXISTS idx_annotations_ticker ON annotations(ticker);
 `;
 
 // Array of all table creation statements
@@ -162,6 +180,7 @@ export const ALL_TABLES = [
   CREATE_COMBINED_WORD_DETAILS_TABLE,
   CREATE_PORTFOLIO_DETAILS_TABLE,
   CREATE_NOTES_TABLE,
+  CREATE_ANNOTATIONS_TABLE,
 ];
 
 // Drop table statements (for testing/development)
@@ -173,4 +192,5 @@ export const DROP_ALL_TABLES = `
   DROP TABLE IF EXISTS combined_word_count_details;
   DROP TABLE IF EXISTS portfolio_details;
   DROP TABLE IF EXISTS notes;
+  DROP TABLE IF EXISTS annotations;
 `;

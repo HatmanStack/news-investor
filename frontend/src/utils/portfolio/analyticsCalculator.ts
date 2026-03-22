@@ -110,6 +110,58 @@ export function computeSectorExposure(stocks: PortfolioStockData[]): SectorExpos
   return result;
 }
 
+export interface SectorSentimentData {
+  sector: string;
+  averageSentiment: number;
+  tickerCount: number;
+  trend: 'improving' | 'worsening' | 'stable';
+}
+
+/**
+ * Compute per-sector average sentiment from portfolio stocks.
+ * Skips stocks without a sector or sentimentScore.
+ * Sorts by tickerCount descending.
+ */
+export function computeSectorSentiment(stocks: PortfolioStockData[]): SectorSentimentData[] {
+  if (stocks.length === 0) return [];
+
+  const groups = new Map<string, number[]>();
+
+  for (const stock of stocks) {
+    if (!stock.sector || stock.sentimentScore === undefined) continue;
+    const existing = groups.get(stock.sector) || [];
+    existing.push(stock.sentimentScore);
+    groups.set(stock.sector, existing);
+  }
+
+  const result: SectorSentimentData[] = [];
+
+  for (const [sector, scores] of groups) {
+    const sum = scores.reduce((acc, s) => acc + s, 0);
+    const avg = sum / scores.length;
+
+    let trend: 'improving' | 'worsening' | 'stable';
+    if (avg > 0.05) {
+      trend = 'improving';
+    } else if (avg < -0.05) {
+      trend = 'worsening';
+    } else {
+      trend = 'stable';
+    }
+
+    result.push({
+      sector,
+      averageSentiment: avg,
+      tickerCount: scores.length,
+      trend,
+    });
+  }
+
+  result.sort((a, b) => b.tickerCount - a.tickerCount);
+
+  return result;
+}
+
 /**
  * Compute prediction confidence per horizon.
  * Omits horizons where no stocks have predictions.

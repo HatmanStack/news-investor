@@ -5,9 +5,10 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Chip, IconButton, Divider } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -207,11 +208,18 @@ export function PortfolioItem({
                 </Text>
                 <FeatureGate feature="real_time_alerts" fallback={null}>
                   {showAlertBadge && (
-                    <View
+                    <Pressable
                       testID="alert-badge"
                       accessibilityLabel="Alert triggered"
-                      style={[styles.alertBadge, { backgroundColor: theme.colors.error }]}
-                    />
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={(e) => {
+                        e?.stopPropagation();
+                        router.push(`/(tabs)/stock/${item.ticker}/sentiment?scrollTo=alerts`);
+                      }}
+                    >
+                      <View style={[styles.alertBadge, { backgroundColor: theme.colors.error }]} />
+                    </Pressable>
                   )}
                 </FeatureGate>
                 {item.name && (

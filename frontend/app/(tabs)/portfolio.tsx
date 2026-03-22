@@ -31,6 +31,8 @@ import { FeatureGate } from '@/features/tier';
 import { AggregateSentimentCard } from '@/components/analytics/AggregateSentimentCard';
 import { SectorExposureCard } from '@/components/analytics/SectorExposureCard';
 import { PredictionConfidenceCard } from '@/components/analytics/PredictionConfidenceCard';
+import { SectorSentimentCard } from '@/components/analytics/SectorSentimentCard';
+import { ExportButton } from '@/components/portfolio/ExportButton';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { usePortfolioAnalytics } from '@/hooks/usePortfolioAnalytics';
 import { useStock } from '@/contexts/StockContext';
@@ -271,9 +273,13 @@ export default function PortfolioScreen() {
             />
           ) : (
             <ScrollView contentContainerStyle={styles.analyticsContent}>
+              <View style={styles.exportRow}>
+                <ExportButton />
+              </View>
               <AggregateSentimentCard data={analytics.sentiment} />
               <SectorExposureCard data={analytics.sectors} />
               <PredictionConfidenceCard data={analytics.predictions} />
+              <SectorSentimentCard data={analytics.sectorSentiment} />
             </ScrollView>
           )
         ) : (
@@ -330,6 +336,10 @@ const styles = StyleSheet.create({
   analyticsContent: {
     padding: 16,
     gap: 12,
+  },
+  exportRow: {
+    alignItems: 'flex-end',
+    paddingBottom: 8,
   },
   loadingContainer: {
     flex: 1,

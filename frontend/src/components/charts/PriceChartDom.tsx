@@ -8,6 +8,23 @@ import { computeRSI } from './indicators/rsi';
 import { computeMACD } from './indicators/macd';
 import type { OHLCData } from './indicators/bollingerBands';
 
+interface AnnotationData {
+  id: string;
+  type: 'horizontal_line' | 'trendline';
+  priceY: number;
+  timeX?: string;
+  priceY2?: number;
+  timeX2?: string;
+  color: string;
+  label?: string;
+}
+
+interface ComparisonSeriesData {
+  ticker: string;
+  data: { time: string; value: number }[];
+  color: string;
+}
+
 interface PriceChartDomProps {
   lineData: LineData[];
   candlestickData: CandlestickData[];
@@ -16,6 +33,18 @@ interface PriceChartDomProps {
   chartColor: string;
   height: number;
   theme: 'light' | 'dark';
+  annotations?: AnnotationData[];
+  activeTool?: 'horizontal_line' | 'trendline' | null;
+  onAnnotationCreated?: (annotation: {
+    type: 'horizontal_line' | 'trendline';
+    priceY: number;
+    timeX?: string;
+    priceY2?: number;
+    timeX2?: string;
+  }) => void;
+  onAnnotationDeleted?: (id: string) => void;
+  isDeleteMode?: boolean;
+  comparisonSeries?: ComparisonSeriesData[];
 }
 
 const INDICATOR_PANE_HEIGHT = 100;
@@ -28,6 +57,12 @@ export default function PriceChartDom({
   chartColor,
   height,
   theme,
+  annotations,
+  activeTool,
+  onAnnotationCreated,
+  onAnnotationDeleted,
+  isDeleteMode,
+  comparisonSeries,
 }: PriceChartDomProps) {
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
@@ -42,11 +77,16 @@ export default function PriceChartDom({
   const textColor = isDark ? '#d1d1d6' : '#3c3c43';
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
 
+  // Trendline drawing state
+  const trendlineStartRef = useRef<{ time: string; price: number } | null>(null);
+
   // Main chart
   useEffect(() => {
     if (!mainContainerRef.current) return;
 
     const container = mainContainerRef.current;
+    const isComparing = comparisonSeries && comparisonSeries.length > 0;
+
     const chart = createChart(container, {
       width: container.clientWidth,
       height,
@@ -60,13 +100,16 @@ export default function PriceChartDom({
         rightOffset: 5,
         barSpacing: 8,
       },
-      rightPriceScale: { borderColor: gridColor },
+      rightPriceScale: {
+        borderColor: gridColor,
+        ...(isComparing ? { mode: 2 } : {}), // Percentage mode when comparing
+      },
     });
 
     mainChartRef.current = chart;
 
     let series: ISeriesApi<any>;
-    if (showCandlestick && candlestickData.length > 0) {
+    if (showCandlestick && candlestickData.length > 0 && !isComparing) {
       series = chart.addSeries(CandlestickSeries, {
         upColor: '#26a69a',
         downColor: '#ef5350',
@@ -76,9 +119,7 @@ export default function PriceChartDom({
       });
       series.setData(candlestickData);
 
-      // Bollinger Bands overlay (only available on candlestick chart since BB
-      // computes from OHLC data; free-tier users see a line chart with BB chip
-      // disabled via the lock icon, so this branch is unreachable for them)
+      // Bollinger Bands overlay
       if (activeIndicators.includes('BB')) {
         const ohlcData: OHLCData[] = candlestickData;
         const bb = computeBollingerBands(ohlcData);
@@ -120,6 +161,115 @@ export default function PriceChartDom({
       series.setData(lineData);
     }
 
+    // Render comparison series
+    if (isComparing && comparisonSeries) {
+      for (const cs of comparisonSeries) {
+        const compSeries = chart.addSeries(LineSeries, {
+          color: cs.color,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        compSeries.setData(cs.data as any);
+      }
+    }
+
+    // Render annotations
+    if (annotations && annotations.length > 0 && series!) {
+      for (const annotation of annotations) {
+        if (annotation.type === 'horizontal_line') {
+          series.createPriceLine({
+            price: annotation.priceY,
+            color: annotation.color,
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            axisLabelVisible: true,
+            title: annotation.label || '',
+          });
+        } else if (
+          annotation.type === 'trendline' &&
+          annotation.timeX &&
+          annotation.timeX2 &&
+          annotation.priceY2 !== undefined
+        ) {
+          const trendSeries = chart.addSeries(LineSeries, {
+            color: annotation.color,
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          trendSeries.setData([
+            { time: annotation.timeX as any, value: annotation.priceY },
+            { time: annotation.timeX2 as any, value: annotation.priceY2 },
+          ]);
+        }
+      }
+    }
+
+    // Click handler for annotation drawing / deleting
+    if (activeTool || isDeleteMode) {
+      chart.subscribeClick((param) => {
+        if (!param.point || !param.time) return;
+        const price = series?.coordinateToPrice(param.point.y);
+        if (price === undefined || price === null) return;
+
+        if (isDeleteMode && annotations && onAnnotationDeleted) {
+          // Find closest annotation
+          const epsilon = Math.abs(price) * 0.01 || 1;
+          const timeStr = String(param.time);
+          for (const annot of annotations) {
+            if (annot.type === 'horizontal_line' && Math.abs(annot.priceY - price) < epsilon) {
+              onAnnotationDeleted(annot.id);
+              return;
+            }
+            if (
+              annot.type === 'trendline' &&
+              annot.timeX &&
+              annot.timeX2 &&
+              annot.priceY2 !== undefined
+            ) {
+              // Interpolate trendline price at the clicked time
+              const t1 = new Date(annot.timeX).getTime();
+              const t2 = new Date(annot.timeX2).getTime();
+              const tClick = new Date(timeStr).getTime();
+              if (t2 !== t1 && tClick >= Math.min(t1, t2) && tClick <= Math.max(t1, t2)) {
+                const ratio = (tClick - t1) / (t2 - t1);
+                const interpolatedPrice = annot.priceY + ratio * (annot.priceY2 - annot.priceY);
+                if (Math.abs(interpolatedPrice - price) < epsilon) {
+                  onAnnotationDeleted(annot.id);
+                  return;
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        if (activeTool === 'horizontal_line' && onAnnotationCreated) {
+          onAnnotationCreated({
+            type: 'horizontal_line',
+            priceY: price,
+          });
+        } else if (activeTool === 'trendline' && onAnnotationCreated) {
+          const timeStr = String(param.time);
+          if (!trendlineStartRef.current) {
+            trendlineStartRef.current = { time: timeStr, price };
+          } else {
+            onAnnotationCreated({
+              type: 'trendline',
+              priceY: trendlineStartRef.current.price,
+              timeX: trendlineStartRef.current.time,
+              priceY2: price,
+              timeX2: timeStr,
+            });
+            trendlineStartRef.current = null;
+          }
+        }
+      });
+    }
+
     chart.timeScale().fitContent();
 
     // Resize observer
@@ -132,6 +282,7 @@ export default function PriceChartDom({
     resizeObserver.observe(container);
 
     return () => {
+      trendlineStartRef.current = null;
       resizeObserver.disconnect();
       chart.remove();
       mainChartRef.current = null;
@@ -146,6 +297,12 @@ export default function PriceChartDom({
     bgColor,
     textColor,
     gridColor,
+    annotations,
+    activeTool,
+    isDeleteMode,
+    comparisonSeries,
+    onAnnotationCreated,
+    onAnnotationDeleted,
   ]);
 
   // RSI sub-chart
@@ -208,7 +365,6 @@ export default function PriceChartDom({
     chart.timeScale().fitContent();
 
     // Bidirectional time scale sync with main chart
-    // Note: slight sync lag is expected since lightweight-charts v5 lacks native multi-pane support
     const mainTimeScale = mainChartRef.current?.timeScale();
     const rsiTimeScale = chart.timeScale();
 

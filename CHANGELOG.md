@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.7.0] - 2026-03-22
+
+### Added
+
+- **[Pro]** Chart annotation tools: horizontal support/resistance lines and two-point trendlines on price chart
+- **[Pro]** Multi-ticker comparison: percentage-normalized overlay chart with portfolio ticker picker (max 4)
+- **[Pro]** Portfolio CSV export: server-side CSV generation with platform-appropriate download
+- **[Pro]** Prediction alerts: direction-flip detection integrated into alert sweep with email notifications
+- **[Pro]** Sector sentiment analytics card: per-sector average sentiment with trend indicators on portfolio analytics tab
+- **[Pro]** Alert badge navigation: tapping alert badge on portfolio card navigates to stock detail with alert settings visible
+
+### Fixed
+
+- **[Pro]** Community sync: TrackRecordCard, PredictionHistory, and ComparativeSentimentCard no longer leak to community edition (replaced with pro teaser stubs)
+- **[Pro]** Alert badge navigation now routes to sentiment tab (was landing on price tab where scrollTo had no effect)
+- **[Pro]** Trendline annotations can now be deleted in delete mode (was silently skipping non-horizontal annotations)
+- **[Pro]** Prediction flip alert emails no longer show irrelevant sparkline data or broken statistics row
+- **[Pro]** Comparison chart date range now matches primary chart (was hardcoded to 30 calendar days)
+- **[Pro]** Cross-device annotation deletion: annotations deleted on one device are now removed on sync from other devices
+- **[Pro]** Delete mode auto-exits after successful annotation deletion
+
 ## [2.6.0] - 2026-03-22
 
 ### Added
