@@ -39,7 +39,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@eslint/js": "^9.16.0",
+    "@eslint/js": "^10.0.1",
     "@types/aws-lambda": "^8.10.161",
     "@types/node": "^25.5.0",
     "@types/sentiment": "^5.0.4",
