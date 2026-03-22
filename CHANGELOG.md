@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.4.1] - 2026-03-21
+
+### Fixed
+
+- Sentiment score field priority in portfolio analytics: use `avgAspectScore`/`avgMlScore` instead of `avgSignalScore` (wrong range)
+- Prediction handler now respects caller's `days` parameter for direct Lambda invocations (warm-cache)
+- Portfolio analytics tab distinguishes loading state from empty data state
+- DELETE /watchlist endpoint now validates ticker format with Zod (matching POST)
+- Truncation banner for `/sentiment/daily-history` — free tier heatmaps now show upgrade prompt and stop paginating into truncated range
+- `useWatchlistSync` returns stable `useCallback`-wrapped references to prevent unnecessary effect re-registration
+- `AggregateSentimentCard` uses `useAppTheme` for proper type safety
+- EmptyState uses `variant="data"` instead of invalid `icon="chart-bar"`
+- Removed unused pro TTL constants flagged by knip
+
+### Changed
+
+- Renamed `weightedScore` to `averageScore` in `AggregateSentiment` to reflect equal-weight arithmetic mean
+- Renamed `isAuthenticated` to `syncEnabled` in watchlist sync service signatures
+- DataTruncationBanner now includes "Upgrade" action linking to settings screen
+
 ## [2.4.0] - 2026-03-21
 
 ### Added
