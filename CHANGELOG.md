@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.5.0] - 2026-03-22
+
+### Added
+
+- **[Pro]** Candlestick chart rendering via TradingView Lightweight Charts
+- **[Pro]** Bollinger Bands overlay on candlestick chart (20-period SMA, 2 std dev)
+- **[Pro]** RSI indicator pane below price chart (14-period Wilder's smoothing)
+- **[Pro]** MACD indicator pane with signal line and color-coded histogram (12/26/9)
+- **[Pro]** Indicator toggle chips (BB, RSI, MACD) with lock icon for free tier
+- Built-in scroll, zoom, and crosshair navigation on price chart (replaces time range selector)
+- Bidirectional time scale sync between price and indicator sub-charts
+- Sentiment chart legend showing series labels with matching line styles
+- Single-point sentiment data rendered as dots instead of being silently dropped
+
+### Changed
+
+- Replaced `react-native-svg-charts` (unmaintained, 6+ years) with TradingView Lightweight Charts for price chart
+- Replaced SentimentChart with custom SVG implementation using `react-native-svg` directly
+- Replaced MiniChart with simple SVG polyline sparkline
+- Free tier price chart upgraded from area chart to Lightweight Charts line series
+- Default time range changed from 1M to 5Y for maximum data availability
+- MACD histogram uses HistogramSeries with green/red color coding instead of plain line
+- Removed `react-native-svg-charts` and `d3-shape` dependencies
+
+### Fixed
+
+- Memory leak: time scale subscriptions now properly unsubscribe in useEffect cleanup
+- NaN gaps in sentiment chart no longer produce misleading connecting lines
+- Legend swatches use SVG dashed lines matching actual chart series style
+
 ## [2.4.1] - 2026-03-21
 
 ### Fixed
