@@ -19,6 +19,7 @@ import { useLatestStockPrice, useStockData, useLayoutDensity } from '@/hooks';
 import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
 import { EarningsBadge } from '@/components/earnings/EarningsBadge';
 import { useSymbolDetails } from '@/hooks/useSymbolSearch';
+import { useRecentAlerts } from '@/hooks/useRecentAlerts';
 import { FeatureGate } from '@/features/tier';
 import { MaterialityHeatmap } from '@/components/heatmap';
 import { useDailyHistory } from '@/hooks/useDailyHistory';
@@ -81,6 +82,10 @@ export function PortfolioItem({
 
   // Fetch symbol details for sector chip (cached by TanStack Query)
   const { data: symbolDetails } = useSymbolDetails(item.ticker);
+
+  // Check for recent alerts to show badge
+  const { hasAlertForTicker } = useRecentAlerts();
+  const showAlertBadge = hasAlertForTicker(item.ticker);
 
   // Calculate price change percentage
   const priceChange = useMemo(() => {
@@ -200,6 +205,15 @@ export function PortfolioItem({
                 >
                   {item.ticker}
                 </Text>
+                <FeatureGate feature="real_time_alerts" fallback={null}>
+                  {showAlertBadge && (
+                    <View
+                      testID="alert-badge"
+                      accessibilityLabel="Alert triggered"
+                      style={[styles.alertBadge, { backgroundColor: theme.colors.error }]}
+                    />
+                  )}
+                </FeatureGate>
                 {item.name && (
                   <Text
                     style={[
@@ -445,5 +459,11 @@ const styles = StyleSheet.create({
   sectorChipText: {
     fontSize: 10,
     lineHeight: 12,
+  },
+  alertBadge: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 4,
   },
 });

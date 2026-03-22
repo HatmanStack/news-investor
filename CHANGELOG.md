@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.6.0] - 2026-03-22
+
+### Added
+
+- **[Pro]** Real-time sentiment alerts: email notifications when significant sentiment shifts or material event spikes are detected for watchlist stocks
+- **[Pro]** Alert settings screen with per-type toggles (sentiment shifts, material events) and master opt-out
+- **[Pro]** Watchlist badge indicator for stocks with recent alerts
+- **[Pro]** Anomaly detection using z-score analysis against 90-day statistical baseline
+- **[Pro]** 24-hour alert cooldown with early reset when conditions normalize
+
+### Changed
+
+- **[Pro]** Restructured Lambda architecture: weekly reports extracted to dedicated Lambda function
+- **[Pro]** Added dedicated alerts Lambda function with independent memory/timeout configuration
+- Backend build now produces three bundles (API, Reports, Alerts)
+
 ## [2.5.0] - 2026-03-22
 
 ### Added

@@ -23,6 +23,7 @@ const EntityPrefix = {
   CIRCUIT: 'CIRCUIT', // Circuit breaker state
   PREDICTION: 'PRED', // Prediction snapshot
   WATCHLIST: 'WATCHLIST', // User watchlist item
+  ALERT: 'ALERT', // Alert history
 } as const;
 
 /**
@@ -260,6 +261,39 @@ export interface WatchlistItem extends BaseTableItem {
 }
 
 // ============================================================
+// Alert Entity Types
+// ============================================================
+
+/**
+ * Alert preferences item
+ * PK: USER#{sub}, SK: ALERT_PREFS
+ */
+export interface AlertPrefsItem extends BaseTableItem {
+  entityType: 'ALERT_PREFS';
+  userSub: string;
+  sentimentShiftEnabled: boolean;
+  materialEventEnabled: boolean;
+  optedOut: boolean;
+  email: string;
+}
+
+/**
+ * Alert history item
+ * PK: USER#{sub}, SK: ALERT#{ISO-timestamp}#{ticker}
+ */
+export interface AlertHistoryItem extends BaseTableItem {
+  entityType: 'ALERT';
+  ticker: string;
+  alertType: 'sentiment_shift' | 'material_event';
+  zScore: number;
+  baselineMean: number;
+  baselineStdDev: number;
+  currentValue: number;
+  triggeringArticles: Array<{ headline: string; publishedAt: string }>;
+  sentAt: string;
+}
+
+// ============================================================
 // Prediction Snapshot Entity Type
 // ============================================================
 
@@ -361,6 +395,14 @@ export function makeWatchlistPK(userSub: string): string {
 
 export function makeWatchlistSK(ticker: string): string {
   return `${EntityPrefix.WATCHLIST}#${ticker.toUpperCase()}`;
+}
+
+export function makeAlertPrefsSK(): string {
+  return 'ALERT_PREFS';
+}
+
+export function makeAlertHistorySK(timestamp: string, ticker: string): string {
+  return `${EntityPrefix.ALERT}#${timestamp}#${ticker}`;
 }
 
 // ============================================================

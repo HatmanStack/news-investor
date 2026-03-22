@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'jest-expo',
   rootDir: '.',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/src', '<rootDir>/app'],
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-reanimated|react-native-worklets)',
   ],

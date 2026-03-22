@@ -4,6 +4,7 @@ import { PortfolioItem } from '../PortfolioItem';
 import { createTestWrapper } from '@/utils/testUtils';
 import { theme } from '@/theme/theme';
 import { useLatestStockPrice, useStockData } from '@/hooks';
+import { useRecentAlerts } from '@/hooks/useRecentAlerts';
 
 // Mock the hooks
 jest.mock('@/hooks', () => ({
@@ -14,6 +15,14 @@ jest.mock('@/hooks', () => ({
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
+}));
+
+jest.mock('@/hooks/useRecentAlerts', () => ({
+  useRecentAlerts: jest.fn(() => ({
+    recentAlerts: [],
+    hasAlertForTicker: jest.fn(() => false),
+    isLoading: false,
+  })),
 }));
 
 jest.mock('@/hooks/useDailyHistory', () => ({
@@ -36,6 +45,7 @@ const mockUseLatestStockPrice = useLatestStockPrice as jest.MockedFunction<
   typeof useLatestStockPrice
 >;
 const mockUseStockData = useStockData as jest.MockedFunction<typeof useStockData>;
+const mockUseRecentAlerts = useRecentAlerts as jest.MockedFunction<typeof useRecentAlerts>;
 
 const mockItem = {
   ticker: 'AAPL',
@@ -317,6 +327,46 @@ describe('PortfolioItem', () => {
         { wrapper },
       );
       expect(getByLabelText('Collapse heatmap')).toBeTruthy();
+    });
+  });
+
+  describe('alert badge', () => {
+    beforeEach(() => {
+      mockUseLatestStockPrice.mockReturnValue({
+        data: mockLatestPrice,
+        isLoading: false,
+        error: null,
+      } as any);
+    });
+
+    it('should render alert badge when hasAlertForTicker returns true', () => {
+      mockUseRecentAlerts.mockReturnValue({
+        recentAlerts: [
+          { ticker: 'AAPL', alertType: 'sentiment_shift', sentAt: '2026-03-22T10:00:00Z' },
+        ],
+        hasAlertForTicker: jest.fn((t: string) => t === 'AAPL'),
+        isLoading: false,
+      });
+
+      const { getByTestId } = render(
+        <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
+        { wrapper },
+      );
+      expect(getByTestId('alert-badge')).toBeTruthy();
+    });
+
+    it('should not render alert badge when no recent alert exists', () => {
+      mockUseRecentAlerts.mockReturnValue({
+        recentAlerts: [],
+        hasAlertForTicker: jest.fn(() => false),
+        isLoading: false,
+      });
+
+      const { queryByTestId } = render(
+        <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
+        { wrapper },
+      );
+      expect(queryByTestId('alert-badge')).toBeNull();
     });
   });
 });
