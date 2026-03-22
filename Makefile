@@ -1,4 +1,4 @@
-.PHONY: setup test test-e2e lint check localstack localstack-stop dev
+.PHONY: setup test test-e2e lint check localstack localstack-stop dev build-admin deploy-admin
 
 setup:
 	npm install --legacy-peer-deps
@@ -23,3 +23,9 @@ localstack-stop:
 
 dev: setup localstack  ## One-step local development setup
 	@echo "Ready. Run 'npm start' to start the Expo dev server."
+
+build-admin:
+	cd admin && npm run build
+
+deploy-admin:
+	cd admin && npm run deploy

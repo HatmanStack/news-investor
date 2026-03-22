@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [2.8.0] - 2026-03-22
+
+### Added
+
+- **[Pro]** Admin metrics dashboard: standalone Vite/React SPA with Shadcn/ui and Recharts at `admin/`
+- **[Pro]** Cognito admin group authorization with JWT `cognito:groups` claim enforcement
+- **[Pro]** Operational metrics dashboard: Lambda invocations, errors, latency, DynamoDB capacity from CloudWatch
+- **[Pro]** Per-endpoint breakdown: route-level latency, cache hit rates, and error rates from CloudWatch EMF metrics
+- **[Pro]** Business metrics dashboard: user signups, tier distribution, DAU/WAU/MAU, feature adoption, quota usage
+- **[Pro]** Cost estimates page via AWS Pricing API with per-service breakdowns
+- **[Pro]** Admin user list with tier badges, sorting, and email search
+- **[Pro]** Scheduled metrics aggregation Lambda (daily EventBridge) for pre-computed DynamoDB snapshots
+- **[Pro]** S3/CloudFront hosting for admin SPA with OAC security
+- **[Pro]** Admin deploy script with CloudFormation output integration
+
+### Changed
+
+- Backend build now produces five bundles (API, Reports, Alerts, Admin, Aggregation)
+- Added `admin/` as third npm workspace in monorepo
+
 ## [2.7.0] - 2026-03-22
 
 ### Added

@@ -5,7 +5,8 @@
   "license": "Apache-2.0",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "admin"
   ],
   "scripts": {
     "start": "cd frontend && expo start",
@@ -19,6 +20,8 @@
     "lint:docs": "markdownlint-cli2 '*.md' 'docs/*.md' '.github/**/*.md'",
     "lint:docs:links": "command -v lychee > /dev/null 2>&1 && lychee --no-progress '*.md' 'docs/*.md' || echo 'Install lychee (https://github.com/lycheeverse/lychee) for local link checking'",
     "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:docs && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
+    "lint:admin": "cd admin && npm run type-check",
+    "build:admin": "cd admin && npm run build",
     "deploy": "./backend/scripts/deploy.sh",
     "hygiene": "./scripts/code-hygiene.sh",
     "format": "prettier --write .",

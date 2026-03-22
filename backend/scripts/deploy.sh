@@ -288,3 +288,16 @@ fi
 echo "Updated frontend .env with API URL"
 echo ""
 echo "EXPO_PUBLIC_BACKEND_URL=$API_URL"
+
+echo ""
+echo "==================================="
+echo "Step 5: Deploy Admin Dashboard"
+echo "==================================="
+echo ""
+
+read -p "Deploy admin dashboard? [Y/n]: " deploy_admin
+if [[ ! "$deploy_admin" =~ ^[Nn]$ ]]; then
+    (cd ../admin && ./scripts/deploy-admin.sh)
+else
+    echo "Skipping admin dashboard deployment."
+fi

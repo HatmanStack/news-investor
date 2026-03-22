@@ -67,3 +67,14 @@ export function errorResponse(message: string, statusCode: number = 500): APIGat
 export function getCorsHeaders(): Record<string, string> {
   return getCorsHeadersInternal();
 }
+
+/**
+ * Extract HTTP status code from an error object.
+ * Returns the statusCode property if present, otherwise defaults to 500.
+ */
+export function getErrorStatusCode(error: unknown): number {
+  if (error instanceof Error && 'statusCode' in error) {
+    return (error as { statusCode: number }).statusCode;
+  }
+  return 500;
+}

@@ -11,6 +11,7 @@ backend/samconfig.toml
 backend/.aws-sam/
 docs-data/
 *.swp
+*.tsbuildinfo
 backend/bin/sam
 **/__pycache__/
 .serena/
