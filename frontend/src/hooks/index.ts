@@ -25,12 +25,7 @@ export { useLayoutDensity } from './useLayoutDensity';
 export type { LayoutDensity } from './useLayoutDensity';
 
 // Chart data hooks
-export {
-  useChartData,
-  transformPriceData,
-  transformSentimentData,
-  calculatePriceChange,
-} from './useChartData';
+export { transformSentimentData, calculatePriceChange } from './useChartData';
 export type { ChartDataPoint, PriceChange } from './useChartData';
 
 // Responsive hooks

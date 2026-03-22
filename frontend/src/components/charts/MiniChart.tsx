@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
-import { LineChart } from 'react-native-svg-charts';
+import { Svg, Polyline } from 'react-native-svg';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import * as shape from 'd3-shape';
 import type { ChartDataPoint } from '@/hooks/useChartData';
 
 interface MiniChartProps {
@@ -13,6 +12,8 @@ interface MiniChartProps {
   positive?: boolean;
 }
 
+const INSET = 2;
+
 const MiniChartComponent = ({
   data,
   width = 60,
@@ -21,7 +22,6 @@ const MiniChartComponent = ({
 }: MiniChartProps) => {
   const theme = useAppTheme();
 
-  // Extract y-values for the chart
   const chartData = useMemo(() => {
     if (data.length === 0) return [];
 
@@ -34,6 +34,36 @@ const MiniChartComponent = ({
     return data.map((d) => d.y);
   }, [data]);
 
+  const pointsString = useMemo(() => {
+    if (chartData.length === 0) return '';
+
+    let minY = chartData[0] ?? 0;
+    let maxY = chartData[0] ?? 0;
+    for (const val of chartData) {
+      if (val < minY) minY = val;
+      if (val > maxY) maxY = val;
+    }
+
+    // Avoid division by zero for constant values
+    if (minY === maxY) {
+      maxY = minY + 1;
+    }
+
+    const drawWidth = width - INSET * 2;
+    const drawHeight = height - INSET * 2;
+    const range = maxY - minY;
+
+    return chartData
+      .map((val, i) => {
+        const x =
+          INSET +
+          (chartData.length === 1 ? drawWidth / 2 : (i / (chartData.length - 1)) * drawWidth);
+        const y = INSET + drawHeight - ((val - minY) / range) * drawHeight;
+        return `${x},${y}`;
+      })
+      .join(' ');
+  }, [chartData, width, height]);
+
   const chartColor = positive ? theme.colors.positive : theme.colors.negative;
 
   if (chartData.length === 0) {
@@ -42,19 +72,11 @@ const MiniChartComponent = ({
 
   return (
     <Animated.View entering={FadeIn.duration(200)} style={{ width, height }}>
-      <LineChart
-        style={{ flex: 1 }}
-        data={chartData}
-        contentInset={{ top: 2, bottom: 2, left: 2, right: 2 }}
-        curve={shape.curveNatural}
-        svg={{
-          stroke: chartColor,
-          strokeWidth: 1.5,
-        }}
-      />
+      <Svg width={width} height={height}>
+        <Polyline points={pointsString} fill="none" stroke={chartColor} strokeWidth={1.5} />
+      </Svg>
     </Animated.View>
   );
 };
 
-// Memoize component to prevent unnecessary re-renders
 export const MiniChart = React.memo(MiniChartComponent);

@@ -2,12 +2,11 @@
  * Price Screen - Displays OHLCV price data for a stock
  */
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { useStockDetail } from '@/contexts/StockDetailContext';
-import { useStock } from '@/contexts/StockContext';
 import { useSymbolDetails } from '@/hooks/useSymbolSearch';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useContentWidth } from '@/hooks/useContentWidth';
@@ -18,8 +17,6 @@ import { PriceListHeader } from '@/components/stock/PriceListHeader';
 import { PriceListItem } from '@/components/stock/PriceListItem';
 import { DataTable, DataTableColumn, MonoText } from '@/components/common';
 import { PriceChart } from '@/components/charts/PriceChart';
-import { TimeRangeSelector } from '@/components/common/TimeRangeSelector';
-import type { TimeRange } from '@/components/common/TimeRangeSelector';
 import { Skeleton } from '@/components/common/Skeleton';
 import { LoadingIndicator } from '@/components/common/LoadingIndicator';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
@@ -29,31 +26,18 @@ import type { StockDetails } from '@/types/database.types';
 interface ChartSectionProps {
   data: StockDetails[];
   isLoading: boolean;
-  selectedRange: TimeRange;
-  onRangeChange: (range: TimeRange) => void;
   chartHeight?: number;
 }
 
-function ChartSection({
-  data,
-  isLoading,
-  selectedRange,
-  onRangeChange,
-  chartHeight = 250,
-}: ChartSectionProps) {
+function ChartSection({ data, isLoading, chartHeight = 250 }: ChartSectionProps) {
   return (
-    <>
-      <View style={styles.chartContainer}>
-        {isLoading ? (
-          <Skeleton width="90%" height={chartHeight} style={styles.chartSkeleton} />
-        ) : data.length > 0 ? (
-          <PriceChart data={data} />
-        ) : null}
-      </View>
-      <View style={styles.timeRangeRow}>
-        <TimeRangeSelector selectedRange={selectedRange} onRangeChange={onRangeChange} />
-      </View>
-    </>
+    <View style={styles.chartContainer}>
+      {isLoading ? (
+        <Skeleton width="90%" height={chartHeight} style={styles.chartSkeleton} />
+      ) : data.length > 0 ? (
+        <PriceChart data={data} />
+      ) : null}
+    </View>
   );
 }
 
@@ -64,18 +48,9 @@ export default function PriceScreen() {
     stockLoading: isPriceLoading,
     stockError: priceError,
   } = useStockDetail();
-  const { selectedTimeRange, setTimeRange } = useStock();
   const theme = useTheme();
   const { isDesktop, isTablet } = useResponsive();
   const { contentWidth } = useContentWidth();
-
-  // Time range is now shared via context - changing it updates both Price and Sentiment tabs
-  const handleRangeChange = useCallback(
-    (range: TimeRange) => {
-      setTimeRange(range);
-    },
-    [setTimeRange],
-  );
 
   // Fetch symbol details for metadata card
   const {
@@ -210,12 +185,7 @@ export default function PriceScreen() {
       >
         <View style={[styles.centeredContent, { width: contentWidth }]}>
           <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
-            <ChartSection
-              data={sortedStockData}
-              isLoading={isPriceLoading}
-              selectedRange={selectedTimeRange}
-              onRangeChange={handleRangeChange}
-            />
+            <ChartSection data={sortedStockData} isLoading={isPriceLoading} />
             <View style={styles.desktopLayout}>
               <View style={styles.desktopLeftColumn}>
                 <DataTable
@@ -251,12 +221,7 @@ export default function PriceScreen() {
       >
         <View style={[styles.centeredContent, { width: contentWidth }]}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ChartSection
-              data={sortedStockData}
-              isLoading={isPriceLoading}
-              selectedRange={selectedTimeRange}
-              onRangeChange={handleRangeChange}
-            />
+            <ChartSection data={sortedStockData} isLoading={isPriceLoading} />
             <StockMetadataCard symbol={symbol || null} isLoading={isSymbolLoading} />
             <SectorBenchmarkCard
               ticker={ticker as string}
@@ -292,13 +257,7 @@ export default function PriceScreen() {
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
         >
-          <ChartSection
-            data={sortedStockData}
-            isLoading={isPriceLoading}
-            selectedRange={selectedTimeRange}
-            onRangeChange={handleRangeChange}
-            chartHeight={220}
-          />
+          <ChartSection data={sortedStockData} isLoading={isPriceLoading} chartHeight={220} />
           <View style={styles.contentRow}>
             <View style={styles.priceColumn}>
               <PriceListHeader />
@@ -342,7 +301,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  // Mobile layout with chart + two-column
   mobileLayout: {
     flex: 1,
   },
@@ -358,15 +316,6 @@ const styles = StyleSheet.create({
     width: '40%',
     paddingLeft: 8,
   },
-  // Time range selector row
-  timeRangeRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 8,
-    marginTop: -16,
-    marginBottom: 8,
-  },
-  // Desktop responsive layout
   desktopLayout: {
     flexDirection: 'row',
     padding: 20,

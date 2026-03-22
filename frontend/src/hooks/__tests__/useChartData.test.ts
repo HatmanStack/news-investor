@@ -1,113 +1,12 @@
-import { transformPriceData, transformSentimentData, calculatePriceChange } from '../useChartData';
+import {
+  transformSentimentData,
+  calculatePriceChange,
+  transformPriceForLine,
+  transformPriceForCandlestick,
+} from '../useChartData';
 import type { StockDetails, CombinedWordDetails } from '@/types/database.types';
 
 describe('useChartData', () => {
-  describe('transformPriceData', () => {
-    const mockStockData: StockDetails[] = [
-      {
-        hash: 1,
-        date: '2025-11-01',
-        ticker: 'AAPL',
-        close: 100,
-        high: 102,
-        low: 98,
-        open: 99,
-        volume: 1000000,
-        adjClose: 100,
-        adjHigh: 102,
-        adjLow: 98,
-        adjOpen: 99,
-        adjVolume: 1000000,
-        divCash: 0,
-        splitFactor: 1,
-        marketCap: 1000000000,
-        enterpriseVal: 1000000000,
-        peRatio: 20,
-        pbRatio: 5,
-        trailingPEG1Y: 1.5,
-      },
-      {
-        hash: 2,
-        date: '2025-11-02',
-        ticker: 'AAPL',
-        close: 105,
-        high: 106,
-        low: 103,
-        open: 104,
-        volume: 1200000,
-        adjClose: 105,
-        adjHigh: 106,
-        adjLow: 103,
-        adjOpen: 104,
-        adjVolume: 1200000,
-        divCash: 0,
-        splitFactor: 1,
-        marketCap: 1050000000,
-        enterpriseVal: 1050000000,
-        peRatio: 21,
-        pbRatio: 5.2,
-        trailingPEG1Y: 1.6,
-      },
-      {
-        hash: 3,
-        date: '2025-11-03',
-        ticker: 'AAPL',
-        close: 103,
-        high: 105,
-        low: 102,
-        open: 105,
-        volume: 1100000,
-        adjClose: 103,
-        adjHigh: 105,
-        adjLow: 102,
-        adjOpen: 105,
-        adjVolume: 1100000,
-        divCash: 0,
-        splitFactor: 1,
-        marketCap: 1030000000,
-        enterpriseVal: 1030000000,
-        peRatio: 20.5,
-        pbRatio: 5.1,
-        trailingPEG1Y: 1.55,
-      },
-    ];
-
-    it('transforms stock data to Victory format', () => {
-      const result = transformPriceData(mockStockData);
-
-      expect(result).toHaveLength(3);
-      expect(result[0]).toHaveProperty('x');
-      expect(result[0]).toHaveProperty('y');
-      expect(result[0].x).toBeInstanceOf(Date);
-      expect(result[0].y).toBe(100);
-    });
-
-    it('sorts data by date ascending', () => {
-      const unsortedData = [mockStockData[2], mockStockData[0], mockStockData[1]];
-      const result = transformPriceData(unsortedData);
-
-      expect(result[0].y).toBe(100); // Nov 1
-      expect(result[1].y).toBe(105); // Nov 2
-      expect(result[2].y).toBe(103); // Nov 3
-    });
-
-    it('handles empty data gracefully', () => {
-      const result = transformPriceData([]);
-
-      expect(result).toEqual([]);
-    });
-
-    it('filters out null/undefined prices', () => {
-      const dataWithNulls = [
-        ...mockStockData,
-        { ...mockStockData[0], close: null as any, date: '2025-11-04' },
-      ];
-      const result = transformPriceData(dataWithNulls);
-
-      expect(result).toHaveLength(3);
-    });
-  });
-
   describe('transformSentimentData', () => {
     const mockSentimentData: CombinedWordDetails[] = [
       {
@@ -148,7 +47,7 @@ describe('useChartData', () => {
       },
     ];
 
-    it('transforms sentiment data to Victory format', () => {
+    it('transforms sentiment data to chart format', () => {
       const result = transformSentimentData(mockSentimentData);
 
       expect(result).toHaveLength(3);
@@ -181,6 +80,167 @@ describe('useChartData', () => {
       const result = transformSentimentData(dataWithNulls);
 
       expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('transformPriceForLine', () => {
+    const mockStockData: StockDetails[] = [
+      {
+        hash: 1,
+        date: '2025-11-01',
+        ticker: 'AAPL',
+        close: 100,
+        high: 102,
+        low: 98,
+        open: 99,
+        volume: 1000000,
+        adjClose: 100,
+        adjHigh: 102,
+        adjLow: 98,
+        adjOpen: 99,
+        adjVolume: 1000000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1000000000,
+        enterpriseVal: 1000000000,
+        peRatio: 20,
+        pbRatio: 5,
+        trailingPEG1Y: 1.5,
+      },
+      {
+        hash: 2,
+        date: '2025-11-03',
+        ticker: 'AAPL',
+        close: 103,
+        high: 105,
+        low: 102,
+        open: 105,
+        volume: 1100000,
+        adjClose: 103,
+        adjHigh: 105,
+        adjLow: 102,
+        adjOpen: 105,
+        adjVolume: 1100000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1030000000,
+        enterpriseVal: 1030000000,
+        peRatio: 20.5,
+        pbRatio: 5.1,
+        trailingPEG1Y: 1.55,
+      },
+    ];
+
+    it('transforms StockDetails to { time, value } format', () => {
+      const result = transformPriceForLine(mockStockData);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({ time: '2025-11-01', value: 100 });
+      expect(result[1]).toEqual({ time: '2025-11-03', value: 103 });
+    });
+
+    it('sorts by date ascending', () => {
+      const reversed = [...mockStockData].reverse();
+      const result = transformPriceForLine(reversed);
+      expect(result[0].time).toBe('2025-11-01');
+      expect(result[1].time).toBe('2025-11-03');
+    });
+
+    it('filters out null close values', () => {
+      const withNull = [
+        ...mockStockData,
+        { ...mockStockData[0], close: null as any, date: '2025-11-04' },
+      ];
+      const result = transformPriceForLine(withNull);
+      expect(result).toHaveLength(2);
+    });
+
+    it('handles empty array', () => {
+      expect(transformPriceForLine([])).toEqual([]);
+    });
+
+    it('returns time as string, not Date', () => {
+      const result = transformPriceForLine(mockStockData);
+      expect(typeof result[0].time).toBe('string');
+    });
+  });
+
+  describe('transformPriceForCandlestick', () => {
+    const mockStockData: StockDetails[] = [
+      {
+        hash: 1,
+        date: '2025-11-01',
+        ticker: 'AAPL',
+        close: 100,
+        high: 102,
+        low: 98,
+        open: 99,
+        volume: 1000000,
+        adjClose: 100,
+        adjHigh: 102,
+        adjLow: 98,
+        adjOpen: 99,
+        adjVolume: 1000000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1000000000,
+        enterpriseVal: 1000000000,
+        peRatio: 20,
+        pbRatio: 5,
+        trailingPEG1Y: 1.5,
+      },
+      {
+        hash: 2,
+        date: '2025-11-03',
+        ticker: 'AAPL',
+        close: 103,
+        high: 105,
+        low: 102,
+        open: 105,
+        volume: 1100000,
+        adjClose: 103,
+        adjHigh: 105,
+        adjLow: 102,
+        adjOpen: 105,
+        adjVolume: 1100000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1030000000,
+        enterpriseVal: 1030000000,
+        peRatio: 20.5,
+        pbRatio: 5.1,
+        trailingPEG1Y: 1.55,
+      },
+    ];
+
+    it('transforms StockDetails to OHLC format', () => {
+      const result = transformPriceForCandlestick(mockStockData);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        time: '2025-11-01',
+        open: 99,
+        high: 102,
+        low: 98,
+        close: 100,
+      });
+    });
+
+    it('sorts by date ascending', () => {
+      const reversed = [...mockStockData].reverse();
+      const result = transformPriceForCandlestick(reversed);
+      expect(result[0].time).toBe('2025-11-01');
+    });
+
+    it('filters out entries with null OHLC fields', () => {
+      const withNull = [
+        ...mockStockData,
+        { ...mockStockData[0], open: null as any, date: '2025-11-04' },
+      ];
+      const result = transformPriceForCandlestick(withNull);
+      expect(result).toHaveLength(2);
+    });
+
+    it('handles empty array', () => {
+      expect(transformPriceForCandlestick([])).toEqual([]);
     });
   });
 

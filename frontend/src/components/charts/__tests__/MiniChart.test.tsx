@@ -19,8 +19,17 @@ describe('MiniChart', () => {
         <MiniChart data={mockData} positive />
       </PaperProvider>,
     );
-
     expect(toJSON()).toBeTruthy();
+  });
+
+  it('renders SVG elements', () => {
+    const { UNSAFE_getByType, UNSAFE_getAllByType } = render(
+      <PaperProvider theme={theme}>
+        <MiniChart data={mockData} positive />
+      </PaperProvider>,
+    );
+    expect(UNSAFE_getByType('Svg' as any)).toBeTruthy();
+    expect(UNSAFE_getAllByType('Polyline' as any).length).toBe(1);
   });
 
   it('renders with positive trend', () => {
@@ -29,7 +38,6 @@ describe('MiniChart', () => {
         <MiniChart data={mockData} positive />
       </PaperProvider>,
     );
-
     expect(toJSON()).toBeTruthy();
   });
 
@@ -39,13 +47,11 @@ describe('MiniChart', () => {
       { x: new Date('2025-11-02'), y: 95 },
       { x: new Date('2025-11-03'), y: 93 },
     ];
-
     const { toJSON } = render(
       <PaperProvider theme={theme}>
         <MiniChart data={negativeData} positive={false} />
       </PaperProvider>,
     );
-
     expect(toJSON()).toBeTruthy();
   });
 
@@ -55,7 +61,6 @@ describe('MiniChart', () => {
         <MiniChart data={[]} positive />
       </PaperProvider>,
     );
-
     expect(toJSON()).toBeTruthy();
   });
 
@@ -65,19 +70,29 @@ describe('MiniChart', () => {
         <MiniChart data={mockData} width={80} height={40} positive />
       </PaperProvider>,
     );
-
     expect(toJSON()).toBeTruthy();
   });
 
-  it('renders compact size by default', () => {
-    const { toJSON } = render(
+  it('handles data longer than 15 points (sampling)', () => {
+    const longData = Array.from({ length: 30 }, (_, i) => ({
+      x: new Date(`2025-11-${String(i + 1).padStart(2, '0')}`),
+      y: 100 + i,
+    }));
+    const { UNSAFE_getByType } = render(
       <PaperProvider theme={theme}>
-        <MiniChart data={mockData} positive />
+        <MiniChart data={longData} positive />
       </PaperProvider>,
     );
+    expect(UNSAFE_getByType('Svg' as any)).toBeTruthy();
+  });
 
-    const tree = toJSON();
-    expect(tree).toBeTruthy();
-    // Chart should be small for portfolio items
+  it('handles single data point', () => {
+    const singleData = [{ x: new Date('2025-11-01'), y: 100 }];
+    const { toJSON } = render(
+      <PaperProvider theme={theme}>
+        <MiniChart data={singleData} positive />
+      </PaperProvider>,
+    );
+    expect(toJSON()).toBeTruthy();
   });
 });

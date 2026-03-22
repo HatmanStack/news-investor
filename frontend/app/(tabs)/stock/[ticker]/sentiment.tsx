@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { useContentWidth } from '@/hooks/useContentWidth';
 import { useStockDetail } from '@/contexts/StockDetailContext';
-import { useStock } from '@/contexts/StockContext';
 import { SentimentToggle } from '@/components/sentiment/SentimentToggle';
 import { SentimentChart } from '@/components/charts/SentimentChart';
 import { SentimentListHeader } from '@/components/sentiment/SentimentListHeader';
@@ -20,8 +19,6 @@ import { ComparativeSentimentCard } from '@/components/sentiment/ComparativeSent
 import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
 import { TrackRecordCard } from '@/components/predictions/TrackRecordCard';
 import { PredictionHistory } from '@/components/predictions/PredictionHistory';
-import { TimeRangeSelector } from '@/components/common/TimeRangeSelector';
-import type { TimeRange } from '@/components/common/TimeRangeSelector';
 import { Skeleton } from '@/components/common/Skeleton';
 import { LoadingIndicator } from '@/components/common/LoadingIndicator';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
@@ -38,18 +35,9 @@ export default function SentimentScreen() {
     articleSentimentLoading: isArticleLoading,
     articleSentimentError: articleError,
   } = useStockDetail();
-  const { selectedTimeRange, setTimeRange } = useStock();
   const theme = useTheme();
   const { contentWidth } = useContentWidth();
   const [viewMode, setViewMode] = useState<'aggregate' | 'individual'>('aggregate');
-
-  // Time range is now shared via context - changing it updates both Price and Sentiment tabs
-  const handleRangeChange = useCallback(
-    (range: TimeRange) => {
-      setTimeRange(range);
-    },
-    [setTimeRange],
-  );
 
   // Sort data by date descending
   const sortedAggregateData = useMemo(() => {
@@ -123,12 +111,6 @@ export default function SentimentScreen() {
                   <SentimentChart data={sortedAggregateData} />
                 ) : null}
               </View>
-              <View style={styles.timeRangeRow}>
-                <TimeRangeSelector
-                  selectedRange={selectedTimeRange}
-                  onRangeChange={handleRangeChange}
-                />
-              </View>
               <SentimentListHeader />
             </>
           )}
@@ -166,14 +148,6 @@ export default function SentimentScreen() {
           keyExtractor={keyExtractorArticle}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
-          ListHeaderComponent={() => (
-            <View style={styles.timeRangeRow}>
-              <TimeRangeSelector
-                selectedRange={selectedTimeRange}
-                onRangeChange={handleRangeChange}
-              />
-            </View>
-          )}
           contentContainerStyle={styles.listContent}
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
@@ -216,11 +190,6 @@ const styles = StyleSheet.create({
   },
   chartSkeleton: {
     alignSelf: 'center',
-  },
-  timeRangeRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 8,
   },
   listContent: {
     paddingBottom: 8,

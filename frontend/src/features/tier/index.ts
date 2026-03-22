@@ -29,13 +29,14 @@ export interface TierInfo {
 const TIER_VALUE: TierInfo = {
   tier: 'free',
   features: {
-    model_diagnostics: true,
-    materiality_heatmap: true,
+    advanced_charting: true,
     comparative_sentiment: true,
     email_reports: true,
-    watchlist_sync: true,
     extended_date_range: true,
+    materiality_heatmap: true,
+    model_diagnostics: true,
     portfolio_analytics: true,
+    watchlist_sync: true,
   },
   quotas: {} as Record<string, never>,
   usage: {} as Record<string, never>,

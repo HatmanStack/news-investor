@@ -30,14 +30,14 @@ interface StockProviderProps {
 export function StockProvider({ children }: StockProviderProps) {
   const [selectedTicker, setSelectedTicker] = useState<string | null>('AAPL'); // Default to AAPL
   const [selectedDate, setSelectedDate] = useState<string>(formatDateForDB(new Date()));
-  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('1M');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('5Y');
 
-  // Default date range: last 30 days (matches '1M' time range)
+  // Default date range: last 5 years (matches '5Y' time range)
   const today = new Date();
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(today.getDate() - 30);
+  const fiveYearsAgo = new Date(today);
+  fiveYearsAgo.setDate(today.getDate() - 1825);
 
-  const [startDate, setStartDate] = useState<string>(formatDateForDB(thirtyDaysAgo));
+  const [startDate, setStartDate] = useState<string>(formatDateForDB(fiveYearsAgo));
   const [endDate, setEndDate] = useState<string>(formatDateForDB(today));
 
   const setDateRange = useCallback((start: string, end: string) => {

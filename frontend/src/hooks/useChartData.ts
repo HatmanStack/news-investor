@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import type { Time } from 'lightweight-charts';
 import type { StockDetails, CombinedWordDetails } from '@/types/database.types';
 
 export interface ChartDataPoint {
@@ -12,25 +12,7 @@ export interface PriceChange {
 }
 
 /**
- * Transform stock price data to Victory Native chart format
- * Filters out null/undefined prices and sorts by date ascending
- */
-export function transformPriceData(stocks: StockDetails[]): ChartDataPoint[] {
-  if (!stocks || stocks.length === 0) {
-    return [];
-  }
-
-  return stocks
-    .filter((stock) => stock.close != null && stock.date != null)
-    .map((stock) => ({
-      x: new Date(stock.date),
-      y: stock.close,
-    }))
-    .sort((a, b) => a.x.getTime() - b.x.getTime());
-}
-
-/**
- * Transform sentiment data to Victory Native chart format
+ * Transform sentiment data to chart format
  * Filters out null/undefined sentiment scores and sorts by date ascending
  */
 export function transformSentimentData(sentiment: CombinedWordDetails[]): ChartDataPoint[] {
@@ -76,20 +58,57 @@ export function calculatePriceChange(data: ChartDataPoint[]): PriceChange {
   return { isPositive, percentage };
 }
 
+// --- Lightweight Charts data transforms ---
+
+export interface LightweightLineData {
+  time: Time;
+  value: number;
+}
+
+export interface LightweightCandlestickData {
+  time: Time;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 /**
- * Hook to transform and memoize chart data
- * Prevents unnecessary recalculations when data hasn't changed
+ * Transform stock price data to Lightweight Charts line series format
  */
-export function useChartData(stocks: StockDetails[] = [], sentiment: CombinedWordDetails[] = []) {
-  const priceData = useMemo(() => transformPriceData(stocks), [stocks]);
+export function transformPriceForLine(stocks: StockDetails[]): LightweightLineData[] {
+  if (!stocks || stocks.length === 0) return [];
 
-  const sentimentData = useMemo(() => transformSentimentData(sentiment), [sentiment]);
+  return stocks
+    .filter((stock) => stock.close != null && stock.date != null)
+    .map((stock) => ({
+      time: stock.date as Time,
+      value: stock.close,
+    }))
+    .sort((a, b) => (a.time as string).localeCompare(b.time as string));
+}
 
-  const priceChange = useMemo(() => calculatePriceChange(priceData), [priceData]);
+/**
+ * Transform stock price data to Lightweight Charts candlestick series format
+ */
+export function transformPriceForCandlestick(stocks: StockDetails[]): LightweightCandlestickData[] {
+  if (!stocks || stocks.length === 0) return [];
 
-  return {
-    priceData,
-    sentimentData,
-    priceChange,
-  };
+  return stocks
+    .filter(
+      (stock) =>
+        stock.date != null &&
+        stock.open != null &&
+        stock.high != null &&
+        stock.low != null &&
+        stock.close != null,
+    )
+    .map((stock) => ({
+      time: stock.date as Time,
+      open: stock.open,
+      high: stock.high,
+      low: stock.low,
+      close: stock.close,
+    }))
+    .sort((a, b) => (a.time as string).localeCompare(b.time as string));
 }

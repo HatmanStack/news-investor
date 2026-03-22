@@ -3,7 +3,7 @@ module.exports = {
   rootDir: '.',
   roots: ['<rootDir>/src'],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|d3-.*|react-native-svg-charts|react-native-reanimated|react-native-worklets)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-reanimated|react-native-worklets)',
   ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/**/*.test.{ts,tsx}'],
   coverageThreshold: {
@@ -25,9 +25,9 @@ module.exports = {
     '^@/database$': '<rootDir>/__mocks__/src/database/index.ts',
     '^@/database/index$': '<rootDir>/__mocks__/src/database/index.ts',
     'react-native-svg$': '<rootDir>/__mocks__/react-native-svg.ts',
-    'react-native-svg-charts$': '<rootDir>/__mocks__/react-native-svg-charts.ts',
     'react-native-worklets$': '<rootDir>/__mocks__/react-native-worklets.ts',
     'react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.ts',
+    'lightweight-charts$': '<rootDir>/__mocks__/lightweight-charts.ts',
     // react-test-renderer removed from deps (RN 0.81+ deprecates it), but RNTL
     // still needs it internally — use jest-expo's vendored copy
     '^react-test-renderer$': '<rootDir>/../node_modules/jest-expo/node_modules/react-test-renderer',
