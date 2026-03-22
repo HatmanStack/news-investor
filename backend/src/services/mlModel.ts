@@ -275,16 +275,8 @@ export function generate_predictions(
 
     const probValue = predict(normalizedFeatures, model);
 
-    let direction: 'up' | 'down' = 'down';
-    let probability = 0;
-
-    if (probValue >= 0.5) {
-      direction = 'up';
-      probability = probValue;
-    } else {
-      direction = 'down';
-      probability = 1 - probValue;
-    }
+    const direction: 'up' | 'down' = probValue >= 0.5 ? 'up' : 'down';
+    const probability = probValue >= 0.5 ? probValue : 1 - probValue;
 
     predictions.push({
       direction,

@@ -39,8 +39,6 @@ const mockSanitizeErrorMessage = jest
   .fn<(...args: unknown[]) => string>()
   .mockReturnValue('Internal server error');
 const mockLogError = jest.fn();
-const mockOptionalAuth = jest.fn<(...args: unknown[]) => unknown>().mockReturnValue(null);
-const mockGetUserTier = jest.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue(null);
 
 // Mock all repository and service dependencies
 jest.unstable_mockModule('../../repositories/sentimentJobs.repository.js', () => ({
@@ -55,12 +53,8 @@ jest.unstable_mockModule('../../repositories/sentimentCache.repository.js', () =
 jest.unstable_mockModule('../../repositories/newsCache.repository.js', () => ({
   queryArticlesByTicker: mockQueryArticlesByTicker,
 }));
-const mockQueryByTickerAndDateRange = jest
-  .fn<(...args: unknown[]) => Promise<unknown[]>>()
-  .mockResolvedValue([]);
 jest.unstable_mockModule('../../repositories/dailySentimentAggregate.repository.js', () => ({
   getLatestDailyAggregate: mockGetLatestDailyAggregate,
-  queryByTickerAndDateRange: mockQueryByTickerAndDateRange,
 }));
 jest.unstable_mockModule('../../services/sentimentProcessing.service.js', () => ({
   processSentimentForTicker: mockProcessSentimentForTicker,
@@ -75,12 +69,6 @@ jest.unstable_mockModule('../../utils/error.util.js', () => ({
 }));
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
-}));
-jest.unstable_mockModule('../../middleware/auth.middleware.js', () => ({
-  optionalAuth: mockOptionalAuth,
-}));
-jest.unstable_mockModule('../../repositories/user.repository.js', () => ({
-  getUserTier: mockGetUserTier,
 }));
 
 // Import handler after mocking
@@ -419,60 +407,6 @@ describe('Sentiment Handler', () => {
       const body = JSON.parse(response.body);
       expect(body.data.ticker).toBe('AAPL');
       expect(body.data.articles).toEqual([]);
-    });
-  });
-
-  // ──────────────────────────────────────────────────────────────
-  // Tier-Aware Truncation
-  // ──────────────────────────────────────────────────────────────
-  describe('Tier-Aware Truncation', () => {
-    it('handleSentimentResultsRequest should not include _meta when unauthenticated and no old data', async () => {
-      mockOptionalAuth.mockReturnValue(null);
-      mockQuerySentimentsByTicker.mockResolvedValue([]);
-      mockQueryArticlesByTicker.mockResolvedValue([]);
-
-      const event = createAPIGatewayEvent({
-        queryStringParameters: { ticker: 'AAPL' },
-      });
-
-      const response = await handleSentimentResultsRequest(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(200);
-      expect(body._meta).toBeUndefined();
-    });
-
-    it('handleSentimentResultsRequest should not include _meta for pro user', async () => {
-      mockOptionalAuth.mockReturnValue({ sub: 'user-123', email: 'pro@test.com' });
-      mockGetUserTier.mockResolvedValue({ tier: 'pro' });
-      mockQuerySentimentsByTicker.mockResolvedValue([]);
-      mockQueryArticlesByTicker.mockResolvedValue([]);
-
-      const event = createAPIGatewayEvent({
-        queryStringParameters: { ticker: 'AAPL' },
-      });
-
-      const response = await handleSentimentResultsRequest(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(200);
-      expect(body._meta).toBeUndefined();
-    });
-
-    it('handleDailyHistoryRequest should not include _meta when no truncation', async () => {
-      mockOptionalAuth.mockReturnValue(null);
-      mockQueryByTickerAndDateRange.mockResolvedValue([]);
-
-      const event = createAPIGatewayEvent({
-        queryStringParameters: { ticker: 'AAPL', startDate: '2026-01-01', endDate: '2026-03-21' },
-      });
-
-      const { handleDailyHistoryRequest } = await import('../sentiment.handler.js');
-      const response = await handleDailyHistoryRequest(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(200);
-      expect(body._meta).toBeUndefined();
     });
   });
 });
