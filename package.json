@@ -33,7 +33,7 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.4",
+    "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.4.1",
     "husky": "^9.1.7",
     "knip": "^5.86.0",
