@@ -1,9 +1,13 @@
-import { DynamoDBClientWrapper } from './dynamodb.client';
+import { queryItems } from '../utils/dynamodb.util.js';
+import {
+  makeHistoricalPK,
+  makeDateSK,
+  makeArticlePK,
+  SortKeyPrefix,
+} from '../types/dynamodb.types.js';
+import type { StockHistoricalItem, ArticleAnalysisItem } from '../types/dynamodb.types';
 import { StockPrice, ArticleSentiment, HistoricalData } from '../types/prediction.types';
-import { StockHistoricalDataItem, ArticleAnalysisDataItem } from '../types/dynamodb.types';
 import { logger } from '../utils/logger.util.js';
-
-const dynamoDB = new DynamoDBClientWrapper();
 
 /**
  * Calculates the start date given a number of days back from today.
@@ -30,10 +34,15 @@ async function fetchPriceData(
   endDate: string,
 ): Promise<StockPrice[]> {
   try {
-    const items = await dynamoDB.queryStockDataByDateRange(ticker, startDate, endDate);
+    const items = await queryItems<StockHistoricalItem>(makeHistoricalPK(ticker), {
+      skBetween: {
+        start: makeDateSK(startDate),
+        end: makeDateSK(endDate),
+      },
+    });
 
     return items
-      .map((item: StockHistoricalDataItem) => ({
+      .map((item: StockHistoricalItem) => ({
         date: item.date,
         open: item.open,
         high: item.high,
@@ -61,9 +70,14 @@ async function fetchSentimentData(
   endDate: string,
 ): Promise<ArticleSentiment[]> {
   try {
-    const items = await dynamoDB.queryArticlesByTicker(ticker, startDate, endDate);
+    const allItems = await queryItems<ArticleAnalysisItem>(makeArticlePK(ticker), {
+      skPrefix: `${SortKeyPrefix.HASH}#`,
+    });
 
-    return items.map((item: ArticleAnalysisDataItem) => ({
+    // Filter by date range client-side (SK is HASH#hash#DATE#date, not date-sortable)
+    const items = allItems.filter((item) => item.date >= startDate && item.date <= endDate);
+
+    return items.map((item: ArticleAnalysisItem) => ({
       hash: item.articleHash,
       date: item.date,
       eventType: item.eventType || null,

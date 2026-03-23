@@ -9,14 +9,13 @@
 
 import { getItem, putItem, queryItems } from '../utils/dynamodb.util.js';
 import { makeDailyPK, makeDateSK, SortKeyPrefix } from '../types/dynamodb.types.js';
-import type { DailySentimentItem } from '../types/dynamodb.types.js';
-import type { DailySentimentAggregateItem } from '../types/dynamodb.types.js';
+import type { DailySentimentItem, DailySentimentData } from '../types/dynamodb.types.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
  * Put daily sentiment aggregate (including predictions)
  */
-export async function putDailyAggregate(item: DailySentimentAggregateItem): Promise<void> {
+export async function putDailyAggregate(item: DailySentimentData): Promise<void> {
   try {
     const cacheItem = transformToInternal(item);
     await putItem(cacheItem);
@@ -32,7 +31,7 @@ export async function putDailyAggregate(item: DailySentimentAggregateItem): Prom
 export async function getDailyAggregate(
   ticker: string,
   date: string,
-): Promise<DailySentimentAggregateItem | null> {
+): Promise<DailySentimentData | null> {
   try {
     const pk = makeDailyPK(ticker);
     const sk = makeDateSK(date);
@@ -54,9 +53,7 @@ export async function getDailyAggregate(
  * Get latest daily sentiment aggregate for a ticker
  * Used to fetch the latest prediction
  */
-export async function getLatestDailyAggregate(
-  ticker: string,
-): Promise<DailySentimentAggregateItem | null> {
+export async function getLatestDailyAggregate(ticker: string): Promise<DailySentimentData | null> {
   try {
     const pk = makeDailyPK(ticker);
 
@@ -84,7 +81,7 @@ export async function queryByTickerAndDateRange(
   ticker: string,
   startDate: string,
   endDate: string,
-): Promise<DailySentimentAggregateItem[]> {
+): Promise<DailySentimentData[]> {
   try {
     const pk = makeDailyPK(ticker);
 
@@ -109,7 +106,7 @@ export async function queryByTickerAndDateRange(
 /**
  * Transform from legacy external format to single-table internal format
  */
-function transformToInternal(item: DailySentimentAggregateItem): DailySentimentItem {
+function transformToInternal(item: DailySentimentData): DailySentimentItem {
   const now = new Date().toISOString();
   const pk = makeDailyPK(item.ticker);
   const sk = makeDateSK(item.date);
@@ -140,7 +137,7 @@ function transformToInternal(item: DailySentimentAggregateItem): DailySentimentI
 /**
  * Transform from single-table internal format to legacy external format
  */
-function transformToExternal(item: DailySentimentItem): DailySentimentAggregateItem {
+function transformToExternal(item: DailySentimentItem): DailySentimentData {
   return {
     ticker: item.ticker,
     date: item.date,

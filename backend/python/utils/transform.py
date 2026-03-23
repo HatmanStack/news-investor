@@ -6,9 +6,10 @@ Converts yfinance data format to Tiingo API format for response compatibility.
 from typing import Any
 
 from constants.sector_etf_map import SECTOR_TO_ETF
+from typedefs import PriceRecord, SearchResult, StockMetadata, YahooInfo, YahooSearchQuote
 
 
-def transform_history_to_tiingo(df: Any, ticker: str) -> list[dict[str, Any]]:
+def transform_history_to_tiingo(df: Any, ticker: str) -> list[PriceRecord]:
     """
     Transform yfinance history DataFrame to Tiingo price format.
 
@@ -25,7 +26,7 @@ def transform_history_to_tiingo(df: Any, ticker: str) -> list[dict[str, Any]]:
     if df.empty:
         return []
 
-    result = []
+    result: list[PriceRecord] = []
     for idx, row in df.iterrows():
         # Convert index (Timestamp) to ISO 8601 string
         date_str = idx.strftime("%Y-%m-%dT00:00:00.000Z")
@@ -48,7 +49,7 @@ def transform_history_to_tiingo(df: Any, ticker: str) -> list[dict[str, Any]]:
         adj_high = round(high_price * adj_ratio, 4)
         adj_low = round(low_price * adj_ratio, 4)
 
-        record = {
+        record: PriceRecord = {
             "date": date_str,
             "open": round(open_price, 4),
             "high": round(high_price, 4),
@@ -68,7 +69,7 @@ def transform_history_to_tiingo(df: Any, ticker: str) -> list[dict[str, Any]]:
     return result
 
 
-def transform_info_to_metadata(info: dict[str, Any], ticker: str) -> dict[str, Any]:
+def transform_info_to_metadata(info: YahooInfo, ticker: str) -> StockMetadata:
     """
     Transform yfinance info dict to Tiingo metadata format.
 
@@ -93,7 +94,7 @@ def transform_info_to_metadata(info: dict[str, Any], ticker: str) -> dict[str, A
     }
 
 
-def transform_search_to_tiingo(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def transform_search_to_tiingo(results: list[YahooSearchQuote]) -> list[SearchResult]:
     """
     Transform Yahoo Finance search results to Tiingo search format.
 
@@ -105,7 +106,7 @@ def transform_search_to_tiingo(results: list[dict[str, Any]]) -> list[dict[str, 
         List of results in Tiingo search format:
         [{"ticker": "AAPL", "name": "Apple Inc.", ...}, ...]
     """
-    transformed = []
+    transformed: list[SearchResult] = []
     for item in results:
         # Map quoteType to Tiingo assetType
         quote_type = item.get("quoteType", "EQUITY")
@@ -121,13 +122,12 @@ def transform_search_to_tiingo(results: list[dict[str, Any]]) -> list[dict[str, 
         }
         asset_type = asset_type_map.get(quote_type, quote_type)
 
-        transformed.append(
-            {
-                "ticker": item.get("symbol", ""),
-                "name": item.get("shortname") or item.get("longname", ""),
-                "assetType": asset_type,
-                "isActive": True,  # yfinance doesn't provide, default to true
-            }
-        )
+        entry: SearchResult = {
+            "ticker": item.get("symbol", ""),
+            "name": item.get("shortname") or item.get("longname", ""),
+            "assetType": asset_type,
+            "isActive": True,  # yfinance doesn't provide, default to true
+        }
+        transformed.append(entry)
 
     return transformed

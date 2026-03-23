@@ -31,21 +31,43 @@ interface ClassificationMetrics {
   lowConfidenceCount: number;
 }
 
-const metrics: ClassificationMetrics = {
-  totalProcessed: 0,
-  eventTypeCounts: {
-    EARNINGS: 0,
-    'M&A': 0,
-    PRODUCT_LAUNCH: 0,
-    ANALYST_RATING: 0,
-    GUIDANCE: 0,
-    GENERAL: 0,
-  },
-  confidenceSum: 0,
-  durationSum: 0,
-  multiEventConflicts: 0,
-  lowConfidenceCount: 0,
-};
+function createFreshMetrics(): ClassificationMetrics {
+  return {
+    totalProcessed: 0,
+    eventTypeCounts: {
+      EARNINGS: 0,
+      'M&A': 0,
+      PRODUCT_LAUNCH: 0,
+      ANALYST_RATING: 0,
+      GUIDANCE: 0,
+      GENERAL: 0,
+    },
+    confidenceSum: 0,
+    durationSum: 0,
+    multiEventConflicts: 0,
+    lowConfidenceCount: 0,
+  };
+}
+
+// Module-level state is safe here: Lambda is single-threaded per container.
+// resetMetrics() is called at batch start to prevent cross-invocation accumulation.
+let metrics: ClassificationMetrics = createFreshMetrics();
+
+/**
+ * Reset classification metrics to zero.
+ * Call at the start of each batch/invocation to prevent
+ * cross-invocation accumulation in warm Lambda containers.
+ */
+export function resetMetrics(): void {
+  metrics = createFreshMetrics();
+}
+
+/**
+ * Return a snapshot of the current metrics (for testing/monitoring).
+ */
+export function getMetricsSnapshot(): Readonly<ClassificationMetrics> {
+  return { ...metrics };
+}
 
 /**
  * Log metrics summary to CloudWatch

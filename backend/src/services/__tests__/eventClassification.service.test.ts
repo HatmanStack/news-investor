@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { classifyEvent } from '../eventClassification.service';
+import { classifyEvent, resetMetrics, getMetricsSnapshot } from '../eventClassification.service';
 import type { NewsArticle } from '../../repositories/newsCache.repository';
 
 describe('Event Classification Service', () => {
@@ -313,6 +313,43 @@ describe('Event Classification Service', () => {
       // Should resolve to highest priority event or GENERAL if all scores are low
       expect(['EARNINGS', 'M&A', 'ANALYST_RATING', 'GENERAL']).toContain(result.eventType);
       expect(result.confidence).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Metrics Isolation', () => {
+    it('should not accumulate metrics across resetMetrics calls', async () => {
+      resetMetrics();
+
+      const earningsArticle: NewsArticle = {
+        title: 'Apple Reports Q1 Earnings Beat',
+        description:
+          'Apple Inc. reported quarterly earnings of $1.25 EPS, beating analyst estimates.',
+        url: 'https://example.com/metrics-test-1',
+        date: '2025-01-15',
+      };
+
+      // First batch: classify one article
+      await classifyEvent(earningsArticle);
+      const firstBatchMetrics = getMetricsSnapshot();
+      expect(firstBatchMetrics.totalProcessed).toBe(1);
+
+      // Reset and run second batch
+      resetMetrics();
+      await classifyEvent(earningsArticle);
+      const secondBatchMetrics = getMetricsSnapshot();
+
+      // Second batch should NOT have accumulated from the first
+      expect(secondBatchMetrics.totalProcessed).toBe(1);
+    });
+
+    it('should return zeroed metrics after reset', () => {
+      resetMetrics();
+      const snapshot = getMetricsSnapshot();
+      expect(snapshot.totalProcessed).toBe(0);
+      expect(snapshot.confidenceSum).toBe(0);
+      expect(snapshot.durationSum).toBe(0);
+      expect(snapshot.multiEventConflicts).toBe(0);
+      expect(snapshot.lowConfidenceCount).toBe(0);
     });
   });
 });

@@ -10,8 +10,8 @@ const mockQueryArticlesByTicker = jest
   .fn<(...args: unknown[]) => Promise<unknown[]>>()
   .mockResolvedValue([]);
 const mockBatchCheckExistence = jest
-  .fn<(...args: unknown[]) => Promise<Set<string>>>()
-  .mockResolvedValue(new Set());
+  .fn<(...args: unknown[]) => Promise<{ found: Set<string>; complete: boolean }>>()
+  .mockResolvedValue({ found: new Set(), complete: true });
 const mockBatchPutSentiments = jest
   .fn<(...args: unknown[]) => Promise<void>>()
   .mockResolvedValue(undefined);
@@ -19,8 +19,8 @@ const mockBatchPutSentiments = jest
 jest.unstable_mockModule('../../repositories/newsCache.repository.js', () => ({
   queryArticlesByTicker: mockQueryArticlesByTicker,
   batchCheckExistence: jest
-    .fn<(...args: unknown[]) => Promise<Set<string>>>()
-    .mockResolvedValue(new Set()),
+    .fn<(...args: unknown[]) => Promise<{ found: Set<string>; complete: boolean }>>()
+    .mockResolvedValue({ found: new Set(), complete: true }),
 }));
 jest.unstable_mockModule('../../repositories/sentimentCache.repository.js', () => ({
   querySentimentsByTicker: jest
@@ -39,6 +39,7 @@ jest.unstable_mockModule('../eventClassification.service.js', () => ({
   classifyEvent: jest
     .fn()
     .mockReturnValue({ eventType: 'GENERAL', confidence: 0.1, matchedKeywords: [] }),
+  resetMetrics: jest.fn(),
 }));
 jest.unstable_mockModule('../aspectAnalysis.service.js', () => ({
   analyzeAspects: jest.fn().mockReturnValue({ aspects: [], overallScore: 0 }),
@@ -59,7 +60,7 @@ describe('SentimentProcessingService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryArticlesByTicker.mockResolvedValue([]);
-    mockBatchCheckExistence.mockResolvedValue(new Set());
+    mockBatchCheckExistence.mockResolvedValue({ found: new Set(), complete: true });
   });
 
   it('should have core processing function exported', () => {
@@ -86,7 +87,7 @@ describe('SentimentProcessingService', () => {
         ttl: 999999,
       },
     ]);
-    mockBatchCheckExistence.mockResolvedValue(new Set(['cached1']));
+    mockBatchCheckExistence.mockResolvedValue({ found: new Set(['cached1']), complete: true });
 
     const result = await processSentimentForTicker('AAPL', '2025-01-01', '2025-01-31');
 

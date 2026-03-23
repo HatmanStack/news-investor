@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+from typedefs import YahooInfo, YahooSearchQuote
+from utils.circuit_breaker import CircuitBreaker
 from utils.error import APIError
 
 if TYPE_CHECKING:
@@ -39,18 +41,27 @@ logger.setLevel(logging.INFO)
 # Configuration
 REQUEST_TIMEOUT = 10  # seconds
 MAX_RETRIES = 2  # Total retry delay: 1s + 1s = 2s (7% of 30s timeout)
-BACKOFF_BASE = 1  # seconds
+RETRY_DELAY_SECONDS = 1
+
+# Circuit breaker: fail fast after 3 consecutive yfinance failures, cooldown 60s
+# In-memory state is acceptable — Lambda containers are short-lived
+_yfinance_circuit = CircuitBreaker(failure_threshold=3, cooldown_seconds=60, name="yfinance")
 
 
 def retry_with_backoff[T](func: Callable[..., T]) -> Callable[..., T]:
-    """Decorator for retry logic with fixed-interval backoff."""
+    """Decorator for retry logic with fixed-interval backoff and circuit breaker."""
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> T:
+        if not _yfinance_circuit.allow_request():
+            raise APIError("yfinance circuit breaker open — failing fast", 503)
+
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES + 1):
             try:
-                return func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                _yfinance_circuit.record_success()
+                return result
             except APIError as e:
                 # Don't retry client errors (4xx except 429)
                 if e.status_code and 400 <= e.status_code < 500 and e.status_code != 429:
@@ -60,12 +71,13 @@ def retry_with_backoff[T](func: Callable[..., T]) -> Callable[..., T]:
                 last_error = e
 
             if attempt < MAX_RETRIES:
-                delay = BACKOFF_BASE ** (attempt + 1)
+                delay = RETRY_DELAY_SECONDS
                 logger.info(
                     f"[YFinanceService] Retry {attempt + 1}/{MAX_RETRIES} after {delay}s..."
                 )
                 time.sleep(delay)
 
+        _yfinance_circuit.record_failure()
         raise last_error if last_error else APIError("Unknown error", 500)
 
     return wrapper
@@ -118,7 +130,7 @@ def fetch_stock_prices(
 
 
 @retry_with_backoff
-def fetch_symbol_metadata(ticker: str) -> dict[str, Any]:
+def fetch_symbol_metadata(ticker: str) -> YahooInfo:
     """
     Fetch company metadata from yfinance.
 
@@ -159,7 +171,7 @@ def fetch_symbol_metadata(ticker: str) -> dict[str, Any]:
 
 
 @retry_with_backoff
-def search_tickers(query: str) -> list[dict[str, Any]]:
+def search_tickers(query: str) -> list[YahooSearchQuote]:
     """
     Search for tickers using Yahoo Finance autocomplete API.
 

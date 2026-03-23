@@ -1,60 +1,67 @@
 /**
  * Logging Utility
- * Conditional logging based on environment/debug flag
+ * Level-based logging with production-safe defaults.
+ *
+ * Levels (lowest to highest verbosity):
+ *   ERROR = 0, WARN = 1, INFO = 2, DEBUG = 3
+ *
+ * Default: WARN in production, DEBUG otherwise.
+ * Override via EXPO_PUBLIC_LOG_LEVEL env var (e.g., "info", "debug").
  */
 
-/**
- * Check if debug logging is enabled
- * In production (NODE_ENV === 'production'), debug logs are disabled
- * Can be overridden with DEBUG environment variable
- */
-function isDebugEnabled(): boolean {
-  // In browser/Expo, process.env.NODE_ENV might not be set
-  // Default to true for development, false for production
+const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 } as const;
+type LogLevel = keyof typeof LOG_LEVELS;
+
+function resolveLogLevel(): number {
   if (typeof process !== 'undefined' && process.env) {
-    // Explicit DEBUG flag takes precedence
-    if (process.env.DEBUG === 'true') return true;
-    if (process.env.DEBUG === 'false') return false;
+    // Explicit log level takes precedence
+    const explicit = process.env.EXPO_PUBLIC_LOG_LEVEL?.toLowerCase();
+    if (explicit && explicit in LOG_LEVELS) {
+      return LOG_LEVELS[explicit as LogLevel];
+    }
 
-    // Otherwise, disable in production
-    return process.env.NODE_ENV !== 'production';
+    // Legacy DEBUG flag support
+    if (process.env.DEBUG === 'true') return LOG_LEVELS.debug;
+    if (process.env.DEBUG === 'false') return LOG_LEVELS.warn;
+
+    // Production defaults to warn, everything else to debug
+    return process.env.NODE_ENV === 'production' ? LOG_LEVELS.warn : LOG_LEVELS.debug;
   }
 
-  // Default to true if we can't determine environment
-  return true;
+  // Cannot determine environment — default to debug
+  return LOG_LEVELS.debug;
 }
 
+const currentLevel = resolveLogLevel();
+
 /**
- * Debug logger - only logs in development/debug mode
+ * Logger with level-based filtering.
+ * In production, only warn and error are emitted by default.
  */
 export const logger = {
-  /**
-   * Log debug information (disabled in production)
-   */
-  debug: (...args: any[]) => {
-    if (isDebugEnabled()) {
+  /** Log debug information (suppressed at warn level and below) */
+  debug: (...args: unknown[]) => {
+    if (currentLevel >= LOG_LEVELS.debug) {
       console.log(...args);
     }
   },
 
-  /**
-   * Log informational messages (always enabled)
-   */
-  info: (...args: any[]) => {
-    console.log(...args);
+  /** Log informational messages (suppressed at warn level and below) */
+  info: (...args: unknown[]) => {
+    if (currentLevel >= LOG_LEVELS.info) {
+      console.log(...args);
+    }
   },
 
-  /**
-   * Log warnings (always enabled)
-   */
-  warn: (...args: any[]) => {
-    console.warn(...args);
+  /** Log warnings (suppressed only at error level) */
+  warn: (...args: unknown[]) => {
+    if (currentLevel >= LOG_LEVELS.warn) {
+      console.warn(...args);
+    }
   },
 
-  /**
-   * Log errors (always enabled)
-   */
-  error: (...args: any[]) => {
+  /** Log errors (always enabled) */
+  error: (...args: unknown[]) => {
     console.error(...args);
   },
 };

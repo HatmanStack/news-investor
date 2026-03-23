@@ -196,6 +196,25 @@ export interface DailySentimentItem extends BaseTableItem {
   oneMonthProbability?: number;
 }
 
+/**
+ * External representation of a daily sentiment aggregate.
+ * Used as the API boundary type by the repository layer, stripping
+ * DynamoDB-specific fields (pk, sk, entityType, etc.).
+ */
+export type DailySentimentData = Omit<
+  DailySentimentItem,
+  | 'pk'
+  | 'sk'
+  | 'ttl'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'entityType'
+  | 'articleCount'
+  | 'positiveCount'
+  | 'negativeCount'
+  | 'neutralCount'
+>;
+
 // ============================================================
 // Model Cache Entity Type
 // ============================================================
@@ -427,62 +446,4 @@ export function makeAnnotSK(ticker: string, annotationId: string): string {
 
 export function makeAlertHistorySK(timestamp: string, ticker: string): string {
   return `${EntityPrefix.ALERT}#${timestamp}#${ticker}`;
-}
-
-// ============================================================
-// Legacy Types (for backward compatibility during migration)
-// ============================================================
-
-/**
- * @deprecated Use StockHistoricalItem instead
- */
-export interface StockHistoricalDataItem {
-  ticker: string;
-  date: string; // ISO 8601 date (YYYY-MM-DD)
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  adjClose?: number;
-  marketCap?: number;
-  peRatio?: number;
-  pbRatio?: number;
-}
-
-/**
- * @deprecated Use ArticleAnalysisItem instead
- */
-export interface ArticleAnalysisDataItem {
-  ticker: string;
-  'articleHash#date': string; // Composite sort key
-  articleHash: string;
-  date: string;
-  eventType?: 'EARNINGS' | 'M&A' | 'GUIDANCE' | 'ANALYST_RATING' | 'PRODUCT_LAUNCH' | 'GENERAL';
-  aspectScore?: number;
-  mlScore?: number;
-  materialityScore?: number;
-  signalScore?: number;
-  title?: string;
-  articleUrl?: string;
-  publisher?: string;
-}
-
-/**
- * @deprecated Use DailySentimentItem instead
- */
-export interface DailySentimentAggregateItem {
-  ticker: string;
-  date: string;
-  eventCounts: Record<string, number>;
-  avgAspectScore?: number;
-  avgMlScore?: number;
-  avgSignalScore?: number;
-  materialEventCount?: number;
-  nextDayDirection?: 'up' | 'down';
-  nextDayProbability?: number;
-  twoWeekDirection?: 'up' | 'down';
-  twoWeekProbability?: number;
-  oneMonthDirection?: 'up' | 'down';
-  oneMonthProbability?: number;
 }

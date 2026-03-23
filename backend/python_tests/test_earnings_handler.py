@@ -136,3 +136,24 @@ class TestHandleBatchEarningsRequest:
         body = json.loads(response["body"])
         assert "AAPL" in body["data"]["results"]
         assert "MSFT" in body["data"]["results"]
+
+
+class TestErrorMessageSanitization:
+    """Verify error responses do not leak exception details."""
+
+    @patch("handlers.earnings._get_earnings_for_ticker")
+    def test_earnings_error_does_not_leak_exception(self, mock_get):
+        """500 response should contain generic message, not raw exception."""
+        mock_get.side_effect = Exception("boto3 DynamoDB timeout at 10.0.0.1:8000")
+
+        event = make_event(ticker="AAPL")
+        response = handle_earnings_request(event)
+
+        assert response["statusCode"] == 500
+        body = json.loads(response["body"])
+        # Must NOT contain the raw exception string
+        assert "boto3" not in body["error"]
+        assert "DynamoDB" not in body["error"]
+        assert "10.0.0.1" not in body["error"]
+        # Should contain a generic message
+        assert "Failed to fetch earnings" in body["error"]

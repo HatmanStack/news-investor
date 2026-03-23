@@ -5,9 +5,9 @@ Handles GET /etf-holdings requests.
 
 import os
 import re
-from typing import Any
 
 from services.etf_holdings_service import get_etf_holdings
+from typedefs import ApiGatewayEvent, ApiGatewayResponse
 from utils.logger import get_structured_logger
 from utils.response import error_response, success_response
 
@@ -34,7 +34,7 @@ def _get_table():
     return _dynamodb.Table(table_name)
 
 
-def handle_etf_holdings(event: dict[str, Any]) -> dict[str, Any]:
+def handle_etf_holdings(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """GET /etf-holdings?etf=XLK"""
     query_params = event.get("queryStringParameters") or {}
     etf = query_params.get("etf", "").upper().strip()

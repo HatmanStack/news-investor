@@ -7,13 +7,14 @@ import logging
 from typing import Any
 
 from services.yfinance_service import _get_yfinance, retry_with_backoff
+from typedefs import EarningsCalendar, EarningsEvent
 from utils.error import APIError
 
 logger = logging.getLogger(__name__)
 
 
 @retry_with_backoff
-def fetch_earnings_calendar(ticker: str) -> list[dict[str, Any]]:
+def fetch_earnings_calendar(ticker: str) -> list[EarningsEvent]:
     """
     Fetch upcoming earnings dates for a ticker from yfinance.
 
@@ -63,7 +64,7 @@ def fetch_earnings_calendar(ticker: str) -> list[dict[str, Any]]:
         return []
 
 
-def _parse_earnings_event(date_val: Any, calendar: dict[str, Any]) -> dict[str, Any] | None:
+def _parse_earnings_event(date_val: Any, calendar: EarningsCalendar) -> EarningsEvent | None:
     """Parse a single earnings event from calendar data."""
     try:
         # Handle datetime or Timestamp objects
@@ -83,7 +84,7 @@ def _parse_earnings_event(date_val: Any, calendar: dict[str, Any]) -> dict[str, 
         else:
             return None
 
-        event: dict[str, Any] = {
+        event: EarningsEvent = {
             "earningsDate": date_str,
             "earningsHour": earnings_hour,
         }

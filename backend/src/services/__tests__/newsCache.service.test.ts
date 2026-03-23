@@ -11,7 +11,8 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 const mockQueryArticlesByTicker = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockBatchPutArticles = jest.fn<(...args: unknown[]) => Promise<void>>();
-const mockBatchCheckExistence = jest.fn<(...args: unknown[]) => Promise<Set<string>>>();
+const mockBatchCheckExistence =
+  jest.fn<(...args: unknown[]) => Promise<{ found: Set<string>; complete: boolean }>>();
 const mockFetchCompanyNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockFetchAlphaVantageNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockGenerateArticleHash = jest.fn<(url: string) => string>();
@@ -120,7 +121,7 @@ describe('newsCacheService', () => {
       };
     });
     mockBatchPutArticles.mockResolvedValue(undefined);
-    mockBatchCheckExistence.mockResolvedValue(new Set());
+    mockBatchCheckExistence.mockResolvedValue({ found: new Set(), complete: true });
   });
 
   // ---------------------------------------------------------------
@@ -460,7 +461,10 @@ describe('newsCacheService', () => {
       mockQueryArticlesByTicker.mockResolvedValue(cached);
       mockFetchCompanyNews.mockResolvedValue(finnhubArticles);
       // Simulate that article 10 already exists in cache
-      mockBatchCheckExistence.mockResolvedValue(new Set(['hash_https://finnhub.com/10']));
+      mockBatchCheckExistence.mockResolvedValue({
+        found: new Set(['hash_https://finnhub.com/10']),
+        complete: true,
+      });
 
       await fetchNewsWithCache(TICKER, from, to, API_KEY);
 

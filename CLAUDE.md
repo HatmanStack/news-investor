@@ -76,7 +76,7 @@ frontend/
 │   └── stock/           # Stock detail screens
 ├── src/
 │   ├── contexts/        # React Context providers (StockContext, StockDetailContext)
-│   ├── hooks/           # Custom hooks (useStockData, usePortfolio, useSentimentData)
+│   ├── hooks/           # Custom hooks (see hooks/index.ts barrel export)
 │   ├── services/api/    # API client layer
 │   ├── database/        # Platform abstraction (SQLite native, localStorage web)
 │   │   ├── database.ts      # Native SQLite implementation

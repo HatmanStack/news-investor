@@ -12,6 +12,8 @@ import time
 from enum import StrEnum
 from typing import Any
 
+from typedefs import MetricDefinition
+
 
 class MetricUnit(StrEnum):
     """Metric units supported by CloudWatch (pruned to used values)."""
@@ -75,7 +77,7 @@ def log_metric(
 
 
 def log_metrics(
-    metrics: list[dict[str, Any]],
+    metrics: list[MetricDefinition],
     dimensions: dict[str, str] | None = None,
 ) -> None:
     """
@@ -149,7 +151,7 @@ def log_request_metrics(
     """
     success = 200 <= status_code < 400
 
-    metrics: list[dict[str, Any]] = [
+    metrics: list[MetricDefinition] = [
         {
             "name": "RequestDuration",
             "value": duration_ms,

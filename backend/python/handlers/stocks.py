@@ -4,10 +4,10 @@ Handles GET /stocks requests for prices and metadata.
 """
 
 from datetime import datetime
-from typing import Any
 
 from repositories.stocks_cache import batch_put_stocks, query_stocks_by_date_range
 from services.yfinance_service import fetch_stock_prices, fetch_symbol_metadata
+from typedefs import ApiGatewayEvent, ApiGatewayResponse, MetadataResult, PriceRecord, PriceResult
 from utils.error import APIError
 from utils.logger import get_structured_logger
 from utils.response import error_response, success_response
@@ -21,7 +21,7 @@ def handle_prices_request(
     ticker: str,
     start_date: str,
     end_date: str | None,
-) -> dict[str, Any]:
+) -> PriceResult:
     """
     Handle stock prices request with caching.
 
@@ -54,22 +54,27 @@ def handle_prices_request(
             logger.info(f"[StocksHandler] Cache hit for {ticker}: {cache_hit_rate * 100:.1f}%")
 
             # Transform cached data to Tiingo format
-            data = []
+            data: list[PriceRecord] = []
             for item in sorted(cached_data, key=lambda x: x["date"]):
                 price_data = item.get("priceData", {})
-                record = {
+                record: PriceRecord = {
                     "date": f"{item['date']}T00:00:00.000Z",
-                    **{
-                        k: float(v) if hasattr(v, "__float__") else v for k, v in price_data.items()
-                    },
+                    "open": float(price_data.get("open", 0)),
+                    "high": float(price_data.get("high", 0)),
+                    "low": float(price_data.get("low", 0)),
+                    "close": float(price_data.get("close", 0)),
+                    "volume": int(price_data.get("volume", 0)),
+                    "adjOpen": float(price_data.get("adjOpen", 0)),
+                    "adjHigh": float(price_data.get("adjHigh", 0)),
+                    "adjLow": float(price_data.get("adjLow", 0)),
+                    "adjClose": float(price_data.get("adjClose", 0)),
+                    "adjVolume": int(price_data.get("adjVolume", 0)),
+                    "divCash": float(price_data.get("divCash", 0)),
+                    "splitFactor": float(price_data.get("splitFactor", 1.0)),
                 }
                 data.append(record)
 
-            return {
-                "data": data,
-                "cached": True,
-                "cacheHitRate": cache_hit_rate,
-            }
+            return PriceResult(data=data, cached=True, cacheHitRate=cache_hit_rate)
 
         # Cache miss - fetch from yfinance
         logger.info(
@@ -111,11 +116,7 @@ def handle_prices_request(
             except Exception as e:
                 logger.error(f"[StocksHandler] Failed to cache stock prices: {e}")
 
-        return {
-            "data": data,
-            "cached": False,
-            "cacheHitRate": cache_hit_rate,
-        }
+        return PriceResult(data=data, cached=False, cacheHitRate=cache_hit_rate)
 
     except APIError:
         raise
@@ -123,10 +124,10 @@ def handle_prices_request(
         logger.warning(f"[StocksHandler] Cache check failed, falling back to API: {e}")
         df = fetch_stock_prices(ticker, start_date, effective_end_date)
         data = transform_history_to_tiingo(df, ticker)
-        return {"data": data, "cached": False, "cacheHitRate": 0}
+        return PriceResult(data=data, cached=False, cacheHitRate=0)
 
 
-def handle_metadata_request(ticker: str) -> dict[str, Any]:
+def handle_metadata_request(ticker: str) -> MetadataResult:
     """
     Handle symbol metadata request.
 
@@ -138,10 +139,10 @@ def handle_metadata_request(ticker: str) -> dict[str, Any]:
     """
     info = fetch_symbol_metadata(ticker)
     data = transform_info_to_metadata(info, ticker)
-    return {"data": data, "cached": False}
+    return MetadataResult(data=data, cached=False)
 
 
-def handle_stocks_request(event: dict[str, Any]) -> dict[str, Any]:
+def handle_stocks_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """
     Handle GET /stocks requests.
 
@@ -199,6 +200,7 @@ def handle_stocks_request(event: dict[str, Any]) -> dict[str, Any]:
                     )
 
         # Route to appropriate handler
+        result: MetadataResult | PriceResult
         if request_type == "metadata":
             result = handle_metadata_request(ticker)
         else:

@@ -114,9 +114,36 @@ export const FINNHUB_FAILURE_THRESHOLD = 5;
  */
 export const FINNHUB_COOLDOWN_MS = 60_000;
 
+/**
+ * Alpha Vantage circuit breaker failure threshold.
+ *
+ * DERIVATION: Alpha Vantage free tier allows only 25 calls/day.
+ * 3 consecutive failures strongly indicates quota exhaustion.
+ * Lower than Finnhub (5) due to the much stricter rate limit.
+ */
+export const ALPHAVANTAGE_FAILURE_THRESHOLD = 3;
+
+/**
+ * Alpha Vantage circuit breaker cooldown period (30 minutes).
+ *
+ * DERIVATION: With only 25 calls/day, a longer cooldown (30 min)
+ * prevents wasting the remaining budget on a failing endpoint.
+ * Much longer than Finnhub's 60s cooldown.
+ */
+export const ALPHAVANTAGE_COOLDOWN_MS = 1_800_000;
+
 /** Service identifiers for circuit breaker DynamoDB keys */
 export const CIRCUIT_SERVICE_FINNHUB = 'finnhub';
 export const CIRCUIT_SERVICE_ALPHAVANTAGE = 'alphavantage';
+
+/**
+ * Maximum concurrent tasks in the sentiment analysis pipeline.
+ *
+ * Applied to event classification, aspect analysis, and ML sentiment
+ * batch loops. Prevents DynamoDB throttling and external API rate limiting.
+ * 10 balances throughput against Lambda/DynamoDB concurrency limits.
+ */
+export const MAX_CONCURRENT_PIPELINE_TASKS = 10;
 
 // ============================================================
 // News Handler / Predictions

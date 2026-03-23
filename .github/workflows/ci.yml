@@ -42,7 +42,7 @@ jobs:
         run: cd backend && npx tsc --noEmit
 
       - name: Backend tests
-        run: cd backend && npm test -- --ci --forceExit
+        run: cd backend && npm test -- --ci
 
       - name: Python tests
         run: |

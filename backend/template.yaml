@@ -398,7 +398,6 @@ Resources:
           ALPHA_VANTAGE_API_KEY: !Ref AlphaVantageApiKey
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           DYNAMODB_TABLE_NAME: !Ref ReactStocksTable
-          PREDICTION_FUNCTION_NAME: !Sub '${AWS::StackName}-api'
           DISTILFINBERT_API_URL: !Ref DistilFinBERTApiUrl
       Policies:
         - Statement:

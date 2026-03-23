@@ -19,20 +19,6 @@ export const Environment = {
   BACKEND_URL: process.env.EXPO_PUBLIC_BACKEND_URL,
 
   /**
-   * Use browser-based sentiment analysis instead of Python microservice
-   * Default: false (safe rollout)
-   * Set EXPO_PUBLIC_BROWSER_SENTIMENT=true to enable
-   */
-  USE_BROWSER_SENTIMENT: process.env.EXPO_PUBLIC_BROWSER_SENTIMENT === 'true',
-
-  /**
-   * Use browser-based prediction model instead of Python microservice
-   * Default: false (safe rollout)
-   * Set EXPO_PUBLIC_BROWSER_PREDICTION=true to enable
-   */
-  USE_BROWSER_PREDICTION: process.env.EXPO_PUBLIC_BROWSER_PREDICTION === 'true',
-
-  /**
    * Use Lambda for sentiment analysis instead of local browser analysis
    * Default: true (enabled)
    * Set EXPO_PUBLIC_USE_LAMBDA_SENTIMENT=false to rollback to local analysis

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from handlers.stocks import handle_prices_request
+from typedefs import ApiGatewayEvent, ApiGatewayResponse
 from utils.error import APIError
 from utils.logger import get_structured_logger
 from utils.response import error_response
@@ -28,7 +29,7 @@ def get_cors_headers() -> dict[str, str]:
     return headers
 
 
-def handle_batch_stocks_request(event: dict[str, Any]) -> dict[str, Any]:
+def handle_batch_stocks_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """
     Handle POST /batch/stocks requests.
 
@@ -57,12 +58,14 @@ def handle_batch_stocks_request(event: dict[str, Any]) -> dict[str, Any]:
     """
     try:
         # Parse request body
-        body = event.get("body", "{}")
-        if isinstance(body, str):
+        raw_body = event.get("body") or "{}"
+        if isinstance(raw_body, str):
             try:
-                body = json.loads(body)
+                body = json.loads(raw_body)
             except json.JSONDecodeError:
                 return error_response("Invalid JSON in request body", 400)
+        else:
+            body = raw_body
 
         tickers = body.get("tickers", [])
         start_date = body.get("startDate")

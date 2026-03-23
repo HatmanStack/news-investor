@@ -6,6 +6,7 @@ handler  # backend/python/index.py
 
 # pytest fixtures (called by pytest, not directly)
 api_event  # backend/python_tests/conftest.py
+_reset_yfinance_circuit_breaker  # backend/python_tests/conftest.py (autouse fixture)
 
 # Tested API functions (not yet called from production handlers, but have test coverage)
 get_stock  # backend/python/repositories/stocks_cache.py

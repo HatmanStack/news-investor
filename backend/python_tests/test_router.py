@@ -1,5 +1,6 @@
 """Tests for Lambda router (index.py)."""
 
+import json
 from unittest.mock import patch
 
 
@@ -60,9 +61,11 @@ class TestRouter:
     def test_returns_404_for_unknown_route(self):
         """Unknown routes return 404."""
         # Need to mock the handlers to avoid import errors
-        with patch("handlers.stocks.handle_stocks_request"), \
-             patch("handlers.search.handle_search_request"), \
-             patch("handlers.batch.handle_batch_stocks_request"):
+        with (
+            patch("handlers.stocks.handle_stocks_request"),
+            patch("handlers.search.handle_search_request"),
+            patch("handlers.batch.handle_batch_stocks_request"),
+        ):
             from index import handler
 
             event = {
@@ -73,3 +76,46 @@ class TestRouter:
             result = handler(event, None)
 
             assert result["statusCode"] == 404
+
+
+class TestBodySizeLimit:
+    """Test request body size enforcement."""
+
+    def test_rejects_oversized_body_with_413(self):
+        """Bodies exceeding 1MB should return 413."""
+        from index import handler
+
+        oversized_body = "x" * (1_048_576 + 1)  # Just over 1MB
+        event = {
+            "rawPath": "/batch/stocks",
+            "requestContext": {
+                "http": {"method": "POST"},
+                "requestId": "test-123",
+            },
+            "body": oversized_body,
+        }
+
+        result = handler(event, None)
+
+        assert result["statusCode"] == 413
+        body = json.loads(result["body"])
+        assert "too large" in body["error"].lower() or "size" in body["error"].lower()
+
+    @patch("handlers.batch.handle_batch_stocks_request")
+    def test_allows_normal_sized_body(self, mock_handler):
+        """Bodies under 1MB should pass through."""
+        from index import handler
+
+        mock_handler.return_value = {"statusCode": 200, "body": "{}"}
+        event = {
+            "rawPath": "/batch/stocks",
+            "requestContext": {
+                "http": {"method": "POST"},
+                "requestId": "test-456",
+            },
+            "body": '{"tickers": ["AAPL"]}',
+        }
+
+        result = handler(event, None)
+
+        assert result["statusCode"] == 200

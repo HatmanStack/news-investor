@@ -14,7 +14,10 @@ import * as NewsCacheRepository from '../repositories/newsCache.repository.js';
 import * as SentimentCacheRepository from '../repositories/sentimentCache.repository.js';
 import { analyzeSentimentBatch, analyzeSentiment } from '../ml/sentiment/analyzer.js';
 import { aggregateDailySentiment, type DailySentiment } from '../utils/sentiment.util.js';
-import { classifyEvent } from './eventClassification.service.js';
+import {
+  classifyEvent,
+  resetMetrics as resetClassificationMetrics,
+} from './eventClassification.service.js';
 import { analyzeAspects } from './aspectAnalysis.service.js';
 import { getMlSentiment } from './mlSentiment.service.js';
 import { calculateSignalScoresBatch, type ArticleMetadata } from './signalScore.service.js';
@@ -23,6 +26,8 @@ import type { EventType } from '../types/event.types.js';
 import type { AspectBreakdown } from '../types/aspect.types.js';
 import type { NewsCacheItem } from '../repositories/newsCache.repository.js';
 import type { SentimentCacheItem } from '../repositories/sentimentCache.repository.js';
+import { mapWithConcurrency } from '../utils/concurrency.util.js';
+import { MAX_CONCURRENT_PIPELINE_TASKS } from '../constants/ml.constants.js';
 
 /**
  * Result of sentiment processing operation
@@ -199,7 +204,14 @@ async function partitionArticlesByCache(
 }> {
   // Batch check existence (single BatchGetItem call per 100 articles)
   const hashes = articles.map((a) => a.articleHash);
-  const existingHashes = await SentimentCacheRepository.batchCheckExistence(ticker, hashes);
+  const { found: existingHashes, complete } = await SentimentCacheRepository.batchCheckExistence(
+    ticker,
+    hashes,
+  );
+
+  if (!complete) {
+    logger.warn('Partial cache lookup — some articles may be re-analyzed', { ticker });
+  }
 
   const articlesToAnalyze = articles.filter((a) => !existingHashes.has(a.articleHash));
   const articlesCached = articles.filter((a) => existingHashes.has(a.articleHash));
@@ -217,8 +229,10 @@ async function classifyEvents(
   ticker: string,
   articles: NewsCacheItem[],
 ): Promise<Map<string, EventType>> {
-  const articleClassifications = await Promise.allSettled(
-    articles.map(async (item) => {
+  resetClassificationMetrics();
+  const articleClassifications = await mapWithConcurrency(
+    articles,
+    async (item) => {
       try {
         const classification = await classifyEvent(item.article);
         return {
@@ -235,14 +249,13 @@ async function classifyEvents(
           eventType: 'GENERAL' as EventType,
         };
       }
-    }),
+    },
+    MAX_CONCURRENT_PIPELINE_TASKS,
   );
 
   const eventTypeMap = new Map<string, EventType>();
   articleClassifications.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      eventTypeMap.set(result.value.articleHash, result.value.eventType);
-    }
+    eventTypeMap.set(result.articleHash, result.eventType);
   });
 
   // Log event type distribution
@@ -306,8 +319,9 @@ async function analyzeAspectsBatch(
   eventTypeMap: Map<string, EventType>,
 ): Promise<Map<string, { aspectScore: number; aspectBreakdown: AspectBreakdown }>> {
   const aspectAnalysisStartTime = Date.now();
-  const aspectAnalysisResults = await Promise.allSettled(
-    articles.map(async (item) => {
+  const aspectAnalysisResults = await mapWithConcurrency(
+    articles,
+    async (item) => {
       try {
         const eventType = eventTypeMap.get(item.articleHash) as EventType | undefined;
         const analysisResult = await analyzeAspects(
@@ -332,20 +346,19 @@ async function analyzeAspectsBatch(
         return {
           articleHash: item.articleHash,
           aspectScore: 0,
-          aspectBreakdown: {},
+          aspectBreakdown: {} as AspectBreakdown,
         };
       }
-    }),
+    },
+    MAX_CONCURRENT_PIPELINE_TASKS,
   );
 
   const aspectMap = new Map<string, { aspectScore: number; aspectBreakdown: AspectBreakdown }>();
   aspectAnalysisResults.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      aspectMap.set(result.value.articleHash, {
-        aspectScore: result.value.aspectScore,
-        aspectBreakdown: result.value.aspectBreakdown,
-      });
-    }
+    aspectMap.set(result.articleHash, {
+      aspectScore: result.aspectScore,
+      aspectBreakdown: result.aspectBreakdown,
+    });
   });
 
   const aspectAnalysisDuration = Date.now() - aspectAnalysisStartTime;
@@ -379,8 +392,9 @@ async function analyzeMlSentimentBatch(
   eventTypeMap: Map<string, EventType>,
 ): Promise<Map<string, number | null>> {
   const mlSentimentStartTime = Date.now();
-  const mlSentimentResults = await Promise.allSettled(
-    articles.map(async (item) => {
+  const mlSentimentResults = await mapWithConcurrency(
+    articles,
+    async (item) => {
       const eventType = eventTypeMap.get(item.articleHash) as EventType | undefined;
 
       if (eventType && isMaterialEvent(eventType)) {
@@ -398,14 +412,13 @@ async function analyzeMlSentimentBatch(
       }
 
       return { articleHash: item.articleHash, mlScore: null };
-    }),
+    },
+    MAX_CONCURRENT_PIPELINE_TASKS,
   );
 
   const mlScoreMap = new Map<string, number | null>();
   mlSentimentResults.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      mlScoreMap.set(result.value.articleHash, result.value.mlScore);
-    }
+    mlScoreMap.set(result.articleHash, result.mlScore);
   });
 
   const mlSentimentDuration = Date.now() - mlSentimentStartTime;
@@ -506,42 +519,54 @@ async function buildCacheItems(
   }
 
   // Batch failed twice - analyze articles individually for partial success
-  const results = await Promise.allSettled(
-    articlesForAnalysis.map(async (article) => {
-      const sentimentResult = await analyzeSentiment(article.text, article.hash);
-      const aspectData = aspectMap.get(sentimentResult.articleHash);
-      const mlScore = mlScoreMap.get(sentimentResult.articleHash);
-      const signalScore = signalScoreMap.get(sentimentResult.articleHash);
+  const results = await mapWithConcurrency(
+    articlesForAnalysis,
+    async (
+      article,
+    ): Promise<
+      { item: Omit<SentimentCacheItem, 'ttl'>; error?: never } | { item?: never; error: unknown }
+    > => {
+      try {
+        const sentimentResult = await analyzeSentiment(article.text, article.hash);
+        const aspectData = aspectMap.get(sentimentResult.articleHash);
+        const mlScore = mlScoreMap.get(sentimentResult.articleHash);
+        const signalScore = signalScoreMap.get(sentimentResult.articleHash);
 
-      return {
-        ticker,
-        articleHash: sentimentResult.articleHash,
-        sentiment: {
-          positive: parseInt(sentimentResult.sentiment.positive[0]),
-          negative: parseInt(sentimentResult.sentiment.negative[0]),
-          sentimentScore: sentimentResult.sentimentScore,
-          classification: sentimentResult.classification,
-        },
-        analyzedAt: Date.now(),
-        eventType: eventTypeMap.get(sentimentResult.articleHash) || 'GENERAL',
-        aspectScore: aspectData?.aspectScore ?? 0,
-        aspectBreakdown: aspectData?.aspectBreakdown,
-        mlScore: mlScore ?? undefined,
-        signalScore: signalScore,
-      } as Omit<SentimentCacheItem, 'ttl'>;
-    }),
+        return {
+          item: {
+            ticker,
+            articleHash: sentimentResult.articleHash,
+            sentiment: {
+              positive: parseInt(sentimentResult.sentiment.positive[0]),
+              negative: parseInt(sentimentResult.sentiment.negative[0]),
+              sentimentScore: sentimentResult.sentimentScore,
+              classification: sentimentResult.classification,
+            },
+            analyzedAt: Date.now(),
+            eventType: eventTypeMap.get(sentimentResult.articleHash) || 'GENERAL',
+            aspectScore: aspectData?.aspectScore ?? 0,
+            aspectBreakdown: aspectData?.aspectBreakdown,
+            mlScore: mlScore ?? undefined,
+            signalScore: signalScore,
+          } as Omit<SentimentCacheItem, 'ttl'>,
+        };
+      } catch (error) {
+        return { error };
+      }
+    },
+    MAX_CONCURRENT_PIPELINE_TASKS,
   );
 
   const successfulItems: Omit<SentimentCacheItem, 'ttl'>[] = [];
   const failedHashes: string[] = [];
 
   results.forEach((result, index) => {
-    if (result.status === 'fulfilled') {
-      successfulItems.push(result.value);
+    if (result.item) {
+      successfulItems.push(result.item);
     } else {
       const failedArticle = articlesForAnalysis[index]!;
       failedHashes.push(failedArticle.hash);
-      logger.error('Failed to analyze article', result.reason, {
+      logger.error('Failed to analyze article', result.error, {
         ticker,
         articleHash: failedArticle.hash,
       });

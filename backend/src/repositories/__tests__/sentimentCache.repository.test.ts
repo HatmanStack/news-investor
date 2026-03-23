@@ -201,7 +201,8 @@ describe('SentimentCacheRepository', () => {
     it('returns empty set for empty input', async () => {
       const result = await batchCheckExistence('AAPL', []);
 
-      expect(result.size).toBe(0);
+      expect(result.found.size).toBe(0);
+      expect(result.complete).toBe(true);
       expect(mockBatchGetItemsSingleTable).not.toHaveBeenCalled();
     });
 
@@ -223,9 +224,10 @@ describe('SentimentCacheRepository', () => {
 
       const result = await batchCheckExistence('AAPL', ['hash1', 'hash2']);
 
-      expect(result.size).toBe(1);
-      expect(result.has('hash1')).toBe(true);
-      expect(result.has('hash2')).toBe(false);
+      expect(result.found.size).toBe(1);
+      expect(result.complete).toBe(true);
+      expect(result.found.has('hash1')).toBe(true);
+      expect(result.found.has('hash2')).toBe(false);
     });
   });
 });

@@ -187,10 +187,15 @@ export async function existsInCache(ticker: string, articleHash: string): Promis
  * Batch check which article hashes already exist in cache.
  * Uses BatchGetItem (100 per request) instead of N individual GetItem calls.
  *
- * @returns Set of article hashes that exist in cache
+ * @returns Object with found hashes and a `complete` flag indicating whether
+ * all batches succeeded. When `complete` is false, some hashes may be missing
+ * from the set due to batch failures.
  */
-export async function batchCheckExistence(ticker: string, hashes: string[]): Promise<Set<string>> {
-  if (hashes.length === 0) return new Set();
+export async function batchCheckExistence(
+  ticker: string,
+  hashes: string[],
+): Promise<{ found: Set<string>; complete: boolean }> {
+  if (hashes.length === 0) return { found: new Set(), complete: true };
 
   const normalizedTicker = ticker.toUpperCase();
   const keys = hashes.map((h) => ({
@@ -198,23 +203,23 @@ export async function batchCheckExistence(ticker: string, hashes: string[]): Pro
     sk: makeHashSK(h),
   }));
 
-  // Process in batches of 100 with individual error handling per batch
   const results: SingleTableSentimentItem[] = [];
   const batchSize = 100;
+  let complete = true;
   for (let i = 0; i < keys.length; i += batchSize) {
     const batch = keys.slice(i, i + batchSize);
     try {
       const batchResults = await batchGetItemsSingleTable<SingleTableSentimentItem>(batch);
       results.push(...batchResults);
     } catch (error) {
-      // Log but continue with other batches - partial results are better than total failure
+      complete = false;
       logger.warn(`Batch ${Math.floor(i / batchSize) + 1} failed, continuing`, {
         error: String(error),
       });
     }
   }
 
-  return new Set(results.map((item) => item.articleHash));
+  return { found: new Set(results.map((item) => item.articleHash)), complete };
 }
 
 // ============================================================

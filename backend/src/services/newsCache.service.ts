@@ -62,7 +62,7 @@ async function filterNewArticles(
   }
 
   const hashes = articlesWithHashes.map((a) => a.hash);
-  const existingHashes = await batchCheckExistence(ticker, hashes);
+  const { found: existingHashes } = await batchCheckExistence(ticker, hashes);
 
   const newArticles = articlesWithHashes.filter(({ hash }) => !existingHashes.has(hash));
   const duplicateCount = articlesWithHashes.length - newArticles.length;

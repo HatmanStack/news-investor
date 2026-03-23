@@ -4,10 +4,11 @@ Handles GET /earnings and POST /batch/earnings requests.
 """
 
 import json
-from typing import Any
+from typing import cast
 
 from repositories.earnings_cache import cache_earnings, get_cached_earnings
 from services.earnings_service import fetch_earnings_calendar
+from typedefs import ApiGatewayEvent, ApiGatewayResponse, EarningsCacheItem, EarningsEvent
 from utils.logger import get_structured_logger
 from utils.response import error_response, success_response
 from utils.validation import validate_ticker
@@ -15,7 +16,7 @@ from utils.validation import validate_ticker
 logger = get_structured_logger(__name__)
 
 
-def handle_earnings_request(event: dict[str, Any]) -> dict[str, Any]:
+def handle_earnings_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """GET /earnings?ticker=X"""
     query_params = event.get("queryStringParameters") or {}
     raw_ticker = query_params.get("ticker", "")
@@ -30,13 +31,13 @@ def handle_earnings_request(event: dict[str, Any]) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Error fetching earnings for {ticker}: {e}", exc_info=True)
-        return error_response(f"Failed to fetch earnings: {e}", 500)
+        return error_response("Failed to fetch earnings", 500)
 
 
-def handle_batch_earnings_request(event: dict[str, Any]) -> dict[str, Any]:
+def handle_batch_earnings_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """POST /batch/earnings with body { tickers: [...] }"""
     try:
-        body = json.loads(event.get("body", "{}"))
+        body = json.loads(event.get("body") or "{}")
     except (json.JSONDecodeError, TypeError):
         return error_response("Invalid JSON body", 400)
 
@@ -47,7 +48,7 @@ def handle_batch_earnings_request(event: dict[str, Any]) -> dict[str, Any]:
     if len(tickers) > 20:
         return error_response("Maximum 20 tickers per batch request", 400)
 
-    results: dict[str, Any] = {}
+    results: dict[str, list[EarningsEvent]] = {}
     for raw_ticker in tickers:
         ticker = validate_ticker(str(raw_ticker))
         if not ticker:
@@ -61,25 +62,29 @@ def handle_batch_earnings_request(event: dict[str, Any]) -> dict[str, Any]:
     return success_response({"results": results})
 
 
-def _get_earnings_for_ticker(ticker: str) -> list[dict[str, Any]]:
+def _get_earnings_for_ticker(ticker: str) -> list[EarningsEvent]:
     """Get earnings for a ticker with cache-first logic."""
     # Check cache first (None = miss, [] = cached empty, [...] = cached data)
     cached = get_cached_earnings(ticker)
     if cached is not None:
         logger.info("Earnings cache hit", ticker=ticker, count=len(cached))
-        return _clean_cache_items(cached) if cached else []
+        return _clean_cache_items(cast(list[EarningsCacheItem], cached)) if cached else []
 
     # Cache miss - fetch from yfinance
     logger.info("Earnings cache miss, fetching from yfinance", ticker=ticker)
     earnings = fetch_earnings_calendar(ticker)
 
     # Cache results (even if empty, to prevent repeated fetches for ETFs/index funds)
-    cache_earnings(ticker, earnings)
+    # EarningsEvent is a TypedDict (subclass of dict) — compatible with repo's dict[str, Any]
+    cache_earnings(ticker, cast(list[dict], earnings))
 
     return earnings
 
 
-def _clean_cache_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _clean_cache_items(items: list[EarningsCacheItem]) -> list[EarningsEvent]:
     """Remove DynamoDB-specific fields from cached items."""
     keys_to_remove = {"pk", "sk", "entityType", "ttl", "createdAt", "updatedAt"}
-    return [{k: v for k, v in item.items() if k not in keys_to_remove} for item in items]
+    return [
+        cast(EarningsEvent, {k: v for k, v in item.items() if k not in keys_to_remove})
+        for item in items
+    ]

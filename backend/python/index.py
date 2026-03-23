@@ -6,6 +6,7 @@ Routes requests to appropriate handlers based on path and method.
 import time
 from typing import Any
 
+from typedefs import ApiGatewayEvent, ApiGatewayResponse
 from utils.logger import (
     clear_request_context,
     get_structured_logger,
@@ -19,7 +20,7 @@ logger = get_structured_logger(__name__)
 _is_first_invocation = True
 
 
-def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
     """
     Lambda handler - routes requests to appropriate handler functions.
 
@@ -59,7 +60,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         logger.info("Incoming request", isColdStart=is_cold_start)
 
-        response: dict[str, Any]
+        # Reject oversized request bodies (1MB limit)
+        body = event.get("body")
+        if body and len(body) > 1_048_576:
+            return error_response("Request body too large (max 1MB)", 413)
+
+        response: ApiGatewayResponse
 
         # Route to appropriate handler
         if raw_path == "/stocks" and method == "GET":
@@ -81,8 +87,21 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             response = handle_etf_holdings(event)
 
         else:
-            logger.warning("Unknown route", path=raw_path)
-            response = error_response(f"Not found: {method} {raw_path}", 404)
+            # Distinguish 405 (known path, wrong method) from 404 (unknown path)
+            known_paths = {
+                "/stocks",
+                "/search",
+                "/batch/stocks",
+                "/earnings",
+                "/batch/earnings",
+                "/etf-holdings",
+            }
+            if raw_path in known_paths:
+                logger.warning("Method not allowed", path=raw_path, method=method)
+                response = error_response(f"Method not allowed: {method} {raw_path}", 405)
+            else:
+                logger.warning("Unknown route", path=raw_path)
+                response = error_response(f"Not found: {raw_path}", 404)
 
         # Log request metrics
         duration_ms = (time.time() - start_time) * 1000

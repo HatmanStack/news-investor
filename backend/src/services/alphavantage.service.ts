@@ -9,8 +9,8 @@ import { APIError } from '../utils/error.util';
 import { fetchWithTimeout } from '../utils/http.util.js';
 import * as CircuitBreakerRepo from '../repositories/circuitBreaker.repository.js';
 import {
-  FINNHUB_FAILURE_THRESHOLD,
-  FINNHUB_COOLDOWN_MS,
+  ALPHAVANTAGE_FAILURE_THRESHOLD,
+  ALPHAVANTAGE_COOLDOWN_MS,
   CIRCUIT_SERVICE_ALPHAVANTAGE,
 } from '../constants/ml.constants.js';
 import { logger } from '../utils/logger.util.js';
@@ -115,10 +115,14 @@ export async function fetchAlphaVantageNews(
   to: string,
   apiKey: string,
 ): Promise<FinnhubNewsArticle[]> {
-  // Circuit breaker: fail-fast if Alpha Vantage is rate-limited or down
+  // Circuit breaker: fail-fast if Alpha Vantage is rate-limited or down.
+  // Note: concurrent Lambda containers may read stale cbState before either records
+  // a failure, causing both to pass the open-check. This is inherent to a DynamoDB-backed
+  // breaker without atomic increments — acceptable because the worst case is N extra
+  // API calls (one per concurrent container) before the circuit opens, not data corruption.
   const cbState = await CircuitBreakerRepo.getCircuitState(CIRCUIT_SERVICE_ALPHAVANTAGE);
   if (
-    cbState.consecutiveFailures >= FINNHUB_FAILURE_THRESHOLD &&
+    cbState.consecutiveFailures >= ALPHAVANTAGE_FAILURE_THRESHOLD &&
     Date.now() < cbState.circuitOpenUntil
   ) {
     logger.warn('Circuit open, skipping API call');
@@ -188,8 +192,8 @@ export async function fetchAlphaVantageNews(
   } catch (error) {
     await CircuitBreakerRepo.recordFailure(
       cbState.consecutiveFailures,
-      FINNHUB_FAILURE_THRESHOLD,
-      FINNHUB_COOLDOWN_MS,
+      ALPHAVANTAGE_FAILURE_THRESHOLD,
+      ALPHAVANTAGE_COOLDOWN_MS,
       CIRCUIT_SERVICE_ALPHAVANTAGE,
     );
     if (error instanceof APIError) {

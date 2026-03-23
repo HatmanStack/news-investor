@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
 
+## [Unreleased]
+
 ## [2.8.0] - 2026-03-22
 
 ### Added

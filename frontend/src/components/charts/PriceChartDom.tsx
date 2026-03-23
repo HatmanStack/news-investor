@@ -2,7 +2,15 @@
 
 import React, { useRef, useEffect } from 'react';
 import { createChart, LineSeries, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, LineData, CandlestickData } from 'lightweight-charts';
+import type {
+  IChartApi,
+  ISeriesApi,
+  LineData,
+  CandlestickData,
+  SeriesType,
+  LogicalRange,
+  HistogramData,
+} from 'lightweight-charts';
 import { computeBollingerBands } from './indicators/bollingerBands';
 import { computeRSI } from './indicators/rsi';
 import { computeMACD } from './indicators/macd';
@@ -108,7 +116,7 @@ export default function PriceChartDom({
 
     mainChartRef.current = chart;
 
-    let series: ISeriesApi<any>;
+    let series: ISeriesApi<SeriesType> | undefined;
     if (showCandlestick && candlestickData.length > 0 && !isComparing) {
       series = chart.addSeries(CandlestickSeries, {
         upColor: '#26a69a',
@@ -171,12 +179,12 @@ export default function PriceChartDom({
           lastValueVisible: false,
           crosshairMarkerVisible: false,
         });
-        compSeries.setData(cs.data as any);
+        compSeries.setData(cs.data as LineData[]);
       }
     }
 
     // Render annotations
-    if (annotations && annotations.length > 0 && series!) {
+    if (annotations && annotations.length > 0 && series) {
       for (const annotation of annotations) {
         if (annotation.type === 'horizontal_line') {
           series.createPriceLine({
@@ -201,9 +209,9 @@ export default function PriceChartDom({
             crosshairMarkerVisible: false,
           });
           trendSeries.setData([
-            { time: annotation.timeX as any, value: annotation.priceY },
-            { time: annotation.timeX2 as any, value: annotation.priceY2 },
-          ]);
+            { time: annotation.timeX, value: annotation.priceY },
+            { time: annotation.timeX2, value: annotation.priceY2 },
+          ] as LineData[]);
         }
       }
     }
@@ -369,13 +377,13 @@ export default function PriceChartDom({
     const rsiTimeScale = chart.timeScale();
 
     let syncing = false;
-    const mainToRsiHandler = (range: any) => {
+    const mainToRsiHandler = (range: LogicalRange | null) => {
       if (syncing || !range || !rsiChartRef.current) return;
       syncing = true;
       rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
       syncing = false;
     };
-    const rsiToMainHandler = (range: any) => {
+    const rsiToMainHandler = (range: LogicalRange | null) => {
       if (syncing || !range || !mainChartRef.current) return;
       syncing = true;
       mainChartRef.current.timeScale().setVisibleLogicalRange(range);
@@ -457,7 +465,7 @@ export default function PriceChartDom({
           time: m.time,
           value: m.histogram,
           color: m.histogram >= 0 ? '#26a69a' : '#ef5350',
-        })) as any,
+        })) as HistogramData[],
       );
     }
 
@@ -468,13 +476,13 @@ export default function PriceChartDom({
     const macdTimeScale = chart.timeScale();
 
     let syncing = false;
-    const mainToMacdHandler = (range: any) => {
+    const mainToMacdHandler = (range: LogicalRange | null) => {
       if (syncing || !range || !macdChartRef.current) return;
       syncing = true;
       macdChartRef.current.timeScale().setVisibleLogicalRange(range);
       syncing = false;
     };
-    const macdToMainHandler = (range: any) => {
+    const macdToMainHandler = (range: LogicalRange | null) => {
       if (syncing || !range || !mainChartRef.current) return;
       syncing = true;
       mainChartRef.current.timeScale().setVisibleLogicalRange(range);

@@ -17,6 +17,19 @@ os.environ["DYNAMODB_TABLE_NAME"] = "StocksCache"
 os.environ["ALLOWED_ORIGINS"] = "*"
 
 
+@pytest.fixture(autouse=True)
+def _reset_yfinance_circuit_breaker():
+    """Reset the yfinance circuit breaker between tests to prevent state leaks."""
+    yield
+    try:
+        from services.yfinance_service import _yfinance_circuit
+
+        _yfinance_circuit._consecutive_failures = 0
+        _yfinance_circuit._open_until = 0
+    except ImportError:
+        pass
+
+
 @pytest.fixture
 def api_event():
     """Factory for creating API Gateway events."""

@@ -4,6 +4,8 @@ import json
 import os
 from typing import Any
 
+from typedefs import ApiGatewayResponse
+
 
 def get_cors_headers() -> dict[str, str]:
     """Get CORS headers from environment."""
@@ -20,7 +22,7 @@ def success_response(
     data: Any,
     status_code: int = 200,
     extra: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> ApiGatewayResponse:
     """
     Create a successful API response.
 
@@ -43,7 +45,7 @@ def success_response(
     }
 
 
-def error_response(message: str, status_code: int = 500) -> dict[str, Any]:
+def error_response(message: str, status_code: int = 500) -> ApiGatewayResponse:
     """
     Create an error API response.
 

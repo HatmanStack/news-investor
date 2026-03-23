@@ -171,6 +171,59 @@ describe('NewsCacheRepository', () => {
     });
   });
 
+  describe('queryArticlesByTicker - max items guard', () => {
+    it('should truncate results to MAX_ARTICLES_PER_QUERY (500) and keep most recent', async () => {
+      // Generate 600 items with varying dates
+      const items = Array.from({ length: 600 }, (_, i) => ({
+        pk: 'NEWS#AAPL',
+        sk: `HASH#hash${i}`,
+        entityType: 'NEWS' as const,
+        ticker: 'AAPL',
+        articleHash: `hash${i}`,
+        headline: `Article ${i}`,
+        summary: '',
+        source: 'Source',
+        url: `https://example.com/${i}`,
+        // Dates from 2025-01-01 to 2025-02-09 (oldest first)
+        publishedAt: `2025-${String(1 + Math.floor(i / 31)).padStart(2, '0')}-${String(1 + (i % 31)).padStart(2, '0')}`,
+        ttl: 1700000000,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      }));
+
+      mockQueryItems.mockResolvedValueOnce(items);
+
+      const result = await queryArticlesByTicker('AAPL');
+
+      // Should be truncated to 500
+      expect(result).toHaveLength(500);
+    });
+
+    it('should not truncate results at or below 500', async () => {
+      const items = Array.from({ length: 500 }, (_, i) => ({
+        pk: 'NEWS#AAPL',
+        sk: `HASH#hash${i}`,
+        entityType: 'NEWS' as const,
+        ticker: 'AAPL',
+        articleHash: `hash${i}`,
+        headline: `Article ${i}`,
+        summary: '',
+        source: 'Source',
+        url: `https://example.com/${i}`,
+        publishedAt: '2025-01-15',
+        ttl: 1700000000,
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      }));
+
+      mockQueryItems.mockResolvedValueOnce(items);
+
+      const result = await queryArticlesByTicker('AAPL');
+
+      expect(result).toHaveLength(500);
+    });
+  });
+
   describe('existsInCache', () => {
     it('returns false when article not in cache', async () => {
       mockGetItem.mockResolvedValueOnce(null);
@@ -206,7 +259,8 @@ describe('NewsCacheRepository', () => {
     it('returns empty set for empty input', async () => {
       const result = await batchCheckExistence('AAPL', []);
 
-      expect(result.size).toBe(0);
+      expect(result.found.size).toBe(0);
+      expect(result.complete).toBe(true);
       expect(mockBatchGetItemsSingleTable).not.toHaveBeenCalled();
     });
 
@@ -244,10 +298,11 @@ describe('NewsCacheRepository', () => {
 
       const result = await batchCheckExistence('AAPL', ['hash1', 'hash2', 'hash3']);
 
-      expect(result.size).toBe(2);
-      expect(result.has('hash1')).toBe(true);
-      expect(result.has('hash2')).toBe(false);
-      expect(result.has('hash3')).toBe(true);
+      expect(result.found.size).toBe(2);
+      expect(result.complete).toBe(true);
+      expect(result.found.has('hash1')).toBe(true);
+      expect(result.found.has('hash2')).toBe(false);
+      expect(result.found.has('hash3')).toBe(true);
     });
   });
 });

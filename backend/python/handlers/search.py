@@ -3,9 +3,8 @@ Search endpoint handler.
 Handles GET /search requests for ticker search.
 """
 
-from typing import Any
-
 from services.yfinance_service import search_tickers
+from typedefs import ApiGatewayEvent, ApiGatewayResponse
 from utils.error import APIError
 from utils.logger import get_structured_logger
 from utils.response import error_response, success_response
@@ -15,7 +14,7 @@ from utils.validation import MAX_QUERY_LENGTH
 logger = get_structured_logger(__name__)
 
 
-def handle_search_request(event: dict[str, Any]) -> dict[str, Any]:
+def handle_search_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
     """
     Handle GET /search requests.
 

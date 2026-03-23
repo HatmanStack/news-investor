@@ -12,7 +12,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["handlers", "services", "repositories", "utils", "schemas"]
+known-first-party = ["handlers", "services", "repositories", "utils", "schemas", "typedefs"]
 
 [tool.mypy]
 python_version = "3.13"

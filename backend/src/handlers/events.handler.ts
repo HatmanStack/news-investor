@@ -6,7 +6,7 @@
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
-import { classifyEvent } from '../services/eventClassification.service.js';
+import { classifyEvent, resetMetrics } from '../services/eventClassification.service.js';
 import type { NewsArticle } from '../repositories/newsCache.repository.js';
 import type { EventClassificationResult } from '../types/event.types.js';
 import { successResponse, errorResponse, type APIGatewayResponse } from '../utils/response.util.js';
@@ -42,6 +42,9 @@ export async function handleEventClassification(
       return errorResponse(parsed.error, 400);
     }
     const { articles } = parsed.data;
+
+    // Reset metrics at batch start to prevent cross-invocation accumulation
+    resetMetrics();
 
     // Classify articles in parallel
     const classificationPromises = (articles as NewsArticle[]).map(async (article) => {
