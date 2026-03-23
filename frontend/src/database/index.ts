@@ -1,48 +1,54 @@
 /**
  * Platform-agnostic database module
- * Exports the correct database implementation based on platform
+ * Creates and returns the appropriate StorageAdapter based on platform.
  */
 
 import { Platform } from 'react-native';
-import type { DatabaseClient } from './types';
+import type { StorageAdapter } from './storageAdapter';
+import { SqliteAdapter } from './sqliteAdapter';
+import { LocalStorageAdapter } from './localStorageAdapter';
 
-/** Shape shared by database.ts and database.web.ts dynamic imports */
-interface DatabaseModule {
-  initializeDatabase: () => Promise<void>;
-  getDatabase: () => DatabaseClient | Promise<DatabaseClient>;
-  closeDatabase: () => Promise<void>;
-  resetDatabase: () => Promise<void>;
-}
+let adapter: StorageAdapter | null = null;
 
-let databaseModule: DatabaseModule | null = null;
-
-async function loadDatabaseModule(): Promise<DatabaseModule> {
-  if (!databaseModule) {
-    if (Platform.OS === 'web') {
-      databaseModule = (await import('./database.web')) as DatabaseModule;
-    } else {
-      databaseModule = (await import('./database')) as DatabaseModule;
-    }
-  }
-  return databaseModule;
-}
-
+/**
+ * Initialize the database with the platform-appropriate adapter.
+ * Creates SqliteAdapter on native, LocalStorageAdapter on web.
+ */
 export async function initializeDatabase(): Promise<void> {
-  const mod = await loadDatabaseModule();
-  return mod.initializeDatabase();
+  if (Platform.OS === 'web') {
+    adapter = new LocalStorageAdapter();
+  } else {
+    adapter = new SqliteAdapter();
+  }
+  await adapter.initialize();
 }
 
-export async function getDatabase(): Promise<DatabaseClient> {
-  const mod = await loadDatabaseModule();
-  return mod.getDatabase();
+/**
+ * Get the initialized StorageAdapter instance.
+ * Synchronous -- throws if not initialized.
+ */
+export function getAdapter(): StorageAdapter {
+  if (!adapter) {
+    throw new Error('Database not initialized. Call initializeDatabase() first.');
+  }
+  return adapter;
 }
 
+/**
+ * Close the database connection.
+ */
 export async function closeDatabase(): Promise<void> {
-  const mod = await loadDatabaseModule();
-  return mod.closeDatabase();
+  if (adapter) {
+    await adapter.close();
+    adapter = null;
+  }
 }
 
+/**
+ * Reset the database (drops all data and reinitializes).
+ */
 export async function resetDatabase(): Promise<void> {
-  const mod = await loadDatabaseModule();
-  return mod.resetDatabase();
+  if (adapter) {
+    await adapter.reset();
+  }
 }

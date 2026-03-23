@@ -3,49 +3,60 @@
  */
 
 import * as CombinedWordRepository from '../combinedWord.repository';
-import { getDatabase } from '../../index';
+import { getAdapter } from '../../index';
 
 jest.mock('../../index', () => ({
-  getDatabase: jest.fn(),
+  getAdapter: jest.fn(),
 }));
 
-const mockDb = {
-  getFirstAsync: jest.fn(),
+const mockAdapter = {
+  query: jest.fn(),
+  queryOne: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+  count: jest.fn(),
+  update: jest.fn(),
+  transaction: jest.fn(),
+  initialize: jest.fn(),
+  close: jest.fn(),
+  reset: jest.fn(),
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (getDatabase as jest.Mock).mockResolvedValue(mockDb);
+  (getAdapter as jest.Mock).mockReturnValue(mockAdapter);
 });
+
+const sampleRecord = {
+  ticker: 'AAPL',
+  date: '2026-03-20',
+  sentimentNumber: 0.5,
+  positive: 10,
+  negative: 3,
+  sentiment: 'POS',
+  nextDay: 0,
+  twoWks: 0,
+  oneMnth: 0,
+  updateDate: '2026-03-20',
+};
 
 describe('CombinedWordRepository', () => {
   describe('findLatestByTicker', () => {
     it('returns the latest record for a ticker', async () => {
-      const latestRecord = {
-        ticker: 'AAPL',
-        date: '2026-03-20',
-        sentimentNumber: 0.5,
-        positive: 10,
-        negative: 3,
-        sentiment: 'POS',
-        nextDay: 0,
-        twoWks: 0,
-        oneMnth: 0,
-        updateDate: '2026-03-20',
-      };
-      mockDb.getFirstAsync.mockResolvedValue(latestRecord);
+      mockAdapter.queryOne.mockResolvedValue(sampleRecord);
 
       const result = await CombinedWordRepository.findLatestByTicker('AAPL');
 
-      expect(mockDb.getFirstAsync).toHaveBeenCalledWith(
-        expect.stringContaining('ORDER BY date DESC LIMIT 1'),
-        ['AAPL'],
-      );
-      expect(result).toEqual(latestRecord);
+      expect(mockAdapter.queryOne).toHaveBeenCalledWith('combined_word_count_details', {
+        filter: { ticker: 'AAPL' },
+        orderBy: 'date',
+        orderDirection: 'DESC',
+      });
+      expect(result).toEqual(sampleRecord);
     });
 
     it('returns null when no records exist for the ticker', async () => {
-      mockDb.getFirstAsync.mockResolvedValue(null);
+      mockAdapter.queryOne.mockResolvedValue(null);
 
       const result = await CombinedWordRepository.findLatestByTicker('XYZ');
 
@@ -53,13 +64,93 @@ describe('CombinedWordRepository', () => {
     });
 
     it('returns null on database error', async () => {
-      mockDb.getFirstAsync.mockRejectedValue(new Error('DB failure'));
-      const spy = jest.spyOn(console, 'error').mockImplementation();
+      mockAdapter.queryOne.mockRejectedValue(new Error('DB failure'));
 
       const result = await CombinedWordRepository.findLatestByTicker('AAPL');
 
       expect(result).toBeNull();
-      spy.mockRestore();
+    });
+  });
+
+  describe('findByTicker', () => {
+    it('returns all records for a ticker', async () => {
+      mockAdapter.query.mockResolvedValue([sampleRecord]);
+
+      const result = await CombinedWordRepository.findByTicker('AAPL');
+
+      expect(mockAdapter.query).toHaveBeenCalledWith('combined_word_count_details', {
+        filter: { ticker: 'AAPL' },
+        orderBy: 'date',
+        orderDirection: 'DESC',
+      });
+      expect(result).toEqual([sampleRecord]);
+    });
+
+    it('returns empty array on error', async () => {
+      mockAdapter.query.mockRejectedValue(new Error('DB failure'));
+
+      const result = await CombinedWordRepository.findByTicker('AAPL');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('findByTickerAndDateRange', () => {
+    it('returns records within date range', async () => {
+      mockAdapter.query.mockResolvedValue([sampleRecord]);
+
+      const result = await CombinedWordRepository.findByTickerAndDateRange(
+        'AAPL',
+        '2026-03-01',
+        '2026-03-31',
+      );
+
+      expect(mockAdapter.query).toHaveBeenCalledWith('combined_word_count_details', {
+        filter: { ticker: 'AAPL' },
+        rangeFilter: { column: 'date', start: '2026-03-01', end: '2026-03-31' },
+        orderBy: 'date',
+        orderDirection: 'DESC',
+      });
+      expect(result).toEqual([sampleRecord]);
+    });
+  });
+
+  describe('upsert', () => {
+    it('calls put with replace strategy', async () => {
+      mockAdapter.put.mockResolvedValue({ changes: 1 });
+
+      await CombinedWordRepository.upsert({
+        ...sampleRecord,
+        eventCounts: null,
+        avgAspectScore: null,
+        avgMlScore: null,
+        avgSignalScore: null,
+        materialEventCount: 0,
+      });
+
+      expect(mockAdapter.put).toHaveBeenCalledWith(
+        'combined_word_count_details',
+        expect.objectContaining({
+          ticker: 'AAPL',
+          date: '2026-03-20',
+        }),
+        { conflictStrategy: 'replace' },
+      );
+    });
+
+    it('throws on adapter error', async () => {
+      mockAdapter.put.mockRejectedValue(new Error('Write error'));
+
+      await expect(
+        CombinedWordRepository.upsert({
+          ...sampleRecord,
+          eventCounts: null,
+          avgAspectScore: null,
+          avgMlScore: null,
+          avgSignalScore: null,
+          materialEventCount: 0,
+        }),
+      ).rejects.toThrow('Write error');
     });
   });
 });

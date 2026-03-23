@@ -3,10 +3,11 @@
  * Data access layer for PortfolioDetails entity (user watchlist)
  */
 
-import { getDatabase } from '../index';
+import { getAdapter } from '../index';
 import { PortfolioDetails } from '@/types/database.types';
-import { TABLE_NAMES } from '@/constants/database.constants';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
+
+const TABLE = 'portfolio_details';
 
 /**
  * Find all portfolio entries
@@ -14,10 +15,12 @@ import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
  */
 export async function findAll(): Promise<PortfolioDetails[]> {
   return withRepoLoggingDefault('PortfolioRepository', 'findAll', [], async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.PORTFOLIO_DETAILS} ORDER BY ticker ASC`;
-    const results = await db.getAllAsync<PortfolioDetails>(sql);
-    return results;
+    const adapter = getAdapter();
+    const results = await adapter.query(TABLE, {
+      orderBy: 'ticker',
+      orderDirection: 'ASC',
+    });
+    return results as unknown as PortfolioDetails[];
   });
 }
 
@@ -28,10 +31,9 @@ export async function findAll(): Promise<PortfolioDetails[]> {
  */
 export async function findByTicker(ticker: string): Promise<PortfolioDetails | null> {
   return withRepoLoggingDefault('PortfolioRepository', 'findByTicker', null, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.PORTFOLIO_DETAILS} WHERE ticker = ?`;
-    const result = await db.getFirstAsync<PortfolioDetails>(sql, [ticker]);
-    return result || null;
+    const adapter = getAdapter();
+    const result = await adapter.queryOne(TABLE, { filter: { ticker } });
+    return (result as unknown as PortfolioDetails) || null;
   });
 }
 
@@ -42,28 +44,24 @@ export async function findByTicker(ticker: string): Promise<PortfolioDetails | n
  */
 export async function upsert(portfolio: PortfolioDetails): Promise<void> {
   return withRepoLogging('PortfolioRepository', 'upsert', async () => {
-    const db = await getDatabase();
-    const sql = `
-    INSERT OR REPLACE INTO ${TABLE_NAMES.PORTFOLIO_DETAILS} (
-      ticker, next, name, wks, mnth,
-      nextDayDirection, nextDayProbability,
-      twoWeekDirection, twoWeekProbability,
-      oneMonthDirection, oneMonthProbability
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-    await db.runAsync(sql, [
-      portfolio.ticker,
-      portfolio.next,
-      portfolio.name,
-      portfolio.wks,
-      portfolio.mnth,
-      portfolio.nextDayDirection ?? null,
-      portfolio.nextDayProbability ?? null,
-      portfolio.twoWeekDirection ?? null,
-      portfolio.twoWeekProbability ?? null,
-      portfolio.oneMonthDirection ?? null,
-      portfolio.oneMonthProbability ?? null,
-    ]);
+    const adapter = getAdapter();
+    await adapter.put(
+      TABLE,
+      {
+        ticker: portfolio.ticker,
+        next: portfolio.next,
+        name: portfolio.name,
+        wks: portfolio.wks,
+        mnth: portfolio.mnth,
+        nextDayDirection: portfolio.nextDayDirection ?? null,
+        nextDayProbability: portfolio.nextDayProbability ?? null,
+        twoWeekDirection: portfolio.twoWeekDirection ?? null,
+        twoWeekProbability: portfolio.twoWeekProbability ?? null,
+        oneMonthDirection: portfolio.oneMonthDirection ?? null,
+        oneMonthProbability: portfolio.oneMonthProbability ?? null,
+      },
+      { conflictStrategy: 'replace' },
+    );
   });
 }
 
@@ -75,8 +73,6 @@ export async function upsert(portfolio: PortfolioDetails): Promise<void> {
  */
 export async function update(ticker: string, updates: Partial<PortfolioDetails>): Promise<void> {
   return withRepoLogging('PortfolioRepository', 'update', async () => {
-    const db = await getDatabase();
-
     // Whitelist of allowed updateable columns (exclude primary key 'ticker')
     const ALLOWED_COLUMNS = [
       'next',
@@ -92,20 +88,21 @@ export async function update(ticker: string, updates: Partial<PortfolioDetails>)
     ];
 
     // Filter out undefined fields and non-whitelisted columns
-    const fields = Object.keys(updates).filter(
-      (key) =>
-        key !== 'ticker' && // Explicitly exclude primary key
+    const data: Record<string, unknown> = {};
+    for (const key of Object.keys(updates)) {
+      if (
+        key !== 'ticker' &&
         ALLOWED_COLUMNS.includes(key) &&
-        updates[key as keyof PortfolioDetails] !== undefined,
-    );
+        updates[key as keyof PortfolioDetails] !== undefined
+      ) {
+        data[key] = updates[key as keyof PortfolioDetails];
+      }
+    }
 
-    if (fields.length === 0) return;
+    if (Object.keys(data).length === 0) return;
 
-    const setClause = fields.map((key) => `${key} = ?`).join(', ');
-    const values = fields.map((key) => updates[key as keyof PortfolioDetails]);
-
-    const sql = `UPDATE ${TABLE_NAMES.PORTFOLIO_DETAILS} SET ${setClause} WHERE ticker = ?`;
-    await db.runAsync(sql, [...values, ticker]);
+    const adapter = getAdapter();
+    await adapter.update(TABLE, { ticker }, data);
   });
 }
 
@@ -115,9 +112,8 @@ export async function update(ticker: string, updates: Partial<PortfolioDetails>)
  */
 export async function deleteByTicker(ticker: string): Promise<void> {
   return withRepoLogging('PortfolioRepository', 'deleteByTicker', async () => {
-    const db = await getDatabase();
-    const sql = `DELETE FROM ${TABLE_NAMES.PORTFOLIO_DETAILS} WHERE ticker = ?`;
-    await db.runAsync(sql, [ticker]);
+    const adapter = getAdapter();
+    await adapter.delete(TABLE, { ticker });
   });
 }
 
@@ -128,10 +124,9 @@ export async function deleteByTicker(ticker: string): Promise<void> {
  */
 export async function existsByTicker(ticker: string): Promise<boolean> {
   return withRepoLoggingDefault('PortfolioRepository', 'existsByTicker', false, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.PORTFOLIO_DETAILS} WHERE ticker = ?`;
-    const result = await db.getFirstAsync<{ count: number }>(sql, [ticker]);
-    return (result?.count || 0) > 0;
+    const adapter = getAdapter();
+    const c = await adapter.count(TABLE, { ticker });
+    return c > 0;
   });
 }
 
@@ -141,10 +136,8 @@ export async function existsByTicker(ticker: string): Promise<boolean> {
  */
 export async function count(): Promise<number> {
   return withRepoLoggingDefault('PortfolioRepository', 'count', 0, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.PORTFOLIO_DETAILS}`;
-    const result = await db.getFirstAsync<{ count: number }>(sql);
-    return result?.count || 0;
+    const adapter = getAdapter();
+    return adapter.count(TABLE);
   });
 }
 
@@ -154,8 +147,7 @@ export async function count(): Promise<number> {
  */
 export async function deleteAll(): Promise<void> {
   return withRepoLogging('PortfolioRepository', 'deleteAll', async () => {
-    const db = await getDatabase();
-    const sql = `DELETE FROM ${TABLE_NAMES.PORTFOLIO_DETAILS}`;
-    await db.runAsync(sql);
+    const adapter = getAdapter();
+    await adapter.delete(TABLE, {});
   });
 }

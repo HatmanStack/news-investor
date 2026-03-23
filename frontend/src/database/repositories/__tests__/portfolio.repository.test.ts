@@ -3,23 +3,29 @@
  */
 
 import * as PortfolioRepository from '../portfolio.repository';
-import { getDatabase } from '../../index';
+import { getAdapter } from '../../index';
 import { PortfolioDetails } from '@/types/database.types';
 
 jest.mock('../../index', () => ({
-  getDatabase: jest.fn(),
+  getAdapter: jest.fn(),
 }));
 
-const mockDb = {
-  getAllAsync: jest.fn(),
-  getFirstAsync: jest.fn(),
-  runAsync: jest.fn(),
-  withTransactionAsync: jest.fn(),
+const mockAdapter = {
+  query: jest.fn(),
+  queryOne: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+  count: jest.fn(),
+  update: jest.fn(),
+  transaction: jest.fn(),
+  initialize: jest.fn(),
+  close: jest.fn(),
+  reset: jest.fn(),
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (getDatabase as jest.Mock).mockResolvedValue(mockDb);
+  (getAdapter as jest.Mock).mockReturnValue(mockAdapter);
 });
 
 const samplePortfolio: PortfolioDetails = {
@@ -38,48 +44,46 @@ const samplePortfolio: PortfolioDetails = {
 
 describe('PortfolioRepository', () => {
   describe('findAll', () => {
-    it('returns array of portfolio entries from getAllAsync', async () => {
+    it('returns array of portfolio entries', async () => {
       const entries: PortfolioDetails[] = [
         samplePortfolio,
         { ...samplePortfolio, ticker: 'MSFT', name: 'Microsoft Corp.' },
       ];
-      mockDb.getAllAsync.mockResolvedValue(entries);
+      mockAdapter.query.mockResolvedValue(entries);
 
       const result = await PortfolioRepository.findAll();
 
-      expect(getDatabase).toHaveBeenCalled();
-      expect(mockDb.getAllAsync).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT * FROM portfolio_details'),
-      );
+      expect(getAdapter).toHaveBeenCalled();
+      expect(mockAdapter.query).toHaveBeenCalledWith('portfolio_details', {
+        orderBy: 'ticker',
+        orderDirection: 'ASC',
+      });
       expect(result).toEqual(entries);
     });
 
     it('returns empty array on error', async () => {
-      mockDb.getAllAsync.mockRejectedValue(new Error('DB failure'));
-      const spy = jest.spyOn(console, 'error').mockImplementation();
+      mockAdapter.query.mockRejectedValue(new Error('DB failure'));
 
       const result = await PortfolioRepository.findAll();
 
       expect(result).toEqual([]);
-      spy.mockRestore();
     });
   });
 
   describe('findByTicker', () => {
     it('returns portfolio entry when found', async () => {
-      mockDb.getFirstAsync.mockResolvedValue(samplePortfolio);
+      mockAdapter.queryOne.mockResolvedValue(samplePortfolio);
 
       const result = await PortfolioRepository.findByTicker('AAPL');
 
-      expect(mockDb.getFirstAsync).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE ticker = ?'),
-        ['AAPL'],
-      );
+      expect(mockAdapter.queryOne).toHaveBeenCalledWith('portfolio_details', {
+        filter: { ticker: 'AAPL' },
+      });
       expect(result).toEqual(samplePortfolio);
     });
 
     it('returns null when not found', async () => {
-      mockDb.getFirstAsync.mockResolvedValue(null);
+      mockAdapter.queryOne.mockResolvedValue(null);
 
       const result = await PortfolioRepository.findByTicker('ZZZZ');
 
@@ -88,50 +92,40 @@ describe('PortfolioRepository', () => {
   });
 
   describe('upsert', () => {
-    it('calls runAsync with correct SQL and params', async () => {
-      mockDb.runAsync.mockResolvedValue(undefined);
+    it('calls put with replace strategy', async () => {
+      mockAdapter.put.mockResolvedValue({ changes: 1 });
 
       await PortfolioRepository.upsert(samplePortfolio);
 
-      expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT OR REPLACE INTO portfolio_details'),
-        [
-          samplePortfolio.ticker,
-          samplePortfolio.next,
-          samplePortfolio.name,
-          samplePortfolio.wks,
-          samplePortfolio.mnth,
-          samplePortfolio.nextDayDirection,
-          samplePortfolio.nextDayProbability,
-          samplePortfolio.twoWeekDirection,
-          samplePortfolio.twoWeekProbability,
-          samplePortfolio.oneMonthDirection,
-          samplePortfolio.oneMonthProbability,
-        ],
+      expect(mockAdapter.put).toHaveBeenCalledWith(
+        'portfolio_details',
+        expect.objectContaining({
+          ticker: samplePortfolio.ticker,
+          next: samplePortfolio.next,
+          name: samplePortfolio.name,
+        }),
+        { conflictStrategy: 'replace' },
       );
     });
 
-    it('throws on db error', async () => {
-      mockDb.runAsync.mockRejectedValue(new Error('Write error'));
+    it('throws on adapter error', async () => {
+      mockAdapter.put.mockRejectedValue(new Error('Write error'));
 
       await expect(PortfolioRepository.upsert(samplePortfolio)).rejects.toThrow('Write error');
     });
   });
 
   describe('deleteByTicker', () => {
-    it('calls runAsync with DELETE SQL', async () => {
-      mockDb.runAsync.mockResolvedValue(undefined);
+    it('calls delete with correct filter', async () => {
+      mockAdapter.delete.mockResolvedValue(1);
 
       await PortfolioRepository.deleteByTicker('AAPL');
 
-      expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM portfolio_details WHERE ticker = ?'),
-        ['AAPL'],
-      );
+      expect(mockAdapter.delete).toHaveBeenCalledWith('portfolio_details', { ticker: 'AAPL' });
     });
 
     it('throws on error', async () => {
-      mockDb.runAsync.mockRejectedValue(new Error('Delete error'));
+      mockAdapter.delete.mockRejectedValue(new Error('Delete error'));
 
       await expect(PortfolioRepository.deleteByTicker('AAPL')).rejects.toThrow('Delete error');
     });
@@ -139,19 +133,16 @@ describe('PortfolioRepository', () => {
 
   describe('existsByTicker', () => {
     it('returns true when count > 0', async () => {
-      mockDb.getFirstAsync.mockResolvedValue({ count: 3 });
+      mockAdapter.count.mockResolvedValue(3);
 
       const result = await PortfolioRepository.existsByTicker('AAPL');
 
-      expect(mockDb.getFirstAsync).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT COUNT(*)'),
-        ['AAPL'],
-      );
+      expect(mockAdapter.count).toHaveBeenCalledWith('portfolio_details', { ticker: 'AAPL' });
       expect(result).toBe(true);
     });
 
     it('returns false when count is 0', async () => {
-      mockDb.getFirstAsync.mockResolvedValue({ count: 0 });
+      mockAdapter.count.mockResolvedValue(0);
 
       const result = await PortfolioRepository.existsByTicker('ZZZZ');
 
@@ -160,57 +151,55 @@ describe('PortfolioRepository', () => {
   });
 
   describe('count', () => {
-    it('returns the count from getFirstAsync', async () => {
-      mockDb.getFirstAsync.mockResolvedValue({ count: 5 });
+    it('returns the count', async () => {
+      mockAdapter.count.mockResolvedValue(5);
 
       const result = await PortfolioRepository.count();
 
+      expect(mockAdapter.count).toHaveBeenCalledWith('portfolio_details');
       expect(result).toBe(5);
     });
 
     it('returns 0 on error', async () => {
-      mockDb.getFirstAsync.mockRejectedValue(new Error('Count error'));
-      const spy = jest.spyOn(console, 'error').mockImplementation();
+      mockAdapter.count.mockRejectedValue(new Error('Count error'));
 
       const result = await PortfolioRepository.count();
 
       expect(result).toBe(0);
-      spy.mockRestore();
     });
   });
 
   describe('update', () => {
     it('updates partial fields for a ticker', async () => {
-      mockDb.runAsync.mockResolvedValue(undefined);
+      mockAdapter.update.mockResolvedValue(1);
 
       await PortfolioRepository.update('AAPL', { name: 'Apple Inc. Updated' });
 
-      expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE portfolio_details SET'),
-        expect.arrayContaining(['Apple Inc. Updated', 'AAPL']),
+      expect(mockAdapter.update).toHaveBeenCalledWith(
+        'portfolio_details',
+        { ticker: 'AAPL' },
+        { name: 'Apple Inc. Updated' },
       );
     });
 
     it('does nothing when no valid fields are provided', async () => {
       await PortfolioRepository.update('AAPL', {});
 
-      expect(mockDb.runAsync).not.toHaveBeenCalled();
+      expect(mockAdapter.update).not.toHaveBeenCalled();
     });
   });
 
   describe('deleteAll', () => {
-    it('calls runAsync with DELETE SQL for all entries', async () => {
-      mockDb.runAsync.mockResolvedValue(undefined);
+    it('calls delete with empty filter', async () => {
+      mockAdapter.delete.mockResolvedValue(5);
 
       await PortfolioRepository.deleteAll();
 
-      expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM portfolio_details'),
-      );
+      expect(mockAdapter.delete).toHaveBeenCalledWith('portfolio_details', {});
     });
 
     it('throws on error', async () => {
-      mockDb.runAsync.mockRejectedValue(new Error('Clear error'));
+      mockAdapter.delete.mockRejectedValue(new Error('Clear error'));
 
       await expect(PortfolioRepository.deleteAll()).rejects.toThrow('Clear error');
     });

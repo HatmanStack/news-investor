@@ -3,11 +3,13 @@
  * Data access layer for StockDetails entity
  */
 
-import { getDatabase } from '../index';
+import { getAdapter } from '../index';
 import { StockDetails } from '@/types/database.types';
-import { TABLE_NAMES } from '@/constants/database.constants';
 import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
+import type { PutResult } from '../storageAdapter';
+
+const TABLE = 'stock_details';
 
 /**
  * Find all stock records for a given ticker
@@ -16,11 +18,14 @@ import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
  */
 export async function findByTicker(ticker: string): Promise<StockDetails[]> {
   return withRepoLogging('StockRepository', 'findByTicker', async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
-    const results = await db.getAllAsync<StockDetails>(sql, [ticker]);
+    const adapter = getAdapter();
+    const results = await adapter.query(TABLE, {
+      filter: { ticker },
+      orderBy: 'date',
+      orderDirection: 'DESC',
+    });
     logger.debug('StockRepository', 'Found price records', { count: results.length, ticker });
-    return results;
+    return results as unknown as StockDetails[];
   });
 }
 
@@ -37,57 +42,26 @@ export async function findByTickerAndDateRange(
   endDate: string,
 ): Promise<StockDetails[]> {
   return withRepoLogging('StockRepository', 'findByTickerAndDateRange', async () => {
-    const db = await getDatabase();
-    const sql = `
-    SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS}
-    WHERE ticker = ? AND date >= ? AND date <= ?
-    ORDER BY date DESC
-  `;
-    const results = await db.getAllAsync<StockDetails>(sql, [ticker, startDate, endDate]);
-    return results;
+    const adapter = getAdapter();
+    const results = await adapter.query(TABLE, {
+      filter: { ticker },
+      rangeFilter: { column: 'date', start: startDate, end: endDate },
+      orderBy: 'date',
+      orderDirection: 'DESC',
+    });
+    return results as unknown as StockDetails[];
   });
 }
 
 /**
  * Insert a single stock record
  * @param stock - Stock details (id will be auto-generated)
- * @returns The ID of the inserted record
+ * @returns PutResult with changes count and optional lastInsertRowId
  */
-export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
+export async function insert(stock: Omit<StockDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('StockRepository', 'insert', async () => {
-    const db = await getDatabase();
-    const sql = `
-    INSERT INTO ${TABLE_NAMES.STOCK_DETAILS} (
-      hash, date, ticker, close, high, low, open, volume,
-      adjClose, adjHigh, adjLow, adjOpen, adjVolume,
-      divCash, splitFactor, marketCap, enterpriseVal,
-      peRatio, pbRatio, trailingPEG1Y
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-    const result = await db.runAsync(sql, [
-      stock.hash,
-      stock.date,
-      stock.ticker,
-      stock.close,
-      stock.high,
-      stock.low,
-      stock.open,
-      stock.volume,
-      stock.adjClose,
-      stock.adjHigh,
-      stock.adjLow,
-      stock.adjOpen,
-      stock.adjVolume,
-      stock.divCash,
-      stock.splitFactor,
-      stock.marketCap,
-      stock.enterpriseVal,
-      stock.peRatio,
-      stock.pbRatio,
-      stock.trailingPEG1Y,
-    ]);
-
-    return result.lastInsertRowId;
+    const adapter = getAdapter();
+    return adapter.put(TABLE, { ...stock });
   });
 }
 
@@ -97,8 +71,8 @@ export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
  */
 export async function insertMany(stocks: Omit<StockDetails, 'id'>[]): Promise<void> {
   return withRepoLogging('StockRepository', 'insertMany', async () => {
-    const db = await getDatabase();
-    await db.withTransactionAsync(async () => {
+    const adapter = getAdapter();
+    await adapter.transaction(async () => {
       for (const stock of stocks) {
         await insert(stock);
       }
@@ -112,9 +86,8 @@ export async function insertMany(stocks: Omit<StockDetails, 'id'>[]): Promise<vo
  */
 export async function deleteByTicker(ticker: string): Promise<void> {
   return withRepoLogging('StockRepository', 'deleteByTicker', async () => {
-    const db = await getDatabase();
-    const sql = `DELETE FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
-    await db.runAsync(sql, [ticker]);
+    const adapter = getAdapter();
+    await adapter.delete(TABLE, { ticker });
   });
 }
 
@@ -125,12 +98,8 @@ export async function deleteByTicker(ticker: string): Promise<void> {
  */
 export async function countByTicker(ticker: string): Promise<number> {
   return withRepoLoggingDefault('StockRepository', 'countByTicker', 0, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
-    // Using getAllAsync instead of getFirstAsync
-    const results = await db.getAllAsync<{ count: number }>(sql, [ticker]);
-    const first = results[0];
-    return first ? first.count : 0;
+    const adapter = getAdapter();
+    return adapter.count(TABLE, { ticker });
   });
 }
 
@@ -141,15 +110,12 @@ export async function countByTicker(ticker: string): Promise<number> {
  */
 export async function findLatestByTicker(ticker: string): Promise<StockDetails | null> {
   return withRepoLoggingDefault('StockRepository', 'findLatestByTicker', null, async () => {
-    const db = await getDatabase();
-    const sql = `
-    SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS}
-    WHERE ticker = ?
-    ORDER BY date DESC
-    LIMIT 1
-  `;
-    // Using getAllAsync instead of getFirstAsync
-    const results = await db.getAllAsync<StockDetails>(sql, [ticker]);
-    return results[0] ?? null;
+    const adapter = getAdapter();
+    const result = await adapter.queryOne(TABLE, {
+      filter: { ticker },
+      orderBy: 'date',
+      orderDirection: 'DESC',
+    });
+    return result as unknown as StockDetails | null;
   });
 }

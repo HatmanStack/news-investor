@@ -22,7 +22,7 @@ jest.mock('./src/database/index', () => {
   const actualDatabase = jest.requireActual('./src/database/database');
   return {
     initializeDatabase: jest.fn(actualDatabase.initializeDatabase),
-    getDatabase: jest.fn(actualDatabase.getDatabase),
+    getAdapter: jest.fn(),
     closeDatabase: jest.fn(actualDatabase.closeDatabase),
     resetDatabase: jest.fn(actualDatabase.resetDatabase),
   };

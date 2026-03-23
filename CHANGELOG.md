@@ -9,6 +9,8 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-03-23
+
 ### Added
 
 - **[Pro]** DynamoDB `EntityTypeIndex` GSI on `entityType` attribute — user-entity queries (report prefs, alert prefs, admin aggregation, user list) now use `Query` instead of full-table `Scan`
@@ -17,6 +19,11 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - **[Pro]** SQS dead-letter queue for failed sentiment jobs (14-day retention, 3 retries)
 - Structured frontend logger with `{level, module, message, context}` output — JSON in production, human-readable in development
 - `withRepoLogging` and `withRepoLoggingDefault` utilities for DRY repository error handling
+- `StorageAdapter` interface with document-style API (`query`, `put`, `update`, `delete`, `getAll`) — platform-agnostic database abstraction below the repository layer
+- `SqliteAdapter` implementation wrapping expo-sqlite for native platforms
+- `LocalStorageAdapter` implementation for web platform with debounced persistence and QuotaExceededError eviction
+- `ML_PIPELINE_VERSION` and `ML_PIPELINE_COMPONENTS` version constants for both backend and frontend ML pipelines
+- Backend ML integration tests for sentiment analyzer, aspect detector, and event matcher with known inputs
 
 ### Changed
 
@@ -26,12 +33,14 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - `batchPutItemsSingleTable` now handles transient DynamoDB errors (throttling, internal server error) with exponential backoff, matching `batchGetItemsSingleTable`
 - Sentiment worker validates SQS message body with Zod schema before processing
 - Chart annotation callbacks use ref-forwarding to avoid unnecessary chart rebuilds when parent re-renders
+- All 7 frontend database repositories migrated from raw SQL strings to `StorageAdapter` method calls
 
 ### Removed
 
 - 4 full-table DynamoDB `Scan` operations replaced by GSI queries
 - `paginatedScan` helper (no longer needed)
 - 83 direct `console.*` calls across frontend repositories, services, hooks, and components
+- `database.web.ts` (1035 lines) — SQL-string-parsing web database layer replaced by `LocalStorageAdapter`
 
 ## [2.8.1] - 2026-03-23
 

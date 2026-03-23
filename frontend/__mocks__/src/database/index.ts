@@ -4,6 +4,6 @@
  */
 
 export const initializeDatabase = jest.fn();
-export const getDatabase = jest.fn();
+export const getAdapter = jest.fn();
 export const closeDatabase = jest.fn();
 export const resetDatabase = jest.fn();

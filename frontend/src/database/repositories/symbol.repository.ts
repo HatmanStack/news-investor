@@ -3,10 +3,12 @@
  * Data access layer for SymbolDetails entity
  */
 
-import { getDatabase } from '../index';
+import { getAdapter } from '../index';
 import { SymbolDetails } from '@/types/database.types';
-import { TABLE_NAMES } from '@/constants/database.constants';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
+import type { PutResult } from '../storageAdapter';
+
+const TABLE = 'symbol_details';
 
 /**
  * Find symbol details by ticker
@@ -15,10 +17,9 @@ import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
  */
 export async function findByTicker(ticker: string): Promise<SymbolDetails | null> {
   return withRepoLoggingDefault('SymbolRepository', 'findByTicker', null, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.SYMBOL_DETAILS} WHERE ticker = ? LIMIT 1`;
-    const result = await db.getFirstAsync<SymbolDetails>(sql, [ticker]);
-    return result || null;
+    const adapter = getAdapter();
+    const result = await adapter.queryOne(TABLE, { filter: { ticker } });
+    return result as unknown as SymbolDetails;
   });
 }
 
@@ -28,40 +29,34 @@ export async function findByTicker(ticker: string): Promise<SymbolDetails | null
  */
 export async function findAll(): Promise<SymbolDetails[]> {
   return withRepoLoggingDefault('SymbolRepository', 'findAll', [], async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.SYMBOL_DETAILS} ORDER BY ticker ASC`;
-    const results = await db.getAllAsync<SymbolDetails>(sql);
-    return results;
+    const adapter = getAdapter();
+    const results = await adapter.query(TABLE, {
+      orderBy: 'ticker',
+      orderDirection: 'ASC',
+    });
+    return results as unknown as SymbolDetails[];
   });
 }
 
 /**
  * Insert a symbol record
  * @param symbol - Symbol details
- * @returns The ID of the inserted record
+ * @returns PutResult with changes count and optional lastInsertRowId
  */
-export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<number> {
+export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('SymbolRepository', 'insert', async () => {
-    const db = await getDatabase();
-    const sql = `
-    INSERT INTO ${TABLE_NAMES.SYMBOL_DETAILS} (
-      longDescription, exchangeCode, name, startDate, ticker, endDate,
-      sector, industry, sectorEtf
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-    const result = await db.runAsync(sql, [
-      symbol.longDescription,
-      symbol.exchangeCode,
-      symbol.name,
-      symbol.startDate,
-      symbol.ticker,
-      symbol.endDate,
-      symbol.sector ?? null,
-      symbol.industry ?? null,
-      symbol.sectorEtf ?? null,
-    ]);
-
-    return result.lastInsertRowId;
+    const adapter = getAdapter();
+    return adapter.put(TABLE, {
+      longDescription: symbol.longDescription,
+      exchangeCode: symbol.exchangeCode,
+      name: symbol.name,
+      startDate: symbol.startDate,
+      ticker: symbol.ticker,
+      endDate: symbol.endDate,
+      sector: symbol.sector ?? null,
+      industry: symbol.industry ?? null,
+      sectorEtf: symbol.sectorEtf ?? null,
+    });
   });
 }
 
@@ -72,9 +67,8 @@ export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<number>
  */
 export async function existsByTicker(ticker: string): Promise<boolean> {
   return withRepoLoggingDefault('SymbolRepository', 'existsByTicker', false, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.SYMBOL_DETAILS} WHERE ticker = ?`;
-    const result = await db.getFirstAsync<{ count: number }>(sql, [ticker]);
-    return (result?.count || 0) > 0;
+    const adapter = getAdapter();
+    const c = await adapter.count(TABLE, { ticker });
+    return c > 0;
   });
 }

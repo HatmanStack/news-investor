@@ -3,10 +3,12 @@
  * Data access layer for WordCountDetails entity (per-article sentiment)
  */
 
-import { getDatabase } from '../index';
+import { getAdapter } from '../index';
 import { WordCountDetails } from '@/types/database.types';
-import { TABLE_NAMES } from '@/constants/database.constants';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
+import type { PutResult } from '../storageAdapter';
+
+const TABLE = 'word_count_details';
 
 /**
  * Find all word count records for a ticker
@@ -15,47 +17,41 @@ import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
  */
 export async function findByTicker(ticker: string): Promise<WordCountDetails[]> {
   return withRepoLoggingDefault('WordCountRepository', 'findByTicker', [], async () => {
-    const db = await getDatabase();
-    const sql = `SELECT * FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
-    const results = await db.getAllAsync<WordCountDetails>(sql, [ticker]);
-    return results;
+    const adapter = getAdapter();
+    const results = await adapter.query(TABLE, {
+      filter: { ticker },
+      orderBy: 'date',
+      orderDirection: 'DESC',
+    });
+    return results as unknown as WordCountDetails[];
   });
 }
 
 /**
  * Insert a word count record
  * @param wordCount - Word count details
- * @returns The ID of the inserted record
+ * @returns PutResult with changes count and optional lastInsertRowId
  */
-export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<number> {
+export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('WordCountRepository', 'insert', async () => {
-    const db = await getDatabase();
-    const sql = `
-    INSERT INTO ${TABLE_NAMES.WORD_COUNT_DETAILS} (
-      date, hash, ticker, positive, negative, nextDay,
-      twoWks, oneMnth, body, sentiment, sentimentNumber,
-      eventType, aspectScore, mlScore, materialityScore
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-    const result = await db.runAsync(sql, [
-      wordCount.date,
-      wordCount.hash,
-      wordCount.ticker,
-      wordCount.positive,
-      wordCount.negative,
-      wordCount.nextDay,
-      wordCount.twoWks,
-      wordCount.oneMnth,
-      wordCount.body,
-      wordCount.sentiment,
-      wordCount.sentimentNumber,
-      wordCount.eventType ?? null,
-      wordCount.aspectScore ?? null,
-      wordCount.mlScore ?? null,
-      wordCount.materialityScore ?? null,
-    ]);
-
-    return result.lastInsertRowId;
+    const adapter = getAdapter();
+    return adapter.put(TABLE, {
+      date: wordCount.date,
+      hash: wordCount.hash,
+      ticker: wordCount.ticker,
+      positive: wordCount.positive,
+      negative: wordCount.negative,
+      nextDay: wordCount.nextDay,
+      twoWks: wordCount.twoWks,
+      oneMnth: wordCount.oneMnth,
+      body: wordCount.body,
+      sentiment: wordCount.sentiment,
+      sentimentNumber: wordCount.sentimentNumber,
+      eventType: wordCount.eventType ?? null,
+      aspectScore: wordCount.aspectScore ?? null,
+      mlScore: wordCount.mlScore ?? null,
+      materialityScore: wordCount.materialityScore ?? null,
+    });
   });
 }
 
@@ -66,11 +62,8 @@ export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<n
  */
 export async function existsByHash(hash: number): Promise<boolean> {
   return withRepoLoggingDefault('WordCountRepository', 'existsByHash', false, async () => {
-    const db = await getDatabase();
-    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE hash = ?`;
-    // Using getAllAsync instead of getFirstAsync
-    const results = await db.getAllAsync<{ count: number }>(sql, [hash]);
-    const first = results[0];
-    return first !== undefined && first.count > 0;
+    const adapter = getAdapter();
+    const c = await adapter.count(TABLE, { hash });
+    return c > 0;
   });
 }
