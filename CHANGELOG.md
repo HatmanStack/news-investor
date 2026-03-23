@@ -9,6 +9,56 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-03-23
+
+### Fixed
+
+- Silent partial failure in `batchCheckExistence` now returns `{ found, complete }` so callers know when cache lookups are incomplete instead of silently re-processing articles
+- Python earnings handler no longer leaks raw exception strings in HTTP error responses
+- All admin handlers now use `sanitizeErrorMessage` instead of raw `error.message`
+- Python Lambda returns 405 Method Not Allowed for known paths with wrong method (was 404)
+- Sentiment job status handler extracts `jobId` from `rawPath` when `pathParameters` is empty
+- Backend client clears cached axios instance on 401 response, preventing stale auth after token expiry
+- `null as unknown as T` type lie in per-article sentiment fallback replaced with discriminated union
+- Misleading `series!` non-null assertion in PriceChartDom replaced with proper `| undefined` initialization
+
+### Changed
+
+- Sentiment pipeline uses `mapWithConcurrency` (limit 10) for all batch operations instead of unbounded `Promise.allSettled`
+- Article query guard tightened from `MAX_ARTICLES_PER_TICKER = 2000` to `MAX_ARTICLES_PER_QUERY = 500`
+- Alpha Vantage circuit breaker uses dedicated thresholds (3 failures, 30min cooldown) instead of reusing Finnhub constants
+- Event classification metrics reset per batch instead of accumulating across Lambda invocations
+- Backend route table refactored from 30 verbose blocks to declarative `lazyHandler` format
+- Frontend logger now filters by level (production defaults to WARN) with `unknown[]` params instead of `any[]`
+- Python Lambda rejects request bodies larger than 1MB with 413
+- Python retry delay renamed from `BACKOFF_BASE` to `RETRY_DELAY_SECONDS` to clarify fixed-interval behavior
+
+### Added
+
+- Python circuit breaker for yfinance calls (3-failure threshold, 60s cooldown)
+- Python TypedDicts for all handler and service function signatures (15 type definitions)
+- Admin workspace test infrastructure with Jest config and 16 tests across API client and auth
+- `mapWithConcurrency` utility in `backend/src/utils/concurrency.util.ts`
+- Backend coverage thresholds raised to 63/75/71/70 (from 55/60/65/65)
+- Frontend coverage thresholds raised for functions/lines/statements (branches lowered to match actual 47.87%)
+
+### Removed
+
+- Deprecated legacy DynamoDB types (`StockHistoricalDataItem`, `ArticleAnalysisDataItem`, `DailySentimentAggregateItem`)
+- `DynamoDBClientWrapper` class and `dynamodb.client.ts` — all data access now uses `dynamodb.util.ts` directly
+- Dead `PREDICTION_FUNCTION_NAME` env var from SAM template
+- `--forceExit` flag from backend test command
+- Duplicate `USE_BROWSER_SENTIMENT` config in `environment.ts` (canonical source is `features.ts`)
+
+### Documentation
+
+- Updated CLAUDE.md: 6 Lambdas, 3 workspaces, 25 hooks, missing DynamoDB entities, directory trees
+- Updated ARCHITECTURE.md: 22 feature gates, 6-Lambda architecture, admin dashboard, file maps
+- Updated API.md: all watchlist/alert/annotation/admin/export endpoints, 22-feature tier response
+- Updated .env.example: all backend, frontend, and admin env vars with defaults and descriptions
+- Added v2.8.0 admin dashboard and tech debt remediation section to pro features roadmap
+- Verified CHANGELOG.md format and fixed release.yml regex to skip `[Unreleased]`
+
 ## [2.8.0] - 2026-03-22
 
 ### Added
