@@ -87,19 +87,19 @@ export default function SearchScreen() {
         setIsSyncing(true);
         setSyncMessage(`Syncing data for ${symbol.ticker}...`);
 
-        logger.debug(`[SearchScreen] Starting sync for ${symbol.ticker} (${days} days)`);
+        logger.debug('SearchScreen', 'Starting sync', { ticker: symbol.ticker, days });
 
         const syncResult = await syncAllData(symbol.ticker, days, (progress) => {
           setSyncMessage(`${progress.message} (${progress.progress}/${progress.total})`);
         });
 
-        logger.debug(`[SearchScreen] Sync complete for ${symbol.ticker}`);
+        logger.debug('SearchScreen', 'Sync complete', { ticker: symbol.ticker });
 
         // Show message if sentiment is processing asynchronously
         if (syncResult.sentimentJobId) {
-          logger.debug(
-            `[SearchScreen] Sentiment analysis in progress: Job ${syncResult.sentimentJobId}`,
-          );
+          logger.debug('SearchScreen', 'Sentiment analysis in progress', {
+            jobId: syncResult.sentimentJobId,
+          });
           toast.show({
             message: `Stock data synced for ${symbol.ticker}. Sentiment analysis in progress...`,
             variant: 'info',
@@ -132,9 +132,13 @@ export default function SearchScreen() {
         });
         queryClient.invalidateQueries({ queryKey: ['stockData', symbol.ticker], exact: false });
 
-        logger.debug(`[SearchScreen] Invalidated queries for ${symbol.ticker}`);
+        logger.debug('SearchScreen', 'Invalidated queries', { ticker: symbol.ticker });
       } catch (error) {
-        logger.error('[SearchScreen] Error syncing data:', error);
+        logger.error(
+          'SearchScreen',
+          'Error syncing data',
+          error instanceof Error ? error : undefined,
+        );
         setIsSyncing(false);
         setSyncMessage('');
         toast.show({ message: 'Failed to sync stock data', variant: 'error' });

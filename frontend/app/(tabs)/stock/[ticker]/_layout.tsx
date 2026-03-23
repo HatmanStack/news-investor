@@ -66,7 +66,11 @@ export default function StockDetailLayout() {
         await addToPortfolio(ticker);
       }
     } catch (err) {
-      logger.error('[StockDetailLayout] Error toggling portfolio:', err);
+      logger.error(
+        'StockDetailLayout',
+        'Error toggling portfolio',
+        err instanceof Error ? err : undefined,
+      );
       Alert.alert('Error', 'Failed to update portfolio');
     }
   }, [inPortfolio, ticker, addToPortfolio, removeFromPortfolio]);

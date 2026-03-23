@@ -6,6 +6,7 @@
 
 import { isAxiosError } from 'axios';
 import { createBackendClient } from './backendClient';
+import { logger } from '@/utils/logger';
 
 /**
  * Request to trigger sentiment analysis
@@ -171,7 +172,7 @@ export async function triggerSentimentAnalysis(
       }
     }
 
-    console.error('[LambdaSentiment] Error triggering sentiment analysis:', error);
+    logger.error('LambdaSentiment', 'Error triggering sentiment analysis', error);
     throw new Error(`Failed to trigger sentiment analysis: ${error}`);
   }
 }
@@ -207,7 +208,7 @@ export async function getSentimentJobStatus(jobId: string): Promise<SentimentJob
       }
     }
 
-    console.error('[LambdaSentiment] Error fetching job status:', error);
+    logger.error('LambdaSentiment', 'Error fetching job status', error);
     throw new Error(`Failed to fetch job status: ${error}`);
   }
 }
@@ -289,7 +290,7 @@ export async function getArticleSentiment(
       }
     }
 
-    console.error('[LambdaSentiment] Error fetching article sentiment:', error);
+    logger.error('LambdaSentiment', 'Error fetching article sentiment', error);
     throw new Error(`Failed to fetch article sentiment: ${error}`);
   }
 }
@@ -345,7 +346,7 @@ export async function fetchLambdaNews(
       }
     }
 
-    console.error('[LambdaSentiment] Error fetching news:', error);
+    logger.error('LambdaSentiment', 'Error fetching news', error);
     throw new Error(`Failed to fetch news: ${error}`);
   }
 }
@@ -402,7 +403,7 @@ export async function getSentimentResults(
       }
     }
 
-    console.error('[LambdaSentiment] Error fetching sentiment results:', error);
+    logger.error('LambdaSentiment', 'Error fetching sentiment results', error);
     throw new Error(`Failed to fetch sentiment results: ${error}`);
   }
 }

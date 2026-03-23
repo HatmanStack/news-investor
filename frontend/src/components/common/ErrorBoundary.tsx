@@ -8,6 +8,7 @@ import React, { Component, ReactNode } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { logger } from '@/utils/logger';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
 
@@ -38,7 +39,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log error to console for debugging
-    console.error('Error Boundary caught an error:', error, errorInfo);
+    logger.error(
+      'ErrorBoundary',
+      'Caught rendering error',
+      error instanceof Error ? error : undefined,
+      { componentStack: errorInfo?.componentStack },
+    );
 
     // Update state with error details
     this.setState({

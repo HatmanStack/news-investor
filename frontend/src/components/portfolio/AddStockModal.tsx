@@ -56,7 +56,11 @@ export function AddStockModal({ visible, onDismiss }: AddStockModalProps) {
         setSearchQuery('');
         onDismiss();
       } catch (error) {
-        logger.error('[AddStockModal] Error adding stock:', error);
+        logger.error(
+          'AddStockModal',
+          'Error adding stock',
+          error instanceof Error ? error : undefined,
+        );
         toast.show({ message: 'Failed to add stock', variant: 'error' });
       }
     },

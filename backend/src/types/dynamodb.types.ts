@@ -325,7 +325,7 @@ export interface AlertPrefsItem extends BaseTableItem {
  * PK: USER#{sub}, SK: ALERT#{ISO-timestamp}#{ticker}
  */
 export interface AlertHistoryItem extends BaseTableItem {
-  entityType: 'ALERT';
+  entityType: 'ALERT' | 'ALERT_HISTORY';
   ticker: string;
   alertType: 'sentiment_shift' | 'material_event' | 'prediction_flip';
   zScore: number;

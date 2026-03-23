@@ -114,9 +114,7 @@ describe('PortfolioRepository', () => {
     it('throws on db error', async () => {
       mockDb.runAsync.mockRejectedValue(new Error('Write error'));
 
-      await expect(PortfolioRepository.upsert(samplePortfolio)).rejects.toThrow(
-        'Failed to upsert portfolio entry',
-      );
+      await expect(PortfolioRepository.upsert(samplePortfolio)).rejects.toThrow('Write error');
     });
   });
 
@@ -135,9 +133,7 @@ describe('PortfolioRepository', () => {
     it('throws on error', async () => {
       mockDb.runAsync.mockRejectedValue(new Error('Delete error'));
 
-      await expect(PortfolioRepository.deleteByTicker('AAPL')).rejects.toThrow(
-        'Failed to delete portfolio entry for ticker AAPL',
-      );
+      await expect(PortfolioRepository.deleteByTicker('AAPL')).rejects.toThrow('Delete error');
     });
   });
 
@@ -216,7 +212,7 @@ describe('PortfolioRepository', () => {
     it('throws on error', async () => {
       mockDb.runAsync.mockRejectedValue(new Error('Clear error'));
 
-      await expect(PortfolioRepository.deleteAll()).rejects.toThrow('Failed to clear portfolio');
+      await expect(PortfolioRepository.deleteAll()).rejects.toThrow('Clear error');
     });
   });
 });

@@ -8,6 +8,7 @@
 import * as CombinedWordRepository from '@/database/repositories/combinedWord.repository';
 import * as WordCountRepository from '@/database/repositories/wordCount.repository';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 /**
  * Hydrate local DB with combined (daily aggregated) sentiment records.
@@ -27,9 +28,10 @@ export function hydrateCombinedWordData(records: CombinedWordDetails[]): void {
         }
       }
       if (failCount > 0) {
-        console.error(
-          `[Hydrator] Combined partial: ${successCount} succeeded, ${failCount} failed`,
-        );
+        logger.error('Hydrator', 'Combined partial failure', undefined, {
+          successCount,
+          failCount,
+        });
       }
     } catch {
       // Combined hydration failed silently
@@ -61,9 +63,11 @@ export function hydrateArticleData(records: WordCountDetails[]): void {
         }
       }
       if (failCount > 0) {
-        console.error(
-          `[Hydrator] Articles partial: ${insertCount} inserted, ${skipCount} skipped, ${failCount} failed`,
-        );
+        logger.error('Hydrator', 'Articles partial failure', undefined, {
+          insertCount,
+          skipCount,
+          failCount,
+        });
       }
     } catch {
       // Article hydration failed silently

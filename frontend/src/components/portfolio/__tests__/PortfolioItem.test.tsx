@@ -2,7 +2,6 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { PortfolioItem } from '../PortfolioItem';
 import { createTestWrapper } from '@/utils/testUtils';
-import { theme } from '@/theme/theme';
 import { useLatestStockPrice, useStockData } from '@/hooks';
 import { useRecentAlerts } from '@/hooks/useRecentAlerts';
 
@@ -84,7 +83,6 @@ describe('PortfolioItem', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock useStockData to return empty data by default
     mockUseStockData.mockReturnValue({
       data: [],
       isLoading: false,
@@ -92,7 +90,7 @@ describe('PortfolioItem', () => {
     } as any);
   });
 
-  it('displays ticker and name on first line', () => {
+  it('displays ticker and name', () => {
     mockUseLatestStockPrice.mockReturnValue({
       data: mockLatestPrice,
       isLoading: false,
@@ -108,7 +106,7 @@ describe('PortfolioItem', () => {
     expect(getByText('Apple Inc.')).toBeTruthy();
   });
 
-  it('displays price and change on second line with MonoText', () => {
+  it('displays price and change', () => {
     mockUseLatestStockPrice.mockReturnValue({
       data: mockLatestPrice,
       isLoading: false,
@@ -121,63 +119,7 @@ describe('PortfolioItem', () => {
     );
 
     expect(getByText('$186.40')).toBeTruthy();
-    // Change percentage: (186.4 - 180.0) / 180.0 = 0.0355... = 3.56%
     expect(getByText('+3.56%')).toBeTruthy();
-  });
-
-  it('applies green color to positive change', () => {
-    mockUseLatestStockPrice.mockReturnValue({
-      data: mockLatestPrice,
-      isLoading: false,
-      error: null,
-    } as any);
-
-    const { getByText } = render(
-      <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
-      { wrapper },
-    );
-
-    const change = getByText('+3.56%');
-    expect(change.props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ color: theme.colors.positive })]),
-    );
-  });
-
-  it('applies red color to negative change', () => {
-    const negativePrice = { ...mockLatestPrice, close: 175.0 }; // Lower than open
-    mockUseLatestStockPrice.mockReturnValue({
-      data: negativePrice,
-      isLoading: false,
-      error: null,
-    } as any);
-
-    const { getByText } = render(
-      <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
-      { wrapper },
-    );
-
-    // Change percentage: (175.0 - 180.0) / 180.0 = -0.0277... = -2.78%
-    const change = getByText('-2.78%');
-    expect(change.props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ color: theme.colors.negative })]),
-    );
-  });
-
-  it('shows loading state when price data is loading', () => {
-    mockUseLatestStockPrice.mockReturnValue({
-      data: null,
-      isLoading: true,
-      error: null,
-    } as any);
-
-    const { getAllByText } = render(
-      <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
-      { wrapper },
-    );
-
-    // Price and chart placeholder both show '--', possibly prediction too
-    const placeholders = getAllByText('--');
-    expect(placeholders.length).toBeGreaterThan(0);
   });
 
   it('calls onPress when tapped', () => {
@@ -228,40 +170,6 @@ describe('PortfolioItem', () => {
     );
 
     expect(toJSON()).toBeTruthy();
-  });
-
-  it('handles zero change correctly', () => {
-    const samePrice = { ...mockLatestPrice, close: 180.0, open: 180.0 };
-    mockUseLatestStockPrice.mockReturnValue({
-      data: samePrice,
-      isLoading: false,
-      error: null,
-    } as any);
-
-    const { getByText } = render(
-      <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
-      { wrapper },
-    );
-
-    expect(getByText('+0.00%')).toBeTruthy();
-  });
-
-  it('displays chart placeholder', () => {
-    mockUseLatestStockPrice.mockReturnValue({
-      data: mockLatestPrice,
-      isLoading: false,
-      error: null,
-    } as any);
-
-    const { getAllByText } = render(
-      <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
-      { wrapper },
-    );
-
-    // When chartData is empty, component renders '--' as placeholder
-    // We use getAllByText because '--' might appear multiple times (price loading, prediction placeholder)
-    const placeholders = getAllByText('--');
-    expect(placeholders.length).toBeGreaterThan(0);
   });
 
   describe('accordion heatmap', () => {

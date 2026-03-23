@@ -69,9 +69,7 @@ describe('StockRepository', () => {
     it('throws on db error', async () => {
       mockDb.getAllAsync.mockRejectedValue(new Error('Query failed'));
 
-      await expect(StockRepository.findByTicker('AAPL')).rejects.toThrow(
-        'Failed to find stocks for ticker AAPL',
-      );
+      await expect(StockRepository.findByTicker('AAPL')).rejects.toThrow('Query failed');
     });
   });
 
@@ -98,7 +96,7 @@ describe('StockRepository', () => {
 
       await expect(
         StockRepository.findByTickerAndDateRange('AAPL', '2025-01-01', '2025-01-31'),
-      ).rejects.toThrow('Failed to find stocks for ticker AAPL in date range');
+      ).rejects.toThrow('Range query failed');
     });
   });
 
@@ -139,7 +137,7 @@ describe('StockRepository', () => {
     it('throws on db error', async () => {
       mockDb.runAsync.mockRejectedValue(new Error('Insert failed'));
 
-      await expect(StockRepository.insert(sampleStock)).rejects.toThrow('Failed to insert stock');
+      await expect(StockRepository.insert(sampleStock)).rejects.toThrow('Insert failed');
     });
   });
 
@@ -161,9 +159,7 @@ describe('StockRepository', () => {
     it('throws when transaction fails', async () => {
       mockDb.withTransactionAsync.mockRejectedValue(new Error('Transaction failed'));
 
-      await expect(StockRepository.insertMany([sampleStock])).rejects.toThrow(
-        'Failed to insert stocks',
-      );
+      await expect(StockRepository.insertMany([sampleStock])).rejects.toThrow('Transaction failed');
     });
   });
 
@@ -182,9 +178,7 @@ describe('StockRepository', () => {
     it('throws on db error', async () => {
       mockDb.runAsync.mockRejectedValue(new Error('Delete failed'));
 
-      await expect(StockRepository.deleteByTicker('AAPL')).rejects.toThrow(
-        'Failed to delete stocks for ticker AAPL',
-      );
+      await expect(StockRepository.deleteByTicker('AAPL')).rejects.toThrow('Delete failed');
     });
   });
 

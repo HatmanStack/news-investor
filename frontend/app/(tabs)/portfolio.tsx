@@ -76,7 +76,11 @@ export default function PortfolioScreen() {
               await removeFromPortfolio(item.ticker);
               toast.show({ message: `${item.ticker} removed from portfolio`, variant: 'info' });
             } catch (err) {
-              logger.error('[PortfolioScreen] Error removing stock:', err);
+              logger.error(
+                'PortfolioScreen',
+                'Error removing stock',
+                err instanceof Error ? err : undefined,
+              );
               Alert.alert('Error', 'Failed to remove stock from portfolio');
             }
           },
@@ -133,13 +137,18 @@ export default function PortfolioScreen() {
       // Calculate number of days to sync
       const days = Math.abs(differenceInDays(new Date(endDate), new Date(startDate))) + 1;
 
-      logger.debug(`[PortfolioScreen] Refreshing ${portfolio.length} stocks`);
+      logger.debug('PortfolioScreen', 'Refreshing stocks', { count: portfolio.length });
 
       for (const item of portfolio) {
         try {
           await syncAllData(item.ticker, days);
         } catch (err) {
-          logger.error(`[PortfolioScreen] Error refreshing ${item.ticker}:`, err);
+          logger.error(
+            'PortfolioScreen',
+            'Error refreshing stock',
+            err instanceof Error ? err : undefined,
+            { ticker: item.ticker },
+          );
         }
       }
 
@@ -147,7 +156,11 @@ export default function PortfolioScreen() {
       toast.show({ message: 'Portfolio refreshed', variant: 'success' });
       setRefreshing(false);
     } catch (err) {
-      logger.error('[PortfolioScreen] Error during refresh:', err);
+      logger.error(
+        'PortfolioScreen',
+        'Error during refresh',
+        err instanceof Error ? err : undefined,
+      );
       setRefreshing(false);
     }
   }, [portfolio, startDate, endDate, refetch, toast]);

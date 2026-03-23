@@ -9,6 +9,30 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+### Added
+
+- **[Pro]** DynamoDB `EntityTypeIndex` GSI on `entityType` attribute — user-entity queries (report prefs, alert prefs, admin aggregation, user list) now use `Query` instead of full-table `Scan`
+- **[Pro]** `queryByEntityType` DynamoDB utility with pagination support
+- **[Pro]** Async sentiment pipeline — POST `/sentiment` enqueues to SQS and returns job ID immediately; new `SentimentWorkerFunction` Lambda (300s timeout) processes jobs asynchronously
+- **[Pro]** SQS dead-letter queue for failed sentiment jobs (14-day retention, 3 retries)
+- Structured frontend logger with `{level, module, message, context}` output — JSON in production, human-readable in development
+- `withRepoLogging` and `withRepoLoggingDefault` utilities for DRY repository error handling
+
+### Changed
+
+- PriceChartDom decomposed from 552-line monolith into 8 focused hooks/helpers (`useMainChart`, `chartSeries`, `chartAnnotations`, `useRSIChart`, `useMACDChart`, `useChartSync`, `types`, barrel `index`)
+- PortfolioItem decomposed from 477-line component into 4 child components (`PortfolioItemHeader`, `PortfolioItemPrice`, `PortfolioItemPrediction`, `ExpandedHeatmapSection`) with co-located tests
+- Frontend console calls reduced from 89 to 6 (4 in logger delegation, 2 in JSDoc examples)
+- `batchPutItemsSingleTable` now handles transient DynamoDB errors (throttling, internal server error) with exponential backoff, matching `batchGetItemsSingleTable`
+- Sentiment worker validates SQS message body with Zod schema before processing
+- Chart annotation callbacks use ref-forwarding to avoid unnecessary chart rebuilds when parent re-renders
+
+### Removed
+
+- 4 full-table DynamoDB `Scan` operations replaced by GSI queries
+- `paginatedScan` helper (no longer needed)
+- 83 direct `console.*` calls across frontend repositories, services, hooks, and components
+
 ## [2.8.1] - 2026-03-23
 
 ### Fixed

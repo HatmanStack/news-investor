@@ -7,6 +7,7 @@ import { getDatabase } from '../index';
 import { StockDetails } from '@/types/database.types';
 import { TABLE_NAMES } from '@/constants/database.constants';
 import { logger } from '@/utils/logger';
+import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 
 /**
  * Find all stock records for a given ticker
@@ -14,20 +15,13 @@ import { logger } from '@/utils/logger';
  * @returns Array of stock details
  */
 export async function findByTicker(ticker: string): Promise<StockDetails[]> {
-  const db = await getDatabase();
-  const sql = `SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
-
-  try {
+  return withRepoLogging('StockRepository', 'findByTicker', async () => {
+    const db = await getDatabase();
+    const sql = `SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
     const results = await db.getAllAsync<StockDetails>(sql, [ticker]);
-    logger.debug(`[StockRepository] Found ${results.length} price records for ${ticker}`);
-    if (results.length > 0) {
-      logger.debug(`[StockRepository] First 3 records:`, results.slice(0, 3));
-    }
+    logger.debug('StockRepository', 'Found price records', { count: results.length, ticker });
     return results;
-  } catch (error) {
-    logger.error('[StockRepository] Error finding by ticker:', error);
-    throw new Error(`Failed to find stocks for ticker ${ticker}: ${error}`);
-  }
+  });
 }
 
 /**
@@ -42,20 +36,16 @@ export async function findByTickerAndDateRange(
   startDate: string,
   endDate: string,
 ): Promise<StockDetails[]> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLogging('StockRepository', 'findByTickerAndDateRange', async () => {
+    const db = await getDatabase();
+    const sql = `
     SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS}
     WHERE ticker = ? AND date >= ? AND date <= ?
     ORDER BY date DESC
   `;
-
-  try {
     const results = await db.getAllAsync<StockDetails>(sql, [ticker, startDate, endDate]);
     return results;
-  } catch (error) {
-    logger.error('[StockRepository] Error finding by ticker and date range:', error);
-    throw new Error(`Failed to find stocks for ticker ${ticker} in date range: ${error}`);
-  }
+  });
 }
 
 /**
@@ -64,8 +54,9 @@ export async function findByTickerAndDateRange(
  * @returns The ID of the inserted record
  */
 export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLogging('StockRepository', 'insert', async () => {
+    const db = await getDatabase();
+    const sql = `
     INSERT INTO ${TABLE_NAMES.STOCK_DETAILS} (
       hash, date, ticker, close, high, low, open, volume,
       adjClose, adjHigh, adjLow, adjOpen, adjVolume,
@@ -73,8 +64,6 @@ export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
       peRatio, pbRatio, trailingPEG1Y
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-
-  try {
     const result = await db.runAsync(sql, [
       stock.hash,
       stock.date,
@@ -99,10 +88,7 @@ export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
     ]);
 
     return result.lastInsertRowId;
-  } catch (error) {
-    logger.error('[StockRepository] Error inserting stock:', error);
-    throw new Error(`Failed to insert stock: ${error}`);
-  }
+  });
 }
 
 /**
@@ -110,18 +96,14 @@ export async function insert(stock: Omit<StockDetails, 'id'>): Promise<number> {
  * @param stocks - Array of stock details
  */
 export async function insertMany(stocks: Omit<StockDetails, 'id'>[]): Promise<void> {
-  const db = await getDatabase();
-
-  try {
+  return withRepoLogging('StockRepository', 'insertMany', async () => {
+    const db = await getDatabase();
     await db.withTransactionAsync(async () => {
       for (const stock of stocks) {
         await insert(stock);
       }
     });
-  } catch (error) {
-    logger.error('[StockRepository] Error inserting multiple stocks:', error);
-    throw new Error(`Failed to insert stocks: ${error}`);
-  }
+  });
 }
 
 /**
@@ -129,15 +111,11 @@ export async function insertMany(stocks: Omit<StockDetails, 'id'>[]): Promise<vo
  * @param ticker - Stock ticker symbol
  */
 export async function deleteByTicker(ticker: string): Promise<void> {
-  const db = await getDatabase();
-  const sql = `DELETE FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
-
-  try {
+  return withRepoLogging('StockRepository', 'deleteByTicker', async () => {
+    const db = await getDatabase();
+    const sql = `DELETE FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
     await db.runAsync(sql, [ticker]);
-  } catch (error) {
-    logger.error('[StockRepository] Error deleting by ticker:', error);
-    throw new Error(`Failed to delete stocks for ticker ${ticker}: ${error}`);
-  }
+  });
 }
 
 /**
@@ -146,18 +124,14 @@ export async function deleteByTicker(ticker: string): Promise<void> {
  * @returns Number of records
  */
 export async function countByTicker(ticker: string): Promise<number> {
-  const db = await getDatabase();
-  const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
-
-  try {
+  return withRepoLoggingDefault('StockRepository', 'countByTicker', 0, async () => {
+    const db = await getDatabase();
+    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.STOCK_DETAILS} WHERE ticker = ?`;
     // Using getAllAsync instead of getFirstAsync
     const results = await db.getAllAsync<{ count: number }>(sql, [ticker]);
     const first = results[0];
     return first ? first.count : 0;
-  } catch (error) {
-    logger.error('[StockRepository] Error counting by ticker:', error);
-    return 0;
-  }
+  });
 }
 
 /**
@@ -166,20 +140,16 @@ export async function countByTicker(ticker: string): Promise<number> {
  * @returns Latest stock details or null if not found
  */
 export async function findLatestByTicker(ticker: string): Promise<StockDetails | null> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLoggingDefault('StockRepository', 'findLatestByTicker', null, async () => {
+    const db = await getDatabase();
+    const sql = `
     SELECT * FROM ${TABLE_NAMES.STOCK_DETAILS}
     WHERE ticker = ?
     ORDER BY date DESC
     LIMIT 1
   `;
-
-  try {
     // Using getAllAsync instead of getFirstAsync
     const results = await db.getAllAsync<StockDetails>(sql, [ticker]);
     return results[0] ?? null;
-  } catch (error) {
-    logger.error('[StockRepository] Error finding latest by ticker:', error);
-    return null;
-  }
+  });
 }

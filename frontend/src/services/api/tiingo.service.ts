@@ -18,7 +18,7 @@ function handleApiError(error: unknown, context: string, ticker?: string): never
     if (status === 400) throw new Error(errorData?.error || 'Invalid request');
     if (status === 500) throw new Error(errorData?.error || 'Server error');
   }
-  logger.error(`[TiingoService] ${context}:`, error);
+  logger.error('TiingoService', context, error instanceof Error ? error : undefined);
   throw new Error(`${context}: ${error}`);
 }
 
@@ -39,7 +39,7 @@ async function retryWithBackoff<T>(
       }
       if (i === retries) break;
       const delay = Math.pow(2, i + 1) * 1000;
-      logger.debug(`[TiingoService] Retry ${i + 1}/${retries} after ${delay}ms...`);
+      logger.debug('TiingoService', 'Retry attempt', { attempt: i + 1, retries, delayMs: delay });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -58,9 +58,12 @@ export async function fetchStockPrices(
       const params: Record<string, string> = { ticker, startDate, type: 'prices' };
       if (endDate) params.endDate = endDate;
 
-      logger.debug(`[TiingoService] Fetching prices for ${ticker} from ${startDate}`);
+      logger.debug('TiingoService', 'Fetching prices', { ticker, startDate });
       const response = await client.get<{ data: TiingoStockPrice[] }>('/stocks', { params });
-      logger.debug(`[TiingoService] Fetched ${response.data.data.length} records for ${ticker}`);
+      logger.debug('TiingoService', 'Fetched records', {
+        count: response.data.data.length,
+        ticker,
+      });
       return response.data.data;
     } catch (error) {
       handleApiError(error, `Failed to fetch prices for ${ticker}`, ticker);
@@ -75,7 +78,7 @@ export async function fetchSymbolMetadata(ticker: string): Promise<TiingoSymbolM
 
   const fetchFn = async () => {
     try {
-      logger.debug(`[TiingoService] Fetching metadata for ${ticker}`);
+      logger.debug('TiingoService', 'Fetching metadata', { ticker });
       const response = await client.get<{ data: TiingoSymbolMetadata }>('/stocks', {
         params: { ticker, type: 'metadata' },
       });
@@ -135,18 +138,20 @@ export async function searchTickers(query: string): Promise<TiingoSearchResult[]
 
   const fetchFn = async () => {
     try {
-      logger.debug(`[TiingoService] Searching for: ${trimmedQuery}`);
-      logger.debug(`[TiingoService] Searching: /search?query=${trimmedQuery}`);
+      logger.debug('TiingoService', 'Searching tickers', { query: trimmedQuery });
       const startTime = Date.now();
       const response = await client.get<{ data: TiingoSearchResult[] }>('/search', {
         params: { query: trimmedQuery },
       });
-      logger.debug(
-        `[TiingoService] Search completed in ${Date.now() - startTime}ms, found ${response.data.data?.length || 0} results`,
-      );
+      logger.debug('TiingoService', 'Search completed', {
+        durationMs: Date.now() - startTime,
+        results: response.data.data?.length || 0,
+      });
       return response.data.data;
     } catch (error) {
-      logger.error(`[TiingoService] Search error for "${trimmedQuery}":`, error);
+      logger.error('TiingoService', 'Search error', error instanceof Error ? error : undefined, {
+        query: trimmedQuery,
+      });
       if (isAxiosError(error) && error.response?.status === 404) {
         return []; // No results
       }

@@ -32,14 +32,14 @@ export function usePortfolio() {
   } = useQuery({
     queryKey: ['portfolio'],
     queryFn: async (): Promise<PortfolioDetails[]> => {
-      logger.debug('[usePortfolio] Fetching portfolio');
+      logger.debug('usePortfolio', 'Fetching portfolio');
       return await PortfolioRepository.findAll();
     },
   });
 
   const addMutation = useMutation({
     mutationFn: async (ticker: string) => {
-      logger.debug(`[usePortfolio] Adding ${ticker}`);
+      logger.debug('usePortfolio', 'Adding ticker', { ticker });
       // Look up company name from symbol details (best-effort)
       let companyName = ticker;
       try {
@@ -49,32 +49,49 @@ export function usePortfolio() {
         }
       } catch (err) {
         logger.error(
-          `[usePortfolio] Failed to look up symbol for ${ticker}, using ticker as name`,
-          err,
+          'usePortfolio',
+          'Failed to look up symbol, using ticker as name',
+          err instanceof Error ? err : undefined,
+          { ticker },
         );
       }
       await syncAdd(ticker, companyName);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] }),
-    onError: (err, ticker) => logger.error(`[usePortfolio] Error adding ${ticker}:`, err),
+    onError: (err, ticker) =>
+      logger.error('usePortfolio', 'Error adding ticker', err instanceof Error ? err : undefined, {
+        ticker,
+      }),
   });
 
   const removeMutation = useMutation({
     mutationFn: async (ticker: string) => {
-      logger.debug(`[usePortfolio] Removing ${ticker}`);
+      logger.debug('usePortfolio', 'Removing ticker', { ticker });
       await syncRemove(ticker);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] }),
-    onError: (err, ticker) => logger.error(`[usePortfolio] Error removing ${ticker}:`, err),
+    onError: (err, ticker) =>
+      logger.error(
+        'usePortfolio',
+        'Error removing ticker',
+        err instanceof Error ? err : undefined,
+        { ticker },
+      ),
   });
 
   const updateMutation = useMutation({
     mutationFn: async (stock: PortfolioDetails) => {
-      logger.debug(`[usePortfolio] Updating ${stock.ticker}`);
+      logger.debug('usePortfolio', 'Updating ticker', { ticker: stock.ticker });
       return await PortfolioRepository.upsert(stock);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portfolio'] }),
-    onError: (err, stock) => logger.error(`[usePortfolio] Error updating ${stock.ticker}:`, err),
+    onError: (err, stock) =>
+      logger.error(
+        'usePortfolio',
+        'Error updating ticker',
+        err instanceof Error ? err : undefined,
+        { ticker: stock.ticker },
+      ),
   });
 
   const isInPortfolio = (ticker: string): boolean => {

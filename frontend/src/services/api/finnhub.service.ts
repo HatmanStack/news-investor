@@ -43,7 +43,7 @@ export async function fetchNews(
   const client = createBackendClient();
 
   try {
-    logger.debug(`[FinnhubService] Fetching news for ${ticker} from ${startDate} to ${endDate}`);
+    logger.debug('FinnhubService', 'Fetching news', { ticker, startDate, endDate });
 
     const params = {
       ticker,
@@ -53,7 +53,10 @@ export async function fetchNews(
 
     const response = await client.get<{ data: FinnhubNewsArticle[] }>('/news', { params });
 
-    logger.debug(`[FinnhubService] Fetched ${response.data.data.length} articles for ${ticker}`);
+    logger.debug('FinnhubService', 'Fetched articles', {
+      count: response.data.data.length,
+      ticker,
+    });
     return response.data.data;
   } catch (error) {
     if (isAxiosError(error)) {
@@ -65,7 +68,7 @@ export async function fetchNews(
       }
 
       if (status === 404) {
-        logger.warn(`[FinnhubService] No news found for ticker ${ticker}`);
+        logger.warn('FinnhubService', 'No news found for ticker', { ticker });
         return []; // Return empty array instead of error
       }
 
@@ -78,7 +81,12 @@ export async function fetchNews(
       }
     }
 
-    logger.error('[FinnhubService] Error fetching news:', error);
+    logger.error(
+      'FinnhubService',
+      'Error fetching news',
+      error instanceof Error ? error : undefined,
+      { ticker },
+    );
     throw new Error(`Failed to fetch news for ${ticker}: ${error}`);
   }
 }

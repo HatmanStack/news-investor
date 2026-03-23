@@ -6,6 +6,7 @@
 import { getDatabase } from '../index';
 import { CombinedWordDetails } from '@/types/database.types';
 import { TABLE_NAMES } from '@/constants/database.constants';
+import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 
 /**
  * Find the most recent combined word record for a ticker
@@ -13,16 +14,12 @@ import { TABLE_NAMES } from '@/constants/database.constants';
  * @returns Latest combined word details or null
  */
 export async function findLatestByTicker(ticker: string): Promise<CombinedWordDetails | null> {
-  const db = await getDatabase();
-  const sql = `SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS} WHERE ticker = ? ORDER BY date DESC LIMIT 1`;
-
-  try {
+  return withRepoLoggingDefault('CombinedWordRepository', 'findLatestByTicker', null, async () => {
+    const db = await getDatabase();
+    const sql = `SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS} WHERE ticker = ? ORDER BY date DESC LIMIT 1`;
     const result = await db.getFirstAsync<CombinedWordDetails>(sql, [ticker]);
     return result ?? null;
-  } catch (error) {
-    console.error('[CombinedWordRepository] Error finding latest by ticker:', error);
-    return null;
-  }
+  });
 }
 
 /**
@@ -31,16 +28,12 @@ export async function findLatestByTicker(ticker: string): Promise<CombinedWordDe
  * @returns Array of combined word details
  */
 export async function findByTicker(ticker: string): Promise<CombinedWordDetails[]> {
-  const db = await getDatabase();
-  const sql = `SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
-
-  try {
+  return withRepoLoggingDefault('CombinedWordRepository', 'findByTicker', [], async () => {
+    const db = await getDatabase();
+    const sql = `SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
     const results = await db.getAllAsync<CombinedWordDetails>(sql, [ticker]);
     return results;
-  } catch (error) {
-    console.error('[CombinedWordRepository] Error finding by ticker:', error);
-    return [];
-  }
+  });
 }
 
 /**
@@ -55,20 +48,21 @@ export async function findByTickerAndDateRange(
   startDate: string,
   endDate: string,
 ): Promise<CombinedWordDetails[]> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLoggingDefault(
+    'CombinedWordRepository',
+    'findByTickerAndDateRange',
+    [],
+    async () => {
+      const db = await getDatabase();
+      const sql = `
     SELECT * FROM ${TABLE_NAMES.COMBINED_WORD_DETAILS}
     WHERE ticker = ? AND date >= ? AND date <= ?
     ORDER BY date DESC
   `;
-
-  try {
-    const results = await db.getAllAsync<CombinedWordDetails>(sql, [ticker, startDate, endDate]);
-    return results;
-  } catch (error) {
-    console.error('[CombinedWordRepository] Error finding by ticker and date range:', error);
-    return [];
-  }
+      const results = await db.getAllAsync<CombinedWordDetails>(sql, [ticker, startDate, endDate]);
+      return results;
+    },
+  );
 }
 
 /**
@@ -80,8 +74,9 @@ export async function findByTickerAndDateRange(
  * @param combinedWord - Combined word details with optional three-signal fields
  */
 export async function upsert(combinedWord: CombinedWordDetails): Promise<void> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLogging('CombinedWordRepository', 'upsert', async () => {
+    const db = await getDatabase();
+    const sql = `
     INSERT OR REPLACE INTO ${TABLE_NAMES.COMBINED_WORD_DETAILS} (
       ticker, date, positive, negative, sentimentNumber,
       sentiment, nextDay, twoWks, oneMnth, updateDate,
@@ -91,8 +86,6 @@ export async function upsert(combinedWord: CombinedWordDetails): Promise<void> {
       oneMonthDirection, oneMonthProbability
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-
-  try {
     await db.runAsync(sql, [
       combinedWord.ticker,
       combinedWord.date,
@@ -118,8 +111,5 @@ export async function upsert(combinedWord: CombinedWordDetails): Promise<void> {
       combinedWord.oneMonthDirection ?? null,
       combinedWord.oneMonthProbability ?? null,
     ]);
-  } catch (error) {
-    console.error('[CombinedWordRepository] Error upserting combined word:', error);
-    throw new Error(`Failed to upsert combined word: ${error}`);
-  }
+  });
 }

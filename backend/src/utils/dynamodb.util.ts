@@ -279,6 +279,11 @@ export async function batchGetItemsSingleTable<T>(
 /**
  * Batch put items for single-table design (max 25 per call).
  * Automatically retries UnprocessedItems with exponential backoff.
+ *
+ * Note: Unlike batchGetItemsSingleTable (which returns partial results on
+ * exhausted retries, letting callers treat missing items as cache misses),
+ * this function throws after max attempts — failed writes must be surfaced
+ * so callers can handle data loss explicitly.
  */
 export async function batchPutItemsSingleTable<
   T extends { pk: string; sk: string; createdAt?: string },
@@ -313,22 +318,40 @@ export async function batchPutItemsSingleTable<
       },
     };
 
-    const result = await dynamoDb.send(new BatchWriteCommand(params));
+    try {
+      const result = await dynamoDb.send(new BatchWriteCommand(params));
 
-    // Check for unprocessed items
-    const unprocessedItems = result.UnprocessedItems?.[tableName];
-    if (!unprocessedItems || unprocessedItems.length === 0) {
-      return; // All items written successfully
-    }
+      // Check for unprocessed items
+      const unprocessedItems = result.UnprocessedItems?.[tableName];
+      if (!unprocessedItems || unprocessedItems.length === 0) {
+        return; // All items written successfully
+      }
 
-    writeRequests = unprocessedItems as PutWriteRequest[];
+      writeRequests = unprocessedItems as PutWriteRequest[];
 
-    if (attempt < maxAttempts - 1) {
-      const delayMs = baseDelayMs * Math.pow(2, attempt);
-      logger.warn(
-        `batchPutItemsSingleTable: ${writeRequests.length} unprocessed items, retrying in ${delayMs}ms`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (attempt < maxAttempts - 1) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        logger.warn(
+          `batchPutItemsSingleTable: ${writeRequests.length} unprocessed items, retrying in ${delayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    } catch (error) {
+      const errorName = (error as { name?: string }).name || 'Unknown';
+      logger.error(`batchPutItemsSingleTable error (attempt ${attempt + 1})`, error, { errorName });
+
+      // Retry on transient errors (matches batchGetItemsSingleTable pattern)
+      if (
+        attempt < maxAttempts - 1 &&
+        (errorName === 'ProvisionedThroughputExceededException' ||
+          errorName === 'ThrottlingException' ||
+          errorName === 'InternalServerError')
+      ) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
     }
   }
 
@@ -384,6 +407,63 @@ export async function deleteItem(pk: string, sk: string): Promise<void> {
   };
 
   await dynamoDb.send(new DeleteCommand(params));
+}
+
+// ============================================================
+// GSI Query Helpers
+// ============================================================
+
+/** Name of the EntityType GSI defined in the SAM template */
+export const ENTITY_TYPE_INDEX = 'EntityTypeIndex';
+
+/**
+ * Query the EntityTypeIndex GSI by entity type.
+ * Automatically paginates through all results.
+ */
+export async function queryByEntityType<T>(
+  entityType: string,
+  options?: {
+    filterExpression?: string;
+    expressionAttributeValues?: Record<string, unknown>;
+    expressionAttributeNames?: Record<string, string>;
+    limit?: number;
+  },
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':entityType': entityType,
+      ...options?.expressionAttributeValues,
+    };
+
+    const params: QueryCommandInput = {
+      TableName: getTableName(),
+      IndexName: ENTITY_TYPE_INDEX,
+      KeyConditionExpression: 'entityType = :entityType',
+      ExpressionAttributeValues: expressionAttributeValues,
+      ...(options?.filterExpression && { FilterExpression: options.filterExpression }),
+      ...(options?.expressionAttributeNames && {
+        ExpressionAttributeNames: options.expressionAttributeNames,
+      }),
+      ...(options?.limit && { Limit: options.limit }),
+      ExclusiveStartKey: exclusiveStartKey,
+    };
+
+    const result = await dynamoDb.send(new QueryCommand(params));
+    const items = (result.Items as T[]) ?? [];
+    allItems.push(...items);
+
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+
+    // If a limit was specified, stop after first page
+    if (options?.limit) {
+      break;
+    }
+  } while (exclusiveStartKey);
+
+  return allItems;
 }
 
 /**

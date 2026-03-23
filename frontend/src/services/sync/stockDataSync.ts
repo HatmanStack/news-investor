@@ -53,7 +53,9 @@ export async function syncStockData(
     // Transform and insert into database
     const stockDetails = tiingoData.map((price) => transformTiingoToStockDetails(price, ticker));
 
-    logger.debug(`[StockDataSync] Sample of first 3 price records:`, stockDetails.slice(0, 3));
+    logger.debug('StockDataSync', 'Sample of first 3 price records', {
+      sample: stockDetails.slice(0, 3),
+    });
 
     await StockRepository.insertMany(stockDetails);
 
@@ -66,14 +68,14 @@ export async function syncStockData(
         const symbolDetails = transformTiingoToSymbolDetails(metadata);
         await SymbolRepository.insert(symbolDetails);
       } catch (error) {
-        console.error(`[StockDataSync] Failed to fetch symbol metadata for ${ticker}:`, error);
+        logger.error('StockDataSync', 'Failed to fetch symbol metadata', error, { ticker });
         // Continue even if metadata fetch fails
       }
     }
 
     return stockDetails.length;
   } catch (error) {
-    console.error(`[StockDataSync] Error syncing stock data for ${ticker}:`, error);
+    logger.error('StockDataSync', 'Error syncing stock data', error, { ticker });
     throw new Error(`Failed to sync stock data for ${ticker}: ${error}`);
   }
 }

@@ -9,6 +9,7 @@ import { triggerSentimentAnalysis, fetchLambdaNews } from '@/services/api/lambda
 import { Environment } from '@/config/environment';
 import { formatDateForDB, getDatesInRange } from '@/utils/date/dateUtils';
 import { subDays } from 'date-fns';
+import { logger } from '@/utils/logger';
 
 /**
  * Progress callback for UI feedback
@@ -66,10 +67,7 @@ async function performLocalSentimentAnalysis(
           message: `Analyzing sentiment locally: ${i + 1}/${dates.length} days...`,
         });
       } catch (error) {
-        console.error(
-          `[SyncOrchestrator] Local sentiment sync failed for ${ticker} on ${date}:`,
-          error,
-        );
+        logger.error('SyncOrchestrator', 'Local sentiment sync failed', error, { ticker, date });
         result.errors.push(`Sentiment analysis failed for ${date}: ${error}`);
         // Continue with next date
       }
@@ -79,7 +77,7 @@ async function performLocalSentimentAnalysis(
     result.daysProcessed = dates.length;
   } catch (error) {
     const errorMsg = `Local sentiment sync failed: ${error}`;
-    console.error(`[SyncOrchestrator] ${errorMsg}`);
+    logger.error('SyncOrchestrator', errorMsg, error);
     result.errors.push(errorMsg);
   }
 }
@@ -123,7 +121,7 @@ export async function syncAllData(
     } catch (error) {
       stockSyncFailed = true;
       const errorMsg = `Stock sync failed: ${error}`;
-      console.error(`[SyncOrchestrator] ${errorMsg}`);
+      logger.error('SyncOrchestrator', errorMsg, error);
       result.errors.push(errorMsg);
     }
 
@@ -202,7 +200,7 @@ export async function syncAllData(
 
     return result;
   } catch (error) {
-    console.error(`[SyncOrchestrator] Fatal error during sync for ${ticker}:`, error);
+    logger.error('SyncOrchestrator', 'Fatal error during sync', error, { ticker });
     result.errors.push(`Fatal sync error: ${error}`);
     throw new Error(`Sync failed for ${ticker}: ${error}`);
   }

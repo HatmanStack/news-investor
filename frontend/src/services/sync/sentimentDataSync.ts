@@ -20,6 +20,7 @@ import {
 } from '@/services/api/finnhub.service';
 import { FeatureFlags } from '@/config/features';
 import type { WordCountDetails, CombinedWordDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 /**
  * Convert hex hash string to 32-bit integer
@@ -135,7 +136,7 @@ export async function syncSentimentData(ticker: string, date: string): Promise<n
 
     return analyzedCount;
   } catch (error) {
-    console.error(`[SentimentDataSync] Error syncing sentiment for ${ticker}:`, error);
+    logger.error('SentimentDataSync', 'Error syncing sentiment', error, { ticker });
     throw new Error(`Failed to sync sentiment for ${ticker}: ${error}`);
   }
 }
@@ -242,7 +243,7 @@ export async function updatePredictions(
       });
     }
   } catch (error) {
-    console.error(`[SentimentDataSync] Failed to update predictions for ${ticker}:`, error);
+    logger.error('SentimentDataSync', 'Failed to update predictions', error, { ticker });
     // Don't throw, just log. Prediction update failure shouldn't fail the whole sync.
   }
 }

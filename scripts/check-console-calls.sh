@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Baseline: number of console.log/warn/error calls in frontend/src/ (non-test)
 # Update this number downward as calls are migrated to logger utility
-BASELINE=89
+BASELINE=6
 
 COUNT=$(grep -r --include='*.ts' --include='*.tsx' \
   --exclude-dir='__tests__' --exclude-dir='__mocks__' \

@@ -6,6 +6,7 @@
 import { getDatabase } from '../index';
 import { WordCountDetails } from '@/types/database.types';
 import { TABLE_NAMES } from '@/constants/database.constants';
+import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 
 /**
  * Find all word count records for a ticker
@@ -13,16 +14,12 @@ import { TABLE_NAMES } from '@/constants/database.constants';
  * @returns Array of word count details
  */
 export async function findByTicker(ticker: string): Promise<WordCountDetails[]> {
-  const db = await getDatabase();
-  const sql = `SELECT * FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
-
-  try {
+  return withRepoLoggingDefault('WordCountRepository', 'findByTicker', [], async () => {
+    const db = await getDatabase();
+    const sql = `SELECT * FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE ticker = ? ORDER BY date DESC`;
     const results = await db.getAllAsync<WordCountDetails>(sql, [ticker]);
     return results;
-  } catch (error) {
-    console.error('[WordCountRepository] Error finding by ticker:', error);
-    return [];
-  }
+  });
 }
 
 /**
@@ -31,16 +28,15 @@ export async function findByTicker(ticker: string): Promise<WordCountDetails[]> 
  * @returns The ID of the inserted record
  */
 export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<number> {
-  const db = await getDatabase();
-  const sql = `
+  return withRepoLogging('WordCountRepository', 'insert', async () => {
+    const db = await getDatabase();
+    const sql = `
     INSERT INTO ${TABLE_NAMES.WORD_COUNT_DETAILS} (
       date, hash, ticker, positive, negative, nextDay,
       twoWks, oneMnth, body, sentiment, sentimentNumber,
       eventType, aspectScore, mlScore, materialityScore
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-
-  try {
     const result = await db.runAsync(sql, [
       wordCount.date,
       wordCount.hash,
@@ -60,10 +56,7 @@ export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<n
     ]);
 
     return result.lastInsertRowId;
-  } catch (error) {
-    console.error('[WordCountRepository] Error inserting word count:', error);
-    throw new Error(`Failed to insert word count: ${error}`);
-  }
+  });
 }
 
 /**
@@ -72,16 +65,12 @@ export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<n
  * @returns true if word count exists
  */
 export async function existsByHash(hash: number): Promise<boolean> {
-  const db = await getDatabase();
-  const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE hash = ?`;
-
-  try {
+  return withRepoLoggingDefault('WordCountRepository', 'existsByHash', false, async () => {
+    const db = await getDatabase();
+    const sql = `SELECT COUNT(*) as count FROM ${TABLE_NAMES.WORD_COUNT_DETAILS} WHERE hash = ?`;
     // Using getAllAsync instead of getFirstAsync
     const results = await db.getAllAsync<{ count: number }>(sql, [hash]);
     const first = results[0];
     return first !== undefined && first.count > 0;
-  } catch (error) {
-    console.error('[WordCountRepository] Error checking existence by hash:', error);
-    return false;
-  }
+  });
 }

@@ -78,8 +78,9 @@ export async function fetchCombinedSentiment(
         }
       } catch (err) {
         logger.warn(
-          '[SentimentFetcher] News/sentiment trigger failed, continuing to fetch results:',
-          err,
+          'SentimentFetcher',
+          'News/sentiment trigger failed, continuing to fetch results',
+          err instanceof Error ? { error: err.message } : {},
         );
       }
 
@@ -91,7 +92,11 @@ export async function fetchCombinedSentiment(
         return { data: transformed, truncationMeta: lambdaResults._meta };
       }
     } catch (err) {
-      logger.warn('[SentimentFetcher] Sentiment result fetch failed:', err);
+      logger.warn(
+        'SentimentFetcher',
+        'Sentiment result fetch failed',
+        err instanceof Error ? { error: err.message } : {},
+      );
       if (localData.length > 0) return { data: localData };
     }
   }
@@ -131,7 +136,11 @@ export async function fetchArticleSentiment(
         return transformed;
       }
     } catch (err) {
-      logger.warn('[SentimentFetcher] Article fetch failed, using local data:', err);
+      logger.warn(
+        'SentimentFetcher',
+        'Article fetch failed, using local data',
+        err instanceof Error ? { error: err.message } : {},
+      );
     }
   }
 

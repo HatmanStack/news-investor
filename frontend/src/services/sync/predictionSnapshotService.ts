@@ -6,6 +6,7 @@
  */
 
 import { createBackendClient } from '@/services/api/backendClient';
+import { logger } from '@/utils/logger';
 
 export async function submitPredictionSnapshot(
   ticker: string,
@@ -19,6 +20,6 @@ export async function submitPredictionSnapshot(
     const client = createBackendClient();
     await client.post('/predictions/snapshot', { ticker, predictions });
   } catch (error) {
-    console.error('[predictionSnapshotService] Failed to submit snapshot:', error);
+    logger.error('PredictionSnapshotService', 'Failed to submit snapshot', error, { ticker });
   }
 }

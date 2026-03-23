@@ -13,6 +13,7 @@ import { Environment } from '@/config/environment';
 import { differenceInDays } from 'date-fns';
 import { useStock } from './StockContext';
 import type { StockDetails, CombinedWordDetails, WordCountDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 import type { SentimentJobStatus, DailySentiment } from '@/services/api/lambdaSentiment.service';
 import type { DiagnosticsOutput } from '@/ml/prediction/types';
 
@@ -108,7 +109,11 @@ export function StockDetailProvider({
       [ticker, queryClient],
     ),
     onError: useCallback((error: Error) => {
-      console.error('[StockDetailContext] Sentiment analysis failed:', error);
+      logger.error(
+        'StockDetailContext',
+        'Sentiment analysis failed',
+        error instanceof Error ? error : undefined,
+      );
     }, []),
   });
 

@@ -6,6 +6,7 @@
 import * as SQLite from 'expo-sqlite';
 import { DB_NAME, DB_VERSION } from '@/constants/database.constants';
 import { ALL_TABLES, CREATE_INDEXES, DROP_ALL_TABLES } from './schema';
+import { logger } from '@/utils/logger';
 
 // Singleton database instance
 let database: SQLite.SQLiteDatabase | null = null;
@@ -49,7 +50,7 @@ export async function initializeDatabase(): Promise<void> {
 
     isInitialized = true;
   } catch (error) {
-    console.error('[Database] Initialization failed:', error);
+    logger.error('Database', 'Initialization failed', error);
     throw new Error(`Database initialization failed: ${error}`);
   }
 }
@@ -88,7 +89,7 @@ async function createTables(): Promise<void> {
     // Create indexes
     await database.execAsync(CREATE_INDEXES);
   } catch (error) {
-    console.error('[Database] Error creating tables:', error);
+    logger.error('Database', 'Error creating tables', error);
     throw new Error(`Failed to create tables: ${error}`);
   }
 }
@@ -108,7 +109,7 @@ async function checkTablesExist(): Promise<boolean> {
     );
     return result.length > 0;
   } catch (error) {
-    console.error('[Database] Error checking tables:', error);
+    logger.error('Database', 'Error checking tables', error);
     return false;
   }
 }
@@ -132,7 +133,7 @@ async function columnExists(tableName: string, columnName: string): Promise<bool
     const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
     return columns.some((col) => col.name === columnName);
   } catch (error) {
-    console.error(`[Database] Error checking column ${columnName} in ${tableName}:`, error);
+    logger.error('Database', 'Error checking column', error, { columnName, tableName });
     return false;
   }
 }
@@ -270,7 +271,7 @@ async function runMigrations(fromVersion: number): Promise<void> {
       );
     }
   } catch (error) {
-    console.error('[Database] Migration failed:', error);
+    logger.error('Database', 'Migration failed', error);
     throw new Error(`Failed to run migrations: ${error}`);
   }
 }
@@ -289,7 +290,7 @@ async function getDatabaseVersion(): Promise<number> {
     const result = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
     return result?.user_version || 0;
   } catch (error) {
-    console.error('[Database] Error getting version:', error);
+    logger.error('Database', 'Error getting version', error);
     return 0;
   }
 }
@@ -307,7 +308,7 @@ async function setDatabaseVersion(version: number): Promise<void> {
   try {
     await database.execAsync(`PRAGMA user_version = ${version}`);
   } catch (error) {
-    console.error('[Database] Error setting version:', error);
+    logger.error('Database', 'Error setting version', error);
     throw new Error(`Failed to set database version: ${error}`);
   }
 }
@@ -336,7 +337,7 @@ export async function resetDatabase(): Promise<void> {
     // Reset version
     await setDatabaseVersion(DB_VERSION);
   } catch (error) {
-    console.error('[Database] Error resetting database:', error);
+    logger.error('Database', 'Error resetting database', error);
     throw new Error(`Failed to reset database: ${error}`);
   }
 }
@@ -352,7 +353,7 @@ export async function closeDatabase(): Promise<void> {
       database = null;
       isInitialized = false;
     } catch (error) {
-      console.error('[Database] Error closing database:', error);
+      logger.error('Database', 'Error closing database', error);
       throw new Error(`Failed to close database: ${error}`);
     }
   }

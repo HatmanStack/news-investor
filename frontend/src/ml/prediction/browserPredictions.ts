@@ -13,6 +13,7 @@ import { getStockPredictions, parsePredictionResponse } from '@/ml/prediction/pr
 import type { CombinedWordDetails, EventType } from '@/types/database.types';
 import type { Predictions } from '@/utils/sentiment/dataTransformer';
 import type { DiagnosticsOutput } from '@/ml/prediction/types';
+import { logger } from '@/utils/logger';
 import { MIN_SENTIMENT_DATA, MIN_STOCK_DATA } from '@/constants/ml.constants';
 
 export interface PredictionsWithDiagnostics extends Predictions {
@@ -178,7 +179,7 @@ export async function generateBrowserPredictions(
 
     return predictions;
   } catch (error) {
-    console.error(`[Predictions] Failed for ${ticker}:`, error);
+    logger.error('Predictions', 'Failed to generate predictions', error, { ticker });
     return null;
   }
 }

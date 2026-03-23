@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as SymbolRepository from '@/database/repositories/symbol.repository';
 import { fetchSymbolMetadata, searchTickers } from '@/services/api/tiingo.service';
 import type { SymbolDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 export interface UseSymbolSearchOptions {
   /**
@@ -112,7 +113,11 @@ export function useSymbolSearch(query: string, options: UseSymbolSearchOptions =
 
         return symbolDetailsList;
       } catch (err) {
-        console.error('[useSymbolSearch] searchTickers failed:', err);
+        logger.error(
+          'useSymbolSearch',
+          'searchTickers failed',
+          err instanceof Error ? err : undefined,
+        );
         return [];
       }
     },
@@ -174,12 +179,22 @@ export function useSymbolDetails(ticker: string) {
 
         // Fire-and-forget: persist fresh data but don't let DB errors discard it
         void SymbolRepository.insert(symbolDetails).catch((err) => {
-          console.error(`[useSymbolDetails] Failed to cache ${ticker}:`, err);
+          logger.error(
+            'useSymbolDetails',
+            'Failed to cache symbol',
+            err instanceof Error ? err : undefined,
+            { ticker },
+          );
         });
 
         return symbolDetails as SymbolDetails;
       } catch (error) {
-        console.error(`[useSymbolDetails] Error fetching ${ticker}:`, error);
+        logger.error(
+          'useSymbolDetails',
+          'Error fetching symbol',
+          error instanceof Error ? error : undefined,
+          { ticker },
+        );
         return cached || null;
       }
     },

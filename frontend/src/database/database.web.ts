@@ -4,6 +4,7 @@
  */
 
 import { DB_NAME } from '@/constants/database.constants';
+import { logger } from '@/utils/logger';
 
 /** Stored symbol data */
 interface StoredSymbol {
@@ -206,7 +207,7 @@ class WebDatabase {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error('[WebDB] Failed to load data:', error);
+      logger.error('WebDB', 'Failed to load data', error);
     }
 
     return {
@@ -293,10 +294,10 @@ class WebDatabase {
       try {
         localStorage.setItem(this.storageKey, JSON.stringify(this.data));
       } catch {
-        console.error('[WebDB] Save failed even after eviction');
+        logger.error('WebDB', 'Save failed even after eviction');
       }
     } else {
-      console.error('[WebDB] Failed to save data:', error);
+      logger.error('WebDB', 'Failed to save data', error);
     }
   }
 
@@ -446,7 +447,7 @@ class WebDatabase {
         else if (tableName === 'annotations') this.data.annotations = {};
         this.saveData();
       } else if (tableName) {
-        console.warn(`[WebDB] Ignoring DROP TABLE for unknown table: ${tableName}`);
+        logger.warn('WebDB', 'Ignoring DROP TABLE for unknown table', { tableName });
       }
       return;
     }

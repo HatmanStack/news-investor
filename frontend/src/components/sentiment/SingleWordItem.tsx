@@ -8,6 +8,7 @@ import { View, StyleSheet, Linking } from 'react-native';
 import { Card, Text, Chip } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useToast } from '@/components/common';
+import { logger } from '@/utils/logger';
 import { FeatureGate } from '@/features/tier';
 import type { WordCountDetails } from '@/types/database.types';
 import { formatShortDate } from '@/utils/date/dateUtils';
@@ -64,7 +65,11 @@ export const SingleWordItem: React.FC<SingleWordItemProps> = React.memo(({ item 
       try {
         await Linking.openURL(item.url);
       } catch (err) {
-        console.error('[SingleWordItem] Failed to open URL:', err);
+        logger.error(
+          'SingleWordItem',
+          'Failed to open URL',
+          err instanceof Error ? err : undefined,
+        );
         toast.show({ message: 'Unable to open link', variant: 'error' });
       }
     }

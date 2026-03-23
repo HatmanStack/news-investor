@@ -180,7 +180,7 @@ export class LogisticRegression {
       loss += (alpha / 2) * l2Penalty;
 
       if (verbose && (iter % 100 === 0 || iter === maxIterations - 1)) {
-        logger.debug(`[LogisticRegression] Iteration ${iter}: loss=${loss.toFixed(6)}`);
+        logger.debug('LogisticRegression', 'Training iteration', { iter, loss: loss.toFixed(6) });
       }
 
       // Check convergence
@@ -188,7 +188,7 @@ export class LogisticRegression {
         this.converged = true;
         this.iterations = iter + 1;
         if (verbose) {
-          logger.debug(`[LogisticRegression] Converged after ${this.iterations} iterations`);
+          logger.debug('LogisticRegression', 'Converged', { iterations: this.iterations });
         }
         break;
       }
@@ -198,7 +198,7 @@ export class LogisticRegression {
     }
 
     if (!this.converged && verbose) {
-      console.warn(`[LogisticRegression] Did not converge after ${maxIterations} iterations`);
+      logger.warn('LogisticRegression', 'Did not converge', { maxIterations });
     }
   }
 

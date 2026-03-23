@@ -12,6 +12,7 @@
 
 import { getSentimentAnalyzer } from './analyzer';
 import type { SentimentAnalysisResponse } from '@/types/api.types';
+import { logger } from '@/utils/logger';
 
 /**
  * Analyze sentiment of article text using browser-based ML
@@ -40,10 +41,9 @@ export async function analyzeSentiment(
   } catch (error) {
     const duration = performance.now() - startTime;
 
-    console.error(
-      `[ML SentimentService] Error analyzing sentiment (${duration.toFixed(2)}ms):`,
-      error,
-    );
+    logger.error('SentimentService', 'Error analyzing sentiment', error, {
+      durationMs: duration.toFixed(2),
+    });
 
     // Wrap in Error for consistent error handling
     throw new Error(

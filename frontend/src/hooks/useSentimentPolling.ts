@@ -12,6 +12,7 @@ import {
   type SentimentJobStatus,
   type DailySentiment,
 } from '@/services/api/lambdaSentiment.service';
+import { logger } from '@/utils/logger';
 
 export interface UseSentimentPollingOptions {
   /**
@@ -195,7 +196,11 @@ export function useSentimentPolling(
           pollJobStatus(currentJobId);
         }, pollInterval);
       } catch (err) {
-        console.error('[useSentimentPolling] Error polling job status:', err);
+        logger.error(
+          'useSentimentPolling',
+          'Error polling job status',
+          err instanceof Error ? err : undefined,
+        );
 
         if (!isMountedRef.current) return;
 
@@ -266,7 +271,11 @@ export function useSentimentPolling(
         startPolling(response.jobId);
       }
     } catch (err) {
-      console.error('[useSentimentPolling] Error triggering analysis:', err);
+      logger.error(
+        'useSentimentPolling',
+        'Error triggering analysis',
+        err instanceof Error ? err : undefined,
+      );
 
       if (!isMountedRef.current) return;
 

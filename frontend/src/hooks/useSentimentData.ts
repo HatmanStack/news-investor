@@ -99,7 +99,11 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
           ]).then((results) => {
             for (const r of results) {
               if (r.status === 'rejected') {
-                logger.error('[useSentimentData] Background write failed:', r.reason);
+                logger.error(
+                  'useSentimentData',
+                  'Background write failed',
+                  r.reason instanceof Error ? r.reason : undefined,
+                );
               }
             }
           });
