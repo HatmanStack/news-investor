@@ -1,28 +1,4 @@
+# Dependabot is disabled for the community edition.
+# Dependencies are managed in the pro repo and synced here.
 version: 2
-updates:
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      aws-sdk:
-        patterns:
-          - '@aws-sdk/*'
-      expo:
-        patterns:
-          - 'expo*'
-          - '@expo/*'
-          - 'react-native*'
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: pip
-    directory: /backend/python
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+updates: []
