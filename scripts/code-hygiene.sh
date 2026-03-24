@@ -47,9 +47,6 @@ echo ""
 echo -e "${CYAN}[1/6] TypeScript dead code analysis (knip)...${NC}"
 KNIP_OUTPUT=$(npx knip --no-exit-code 2>&1 || true)
 
-UNUSED_DEPS=$(echo "$KNIP_OUTPUT" | grep -c "Unused dependencies" || true)
-UNUSED_EXPORTS=$(echo "$KNIP_OUTPUT" | grep -c "backend\|frontend" || true)
-
 if echo "$KNIP_OUTPUT" | grep -q "^Unused"; then
     echo -e "${YELLOW}  Found unused TypeScript code:${NC}"
     echo "$KNIP_OUTPUT" | grep -E "^(Unused|Unlisted|Unresolved)" | head -20
