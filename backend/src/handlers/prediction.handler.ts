@@ -6,7 +6,7 @@ import {
   putDailyAggregate,
   getDailyAggregate,
 } from '../repositories/dailySentimentAggregate.repository';
-import { DailySentimentAggregateItem } from '../types/dynamodb.types';
+import { DailySentimentItem } from '../types/dynamodb.types';
 import { predictionRequestSchema, parseBody, formatZodError } from '../utils/schemas.util';
 import { logger } from '../utils/logger.util.js';
 
@@ -132,7 +132,7 @@ export async function predictionHandler(
       const existingItem = await getDailyAggregate(ticker, today);
 
       // Merge prediction fields into existing item (or create new)
-      const aggregateItem: DailySentimentAggregateItem = {
+      const aggregateItem: DailySentimentItem = {
         ticker,
         date: today,
         // Preserve existing fields if present, otherwise use defaults
