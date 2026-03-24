@@ -1,4 +1,10 @@
-# Dependabot is disabled for the community edition.
+# Dependabot is effectively disabled for the community edition.
 # Dependencies are managed in the pro repo and synced here.
+# A no-op entry is required because dependabot.yml needs at least one update.
 version: 2
-updates: []
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
