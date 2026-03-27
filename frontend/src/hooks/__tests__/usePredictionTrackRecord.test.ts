@@ -56,4 +56,26 @@ describe('usePredictionTrackRecord', () => {
     expect(result.current.isFetching).toBe(false);
     expect(mockGet).not.toHaveBeenCalled();
   });
+
+  it('should pass limit parameter when provided', async () => {
+    const mockData = {
+      trackRecord: {
+        '1d': { total: 0, correct: 0, accuracy: 0 },
+        '14d': { total: 0, correct: 0, accuracy: 0 },
+        '30d': { total: 0, correct: 0, accuracy: 0 },
+      },
+      recentPredictions: [],
+    };
+    mockGet.mockResolvedValue({ data: { data: mockData } });
+
+    const { result } = renderHook(() => usePredictionTrackRecord('AAPL', 50), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledWith('/predictions/track-record', {
+      params: { ticker: 'AAPL', limit: '50' },
+    });
+  });
 });

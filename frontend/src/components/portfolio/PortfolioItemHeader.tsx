@@ -52,7 +52,7 @@ export function PortfolioItemHeader({
               hitSlop={8}
               onPress={(e) => {
                 e?.stopPropagation();
-                router.push(`/(tabs)/stock/${ticker}/sentiment?scrollTo=alerts`);
+                router.push(`/(tabs)/alert-settings?ticker=${ticker}`);
               }}
             >
               <View style={[styles.alertBadge, { backgroundColor: theme.colors.error }]} />

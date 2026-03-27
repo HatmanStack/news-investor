@@ -32,6 +32,7 @@ import { AggregateSentimentCard } from '@/components/analytics/AggregateSentimen
 import { SectorExposureCard } from '@/components/analytics/SectorExposureCard';
 import { PredictionConfidenceCard } from '@/components/analytics/PredictionConfidenceCard';
 import { SectorSentimentCard } from '@/components/analytics/SectorSentimentCard';
+import { SectorSentimentDetailCard } from '@/components/analytics/SectorSentimentDetailCard';
 import { ExportButton } from '@/components/portfolio/ExportButton';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { usePortfolioAnalytics } from '@/hooks/usePortfolioAnalytics';
@@ -51,6 +52,30 @@ export default function PortfolioScreen() {
   const { portfolio, isLoading, error, refetch, removeFromPortfolio } = usePortfolio();
   const { analytics, isLoading: analyticsLoading } = usePortfolioAnalytics();
   const { setSelectedTicker, startDate, endDate } = useStock();
+
+  const topSectorEtf = useMemo(() => {
+    if (!analytics?.sectors?.length) return null;
+    const SECTOR_TO_ETF: Record<string, string> = {
+      Technology: 'XLK',
+      Financials: 'XLF',
+      'Financial Services': 'XLF',
+      Energy: 'XLE',
+      'Health Care': 'XLV',
+      Healthcare: 'XLV',
+      Industrials: 'XLI',
+      'Communication Services': 'XLC',
+      'Consumer Discretionary': 'XLY',
+      'Consumer Cyclical': 'XLY',
+      'Consumer Staples': 'XLP',
+      'Consumer Defensive': 'XLP',
+      Utilities: 'XLU',
+      'Real Estate': 'XLRE',
+      Materials: 'XLB',
+      'Basic Materials': 'XLB',
+    };
+    const topSector = analytics.sectors.reduce((a, b) => (a.count >= b.count ? a : b));
+    return SECTOR_TO_ETF[topSector.sector] ?? null;
+  }, [analytics?.sectors]);
   const toast = useToast();
 
   const handleStockPress = useCallback(
@@ -293,6 +318,7 @@ export default function PortfolioScreen() {
               <SectorExposureCard data={analytics.sectors} />
               <PredictionConfidenceCard data={analytics.predictions} />
               <SectorSentimentCard data={analytics.sectorSentiment} />
+              {topSectorEtf && <SectorSentimentDetailCard sectorEtf={topSectorEtf} />}
             </ScrollView>
           )
         ) : (

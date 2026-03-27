@@ -122,6 +122,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - **[Pro]** Prediction alerts: direction-flip detection integrated into alert sweep with email notifications
 - **[Pro]** Sector sentiment analytics card: per-sector average sentiment with trend indicators on portfolio analytics tab
 - **[Pro]** Alert badge navigation: tapping alert badge on portfolio card navigates to stock detail with alert settings visible
+- **[Pro]** Track record visualization: rolling accuracy, win/loss distribution, streak tracking, and confidence calibration charts for prediction analytics
 
 ### Fixed
 

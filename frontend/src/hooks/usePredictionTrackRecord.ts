@@ -31,12 +31,14 @@ export interface TrackRecordData {
   recentPredictions: RecentPrediction[];
 }
 
-export function usePredictionTrackRecord(ticker: string) {
+export function usePredictionTrackRecord(ticker: string, limit?: number) {
   return useQuery({
-    queryKey: ['trackRecord', ticker],
+    queryKey: ['trackRecord', ticker, limit],
     queryFn: async (): Promise<TrackRecordData> => {
       const client = createBackendClient();
-      const response = await client.get('/predictions/track-record', { params: { ticker } });
+      const params: Record<string, string> = { ticker };
+      if (limit) params.limit = String(limit);
+      const response = await client.get('/predictions/track-record', { params });
       return response.data.data;
     },
     enabled: !!ticker,

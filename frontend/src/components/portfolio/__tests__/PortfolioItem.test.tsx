@@ -277,7 +277,7 @@ describe('PortfolioItem', () => {
       expect(queryByTestId('alert-badge')).toBeNull();
     });
 
-    it('should navigate to stock detail with scrollTo=alerts when alert badge pressed', () => {
+    it('should navigate to alert-settings with ticker param when alert badge pressed', () => {
       const { router } = jest.requireMock('expo-router');
       mockUseRecentAlerts.mockReturnValue({
         recentAlerts: [
@@ -294,7 +294,7 @@ describe('PortfolioItem', () => {
 
       const badge = getByTestId('alert-badge');
       fireEvent.press(badge);
-      expect(router.push).toHaveBeenCalledWith('/(tabs)/stock/AAPL/sentiment?scrollTo=alerts');
+      expect(router.push).toHaveBeenCalledWith('/(tabs)/alert-settings?ticker=AAPL');
     });
   });
 });
