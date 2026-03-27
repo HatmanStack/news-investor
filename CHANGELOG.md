@@ -9,6 +9,33 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-03-26
+
+### Added
+
+- **[Pro]** Sector sentiment analytics: `GET /sentiment/sector` endpoint aggregates DAILY# sentiment across sector ETF holdings with 7-day rolling trend, plus `SectorSentimentDetailCard` on portfolio analytics tab
+- **[Pro]** Alert badge navigation: tapping alert badge on portfolio card navigates to alert-settings screen with ticker context chip
+- **[Pro]** Track record visualization: rolling accuracy chart, win/loss distribution, streak tracking, and confidence calibration charts gated behind `backtesting` feature flag
+- **[Pro]** Track record endpoint `limit` parameter: configurable recent predictions per horizon (default 7, max 50)
+- **[Pro]** Unknown ETF validation: `GET /sentiment/sector` returns 400 for unrecognized ETFs with static + DynamoDB fallback lookup
+- `portfolio_export` and `real_time_alerts` keys added to community tier stub features map
+- `news_alerts` confirmed covered by existing v2.6 alert sweep (material event detection via z-score anomaly)
+- `prediction_alerts` confirmed covered by existing v2.6 alert sweep (direction-flip detection)
+
+### Fixed
+
+- **[Pro]** Community sync: TrackRecordCard and notes screen added to `.sync/config.json` exclusions with "Available in Pro" overlay stubs
+- **[Pro]** TrackRecordCard and notes hooks gracefully handle 404 from missing backend endpoints (defense-in-depth for community edition)
+- **[Pro]** Alert badge navigation routes to `alert-settings?ticker=X` (was routing to stock sentiment tab where scrollTo had no effect)
+- **[Pro]** Sector sentiment route uses `lazyHandler` pattern consistent with all other routes in index.ts
+- **[Pro]** Track record calibration bar uses `theme.colors.surfaceVariant` instead of hardcoded `#e0e0e0` (dark mode support)
+- **[Pro]** Sector sentiment ticker count uses most recent day's count instead of max over 7 days
+
+### Changed
+
+- Chart annotations, multi-ticker comparison, and portfolio export audited and confirmed working end-to-end (already implemented in v2.7.0)
+- `PRO_FEATURES_ROADMAP.md` updated: 9 features moved from Backlog to Implemented, 3 remaining (custom_models, api_access, webhook_integration)
+
 ## [2.9.0] - 2026-03-23
 
 ### Added
