@@ -121,18 +121,24 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - **[Pro]** Portfolio CSV export: server-side CSV generation with platform-appropriate download
 - **[Pro]** Prediction alerts: direction-flip detection integrated into alert sweep with email notifications
 - **[Pro]** Sector sentiment analytics card: per-sector average sentiment with trend indicators on portfolio analytics tab
-- **[Pro]** Alert badge navigation: tapping alert badge on portfolio card navigates to stock detail with alert settings visible
+- **[Pro]** Alert badge navigation: tapping alert badge on portfolio card navigates to alert-settings screen with ticker context
 - **[Pro]** Track record visualization: rolling accuracy, win/loss distribution, streak tracking, and confidence calibration charts for prediction analytics
+- **[Pro]** News alerts: material event detection integrated into alert sweep with email notifications
 
 ### Fixed
 
 - **[Pro]** Community sync: TrackRecordCard, PredictionHistory, and ComparativeSentimentCard no longer leak to community edition (replaced with pro teaser stubs)
-- **[Pro]** Alert badge navigation now routes to sentiment tab (was landing on price tab where scrollTo had no effect)
+- **[Pro]** Alert badge navigation now routes to alert-settings screen (was landing on stock sentiment tab where scrollTo had no effect)
 - **[Pro]** Trendline annotations can now be deleted in delete mode (was silently skipping non-horizontal annotations)
 - **[Pro]** Prediction flip alert emails no longer show irrelevant sparkline data or broken statistics row
 - **[Pro]** Comparison chart date range now matches primary chart (was hardcoded to 30 calendar days)
 - **[Pro]** Cross-device annotation deletion: annotations deleted on one device are now removed on sync from other devices
 - **[Pro]** Delete mode auto-exits after successful annotation deletion
+- **[Pro]** Sector sentiment handler now validates unknown ETFs with 400 response instead of returning empty 200
+- **[Pro]** Sector sentiment route uses `lazyHandler` pattern consistent with all other routes
+- **[Pro]** Track record calibration bar adapts to dark mode (was hardcoded light-mode color)
+- **[Pro]** Sector sentiment ticker count uses most recent day instead of max over 7 days
+- Community tier stub now includes `portfolio_export` and `real_time_alerts` feature keys
 
 ## [2.6.0] - 2026-03-22
 
