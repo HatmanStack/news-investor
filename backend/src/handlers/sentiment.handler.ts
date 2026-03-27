@@ -130,8 +130,9 @@ export async function handleSentimentJobStatusRequest(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayResponse> {
   try {
-    // Extract job ID from path parameters
-    const jobId = event.pathParameters?.jobId;
+    // Extract job ID from path parameters, with rawPath fallback
+    const jobId =
+      event.pathParameters?.jobId || event.rawPath.match(/\/sentiment\/job\/([^/]+)/)?.[1];
 
     if (!jobId) {
       return errorResponse('Job ID is required', 400);
@@ -188,9 +189,16 @@ export async function getSentimentResults(
 }> {
   logger.info('getSentimentResults called', { ticker, startDate, endDate });
 
-  // Fetch all sentiments for ticker
-  const allSentiments = await SentimentCacheRepository.querySentimentsByTicker(ticker);
-  logger.info('Fetched sentiments', { ticker, count: allSentiments.length });
+  // Fetch sentiments and articles in parallel (independent queries)
+  const [allSentiments, allArticles] = await Promise.all([
+    SentimentCacheRepository.querySentimentsByTicker(ticker),
+    NewsCacheRepository.queryArticlesByTicker(ticker),
+  ]);
+  logger.info('Fetched sentiments and articles', {
+    ticker,
+    sentiments: allSentiments.length,
+    articles: allArticles.length,
+  });
 
   if (allSentiments.length === 0) {
     logger.info('No sentiments found, returning empty');
@@ -205,10 +213,6 @@ export async function getSentimentResults(
   }
 
   logMlSentimentCacheHitRate(ticker, 1, 0); // 1 hit (aggregate)
-
-  // Fetch all news articles to get dates
-  const allArticles = await NewsCacheRepository.queryArticlesByTicker(ticker);
-  logger.info('Fetched articles', { ticker, count: allArticles.length });
 
   // Filter articles by date range if provided
   const articlesInRange = allArticles.filter((article) => {

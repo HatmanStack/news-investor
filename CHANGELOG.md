@@ -34,7 +34,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 ### Changed
 
 - Chart annotations, multi-ticker comparison, and portfolio export audited and confirmed working end-to-end (already implemented in v2.7.0)
-- `PRO_FEATURES_ROADMAP.md` updated: 9 features moved from Backlog to Implemented, 3 remaining (custom_models, api_access, webhook_integration)
+- Feature roadmap updated: 9 features moved from Backlog to Implemented, 3 remaining (custom_models, api_access, webhook_integration)
 
 ## [2.9.0] - 2026-03-23
 
@@ -360,7 +360,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 - Updated ARCHITECTURE.md and API.md with v2.2 feature documentation (sentiment velocity, sector benchmarking, earnings calendar, notes, track record)
 - Updated community overlay docs to include public features and reference pro for gated features
-- Marked implemented features in PRO_FEATURES_ROADMAP.md
+- Marked implemented features in feature roadmap
 
 ## [2.2.1] - 2026-02-22
 

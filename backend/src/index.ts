@@ -22,7 +22,7 @@ interface DirectInvocationEvent {
 }
 
 /** Route definition with lazy handler import for cold start optimization */
-interface RouteDefinition {
+export interface RouteDefinition {
   path: string;
   method: string;
   prefix?: boolean;
@@ -34,7 +34,7 @@ interface RouteDefinition {
  * Prefix routes go at the end so exact matches take priority.
  * Note: /stocks, /search, /batch/stocks are handled by Python Lambda.
  */
-const ROUTES: RouteDefinition[] = [
+export const ROUTES: RouteDefinition[] = [
   // ── News ──
   {
     path: '/news',
@@ -123,7 +123,7 @@ const ROUTES: RouteDefinition[] = [
  * Find a matching route for the given path and method.
  * Exact matches take priority over prefix matches.
  */
-function findRoute(path: string, method: string): RouteDefinition | undefined {
+export function findRoute(path: string, method: string): RouteDefinition | undefined {
   const exact = ROUTES.find((r) => r.path === path && r.method === method && !r.prefix);
   if (exact) return exact;
   return ROUTES.find((r) => r.prefix === true && path.startsWith(r.path) && r.method === method);

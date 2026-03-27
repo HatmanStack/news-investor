@@ -6,18 +6,24 @@
         "src/hooks/*.ts",
         "src/contexts/*.tsx",
         "src/database/database.ts",
-        "src/database/database.web.ts",
         "src/database/index.ts",
+        "src/ml/version.ts",
         "src/features/tier/index.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"]
     },
     "backend": {
-      "entry": ["scripts/*.ts", "src/utils/dynamodb.util.ts"],
+      "entry": [
+        "scripts/*.ts",
+        "src/handlers/*.ts",
+        "src/handlers/**/*.ts",
+        "src/utils/dynamodb.util.ts"
+      ],
       "project": ["src/**/*.ts"]
     }
   },
-  "ignoreDependencies": ["babel-preset-expo", "amazon-cognito-identity-js", "@aws-sdk/client-ses"],
-  "ignoreExportsUsedInFile": true,
-  "exclude": ["exports"]
+  "ignore": [".sync/**"],
+  "ignoreDependencies": ["babel-preset-expo"],
+  "ignoreBinaries": [],
+  "ignoreExportsUsedInFile": true
 }
