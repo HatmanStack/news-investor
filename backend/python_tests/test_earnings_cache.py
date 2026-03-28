@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 # Must set env var before importing the module
-os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
+# DYNAMODB_TABLE_NAME already set to "StocksCache" by conftest.py
 
 from repositories.earnings_cache import get_cached_earnings, cache_earnings
 

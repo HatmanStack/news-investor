@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
-os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
+# DYNAMODB_TABLE_NAME already set to "StocksCache" by conftest.py
 
 from handlers.earnings import handle_earnings_request, handle_batch_earnings_request
 

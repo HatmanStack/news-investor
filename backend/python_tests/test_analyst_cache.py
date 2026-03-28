@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
-os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
+# DYNAMODB_TABLE_NAME already set to "StocksCache" by conftest.py
 
 
 class TestAnalystCache:

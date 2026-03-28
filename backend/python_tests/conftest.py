@@ -18,8 +18,8 @@ os.environ["ALLOWED_ORIGINS"] = "*"
 
 
 @pytest.fixture(autouse=True)
-def _reset_yfinance_circuit_breaker():
-    """Reset the yfinance circuit breaker between tests to prevent state leaks."""
+def _reset_module_state():
+    """Reset module-level state between tests to prevent cross-test leaks."""
     yield
     try:
         from services.yfinance_service import _yfinance_circuit
@@ -28,6 +28,17 @@ def _reset_yfinance_circuit_breaker():
         _yfinance_circuit._open_until = 0
     except ImportError:
         pass
+    # Reset cached DynamoDB resources so mock-based tests start clean.
+    # Without this, a real boto3 resource cached by one test leaks into
+    # the next test's @patch scope.
+    for mod_name in (
+        "repositories.stocks_cache",
+        "repositories.analyst_cache",
+        "repositories.earnings_cache",
+    ):
+        mod = sys.modules.get(mod_name)
+        if mod and hasattr(mod, "_dynamodb"):
+            mod._dynamodb = None
 
 
 @pytest.fixture
