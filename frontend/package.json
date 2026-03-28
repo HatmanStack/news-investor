@@ -19,7 +19,7 @@
     "@expo/vector-icons": "^15.0.3",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-navigation/material-top-tabs": "^7.4.20",
-    "@react-navigation/native": "^7.1.33",
+    "@react-navigation/native": "^7.2.2",
     "@tanstack/react-query": "^5.91.2",
     "amazon-cognito-identity-js": "^6.3.16",
     "axios": "^1.13.6",
