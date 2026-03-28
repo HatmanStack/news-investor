@@ -142,12 +142,38 @@ export async function batchPutSentiments(items: Omit<SentimentCacheItem, 'ttl'>[
  * @example
  * const sentiments = await querySentimentsByTicker('AAPL');
  */
-export async function querySentimentsByTicker(ticker: string): Promise<SentimentCacheItem[]> {
+export async function querySentimentsByTicker(
+  ticker: string,
+  options?: { startDate?: string; endDate?: string },
+): Promise<SentimentCacheItem[]> {
   try {
     const pk = makeSentimentPK(ticker);
 
+    // SENT# sort keys are HASH#{hash} (not date-sortable), so use
+    // FilterExpression on createdAt to push date filtering to DynamoDB
+    // and reduce data transfer.
+    const filterParts: string[] = [];
+    const filterAttributeNames: Record<string, string> = {};
+    const filterAttributeValues: Record<string, string> = {};
+
+    if (options?.startDate) {
+      filterParts.push('#createdAt >= :startDate');
+      filterAttributeNames['#createdAt'] = 'createdAt';
+      filterAttributeValues[':startDate'] = options.startDate;
+    }
+    if (options?.endDate) {
+      filterParts.push('#createdAt <= :endDate');
+      filterAttributeNames['#createdAt'] = 'createdAt';
+      filterAttributeValues[':endDate'] = `${options.endDate}T23:59:59.999Z`;
+    }
+
     const items = await queryItems<SingleTableSentimentItem>(pk, {
       skPrefix: `${SortKeyPrefix.HASH}#`,
+      ...(filterParts.length > 0 && {
+        filterExpression: filterParts.join(' AND '),
+        filterAttributeNames,
+        filterAttributeValues,
+      }),
     });
 
     return items.map(transformToExternal);

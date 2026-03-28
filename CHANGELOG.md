@@ -11,6 +11,9 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ### Fixed
 
+- 8 API Gateway route definitions added to `template.yaml` for endpoints that were unreachable in production (trending, freshness, earnings-impact, sector, watchlist x3, analyst)
+- `querySentimentsByTicker` now accepts optional date range and pushes `FilterExpression` on `createdAt` to DynamoDB instead of loading all sentiments into memory
+- SES client in report service now uses `process.env.AWS_REGION || 'us-east-1'` instead of empty config (was relying on SDK default resolution)
 - Bare `catch {}` blocks in prediction and track record handlers now capture and log the error object instead of silently swallowing failures
 - Alert sweep subscriber watchlist fetch bounded to 25 concurrent DynamoDB queries via `mapWithConcurrency` (was unbounded `Promise.all`)
 - Alert sweep error logging passes errors as logger parameters instead of embedding in data objects, restoring stack traces in structured logs

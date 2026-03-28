@@ -166,6 +166,44 @@ describe('SentimentCacheRepository', () => {
       expect(result).toHaveLength(1);
       expect(result[0]!.articleHash).toBe('hash1');
     });
+
+    it('passes no filterExpression when no dates provided', async () => {
+      mockQueryItems.mockResolvedValueOnce([]);
+
+      await querySentimentsByTicker('AAPL');
+
+      const options = mockQueryItems.mock.calls[0]![1] as Record<string, unknown>;
+      expect(options.filterExpression).toBeUndefined();
+      expect(options.filterAttributeNames).toBeUndefined();
+      expect(options.filterAttributeValues).toBeUndefined();
+    });
+
+    it('passes >= filter when only startDate provided', async () => {
+      mockQueryItems.mockResolvedValueOnce([]);
+
+      await querySentimentsByTicker('AAPL', { startDate: '2025-01-15' });
+
+      const options = mockQueryItems.mock.calls[0]![1] as Record<string, unknown>;
+      expect(options.filterExpression).toBe('#createdAt >= :startDate');
+      expect(options.filterAttributeNames).toEqual({ '#createdAt': 'createdAt' });
+      expect(options.filterAttributeValues).toEqual({ ':startDate': '2025-01-15' });
+    });
+
+    it('passes combined filter when both dates provided', async () => {
+      mockQueryItems.mockResolvedValueOnce([]);
+
+      await querySentimentsByTicker('AAPL', {
+        startDate: '2025-01-01',
+        endDate: '2025-03-01',
+      });
+
+      const options = mockQueryItems.mock.calls[0]![1] as Record<string, unknown>;
+      expect(options.filterExpression).toBe('#createdAt >= :startDate AND #createdAt <= :endDate');
+      expect(options.filterAttributeValues).toEqual({
+        ':startDate': '2025-01-01',
+        ':endDate': '2025-03-01T23:59:59.999Z',
+      });
+    });
   });
 
   describe('existsInCache', () => {
