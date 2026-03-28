@@ -9,6 +9,22 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-03-27
+
+### Added
+
+- Volume bars indicator: toggleable volume histogram on the price chart with green/red color coding for up/down days, synced crosshair with main chart
+- Trending sentiment feed: "Top 10 Movers" feed on the home screen showing tickers with the largest absolute sentiment delta, computed by the sentiment worker and stored as a pre-aggregated TRENDING# entity
+- Analyst consensus card: new Python `/analyst` endpoint fetching analyst price targets and recommendation data from yfinance, cached in ANALYST# entities with 24h TTL, displayed on the price tab
+- Data freshness indicators: batch `GET /sentiment/freshness` endpoint returning last-sync timestamps for multiple tickers, with human-readable labels ("Updated 3h ago", "Stale") on portfolio items and sentiment tab
+- Price alerts: percentage-based price change detection (5% threshold) integrated into the existing alert sweep pipeline with email notifications and a new `priceAlertEnabled` toggle in alert preferences
+- Earnings impact analysis: sentiment worker annotates DAILY# entities with earnings proximity (5 business day window), new `GET /sentiment/earnings-impact` endpoint computes pre/post-earnings sentiment deltas, displayed as EarningsImpactCard on the sentiment tab
+
+### Changed
+
+- Home screen now shows trending sentiment feed above search results when search is empty, collapses when user starts typing
+- Community sync overlays updated for new routes (`/sentiment/trending`, `/sentiment/freshness`, `/analyst`, `/sentiment/earnings-impact`) and new UI components (volume indicator, freshness badges, EarningsImpactCard)
+
 ## [2.10.0] - 2026-03-26
 
 ### Added

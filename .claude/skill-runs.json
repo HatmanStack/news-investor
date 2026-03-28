@@ -56,5 +56,16 @@
     "date": "2026-03-26",
     "plan": "2026-03-26-v2.7-backlog-sweep",
     "verdict": "GO"
+  },
+  {
+    "skill": "brainstorm",
+    "date": "2026-03-27",
+    "plan": "2026-03-27-roadmap-feature-batch"
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-03-27",
+    "plan": "2026-03-27-roadmap-feature-batch",
+    "verdict": "GO"
   }
 ]

@@ -36,6 +36,7 @@ import { SectorSentimentDetailCard } from '@/components/analytics/SectorSentimen
 import { ExportButton } from '@/components/portfolio/ExportButton';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { usePortfolioAnalytics } from '@/hooks/usePortfolioAnalytics';
+import { useFreshness, getFreshnessLabel } from '@/hooks/useFreshness';
 import { useStock } from '@/contexts/StockContext';
 import { syncAllData } from '@/services/sync/syncOrchestrator';
 import { logger } from '@/utils/logger';
@@ -52,6 +53,9 @@ export default function PortfolioScreen() {
   const { portfolio, isLoading, error, refetch, removeFromPortfolio } = usePortfolio();
   const { analytics, isLoading: analyticsLoading } = usePortfolioAnalytics();
   const { setSelectedTicker, startDate, endDate } = useStock();
+
+  const portfolioTickers = useMemo(() => portfolio.map((p) => p.ticker), [portfolio]);
+  const { freshnessMap } = useFreshness(portfolioTickers);
 
   const topSectorEtf = useMemo(() => {
     if (!analytics?.sectors?.length) return null;
@@ -191,18 +195,24 @@ export default function PortfolioScreen() {
   }, [portfolio, startDate, endDate, refetch, toast]);
 
   const renderPortfolioItem = useCallback(
-    ({ item }: { item: PortfolioDetails }) => (
-      <Animated.View entering={FadeIn.duration(200)}>
-        <PortfolioItem
-          item={item}
-          onPress={() => handleStockPress(item)}
-          onDelete={() => handleDeleteStock(item)}
-          isExpanded={expandedTicker === item.ticker}
-          onToggleExpand={() => handleToggleExpand(item.ticker)}
-        />
-      </Animated.View>
-    ),
-    [handleStockPress, handleDeleteStock, expandedTicker, handleToggleExpand],
+    ({ item }: { item: PortfolioDetails }) => {
+      const freshEntry = freshnessMap?.get(item.ticker);
+      const label = freshEntry ? getFreshnessLabel(freshEntry.lastUpdated) : undefined;
+
+      return (
+        <Animated.View entering={FadeIn.duration(200)}>
+          <PortfolioItem
+            item={item}
+            onPress={() => handleStockPress(item)}
+            onDelete={() => handleDeleteStock(item)}
+            isExpanded={expandedTicker === item.ticker}
+            onToggleExpand={() => handleToggleExpand(item.ticker)}
+            freshnessLabel={label}
+          />
+        </Animated.View>
+      );
+    },
+    [handleStockPress, handleDeleteStock, expandedTicker, handleToggleExpand, freshnessMap],
   );
 
   const renderSkeletonItem = useCallback(

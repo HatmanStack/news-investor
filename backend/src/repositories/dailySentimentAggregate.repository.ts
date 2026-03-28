@@ -99,6 +99,36 @@ export async function queryByTickerAndDateRange(
   }
 }
 
+/**
+ * Get latest daily aggregates for multiple tickers in parallel.
+ * Uses Promise.allSettled to gracefully handle partial failures.
+ * Processes in batches of 20 to avoid overwhelming DynamoDB.
+ */
+export async function getLatestDailyAggregatesForTickers(
+  tickers: string[],
+): Promise<Map<string, DailySentimentData>> {
+  const results = new Map<string, DailySentimentData>();
+  const BATCH_SIZE = 20;
+
+  for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    const batch = tickers.slice(i, i + BATCH_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map(async (ticker) => {
+        const data = await getLatestDailyAggregate(ticker);
+        return { ticker, data };
+      }),
+    );
+
+    for (const result of settled) {
+      if (result.status === 'fulfilled' && result.value.data) {
+        results.set(result.value.ticker, result.value.data);
+      }
+    }
+  }
+
+  return results;
+}
+
 // ============================================================
 // Internal Transform Functions
 // ============================================================
@@ -128,6 +158,7 @@ function transformToInternal(item: DailySentimentData): DailySentimentItem {
     twoWeekProbability: item.twoWeekProbability,
     oneMonthDirection: item.oneMonthDirection,
     oneMonthProbability: item.oneMonthProbability,
+    earningsProximity: item.earningsProximity,
     // No TTL - persistent data
     createdAt: now,
     updatedAt: now,
@@ -152,5 +183,6 @@ function transformToExternal(item: DailySentimentItem): DailySentimentData {
     twoWeekProbability: item.twoWeekProbability,
     oneMonthDirection: item.oneMonthDirection,
     oneMonthProbability: item.oneMonthProbability,
+    earningsProximity: item.earningsProximity,
   };
 }

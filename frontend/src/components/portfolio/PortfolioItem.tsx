@@ -25,6 +25,7 @@ interface PortfolioItemProps {
   onDelete: () => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  freshnessLabel?: string;
 }
 
 export function PortfolioItem({
@@ -33,6 +34,7 @@ export function PortfolioItem({
   onDelete,
   isExpanded,
   onToggleExpand,
+  freshnessLabel,
 }: PortfolioItemProps) {
   const theme = useAppTheme();
   const { cardSpacing, cardPadding } = useLayoutDensity();
@@ -77,6 +79,22 @@ export function PortfolioItem({
               showAlertBadge={hasAlertForTicker(item.ticker)}
               onDelete={onDelete}
             />
+            {freshnessLabel && (
+              <Text
+                testID="freshness-label"
+                style={[
+                  styles.freshnessLabel,
+                  {
+                    color:
+                      freshnessLabel === 'Stale'
+                        ? theme.colors.error
+                        : theme.colors.onSurfaceVariant,
+                  },
+                ]}
+              >
+                {freshnessLabel}
+              </Text>
+            )}
             <PortfolioItemPrice ticker={item.ticker} />
             <PortfolioItemPrediction
               ticker={item.ticker}
@@ -101,6 +119,10 @@ export function PortfolioItem({
 
 const styles = StyleSheet.create({
   card: {},
+  freshnessLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
   deleteAction: {
     justifyContent: 'center',
     alignItems: 'center',

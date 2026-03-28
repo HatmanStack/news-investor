@@ -3,6 +3,7 @@ import {
   calculatePriceChange,
   transformPriceForLine,
   transformPriceForCandlestick,
+  extractVolumeData,
 } from '../useChartData';
 import type { StockDetails, CombinedWordDetails } from '@/types/database.types';
 
@@ -241,6 +242,75 @@ describe('useChartData', () => {
 
     it('handles empty array', () => {
       expect(transformPriceForCandlestick([])).toEqual([]);
+    });
+  });
+
+  describe('extractVolumeData', () => {
+    const mockStockData: StockDetails[] = [
+      {
+        hash: 1,
+        date: '2025-11-01',
+        ticker: 'AAPL',
+        close: 100,
+        high: 102,
+        low: 98,
+        open: 99,
+        volume: 1000000,
+        adjClose: 100,
+        adjHigh: 102,
+        adjLow: 98,
+        adjOpen: 99,
+        adjVolume: 1000000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1000000000,
+        enterpriseVal: 1000000000,
+        peRatio: 20,
+        pbRatio: 5,
+        trailingPEG1Y: 1.5,
+      },
+      {
+        hash: 2,
+        date: '2025-11-03',
+        ticker: 'AAPL',
+        close: 103,
+        high: 105,
+        low: 102,
+        open: 105,
+        volume: 1100000,
+        adjClose: 103,
+        adjHigh: 105,
+        adjLow: 102,
+        adjOpen: 105,
+        adjVolume: 1100000,
+        divCash: 0,
+        splitFactor: 1,
+        marketCap: 1030000000,
+        enterpriseVal: 1030000000,
+        peRatio: 20.5,
+        pbRatio: 5.1,
+        trailingPEG1Y: 1.55,
+      },
+    ];
+
+    it('extracts time and volume from StockDetails', () => {
+      const result = extractVolumeData(mockStockData);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({ time: '2025-11-01', volume: 1000000 });
+      expect(result[1]).toEqual({ time: '2025-11-03', volume: 1100000 });
+    });
+
+    it('returns empty array for empty input', () => {
+      expect(extractVolumeData([])).toEqual([]);
+    });
+
+    it('filters out entries with null volume', () => {
+      const withNull = [
+        ...mockStockData,
+        { ...mockStockData[0], volume: null as any, date: '2025-11-04' },
+      ];
+      const result = extractVolumeData(withNull);
+      expect(result).toHaveLength(2);
     });
   });
 

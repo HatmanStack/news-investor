@@ -112,3 +112,19 @@ export function transformPriceForCandlestick(stocks: StockDetails[]): Lightweigh
     }))
     .sort((a, b) => (a.time as string).localeCompare(b.time as string));
 }
+
+/**
+ * Extract volume data from stock details for the volume chart.
+ * Returns an array parallel to the candlestick data, with time and volume.
+ */
+export function extractVolumeData(stocks: StockDetails[]): { time: string; volume: number }[] {
+  if (!stocks || stocks.length === 0) return [];
+
+  return stocks
+    .filter((stock) => stock.date != null && stock.volume != null)
+    .map((stock) => ({
+      time: stock.date as string,
+      volume: stock.volume,
+    }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+}

@@ -238,6 +238,51 @@ describe('PortfolioItem', () => {
     });
   });
 
+  describe('freshness label', () => {
+    beforeEach(() => {
+      mockUseLatestStockPrice.mockReturnValue({
+        data: mockLatestPrice,
+        isLoading: false,
+        error: null,
+      } as any);
+    });
+
+    it('renders freshness label when provided', () => {
+      const { getByTestId, getByText } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          freshnessLabel="Updated 3h ago"
+        />,
+        { wrapper },
+      );
+      expect(getByTestId('freshness-label')).toBeTruthy();
+      expect(getByText('Updated 3h ago')).toBeTruthy();
+    });
+
+    it('does not render freshness label when not provided', () => {
+      const { queryByTestId } = render(
+        <PortfolioItem item={mockItem} onPress={jest.fn()} onDelete={jest.fn()} />,
+        { wrapper },
+      );
+      expect(queryByTestId('freshness-label')).toBeNull();
+    });
+
+    it('renders Stale label with distinct styling', () => {
+      const { getByText } = render(
+        <PortfolioItem
+          item={mockItem}
+          onPress={jest.fn()}
+          onDelete={jest.fn()}
+          freshnessLabel="Stale"
+        />,
+        { wrapper },
+      );
+      expect(getByText('Stale')).toBeTruthy();
+    });
+  });
+
   describe('alert badge', () => {
     beforeEach(() => {
       mockUseLatestStockPrice.mockReturnValue({

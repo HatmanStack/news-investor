@@ -32,6 +32,22 @@ export type { ChartDataPoint, PriceChange } from './useChartData';
 export { useResponsive } from './useResponsive';
 export type { ResponsiveValues } from './useResponsive';
 
+// Analyst consensus hook
+export { useAnalystConsensus } from './useAnalystConsensus';
+export type { AnalystConsensusData } from './useAnalystConsensus';
+
+// Trending hook
+export { useTrending } from './useTrending';
+export type { TrendingTicker, TrendingResponse } from './useTrending';
+
+// Earnings impact hook
+export { useEarningsImpact } from './useEarningsImpact';
+export type { EarningsImpactEvent } from './useEarningsImpact';
+
+// Freshness hook
+export { useFreshness, getFreshnessLabel } from './useFreshness';
+export type { FreshnessData } from './useFreshness';
+
 // Theme hook with extended types
 export { useAppTheme } from './useAppTheme';
 export type { AppTheme, AppColors } from './useAppTheme';

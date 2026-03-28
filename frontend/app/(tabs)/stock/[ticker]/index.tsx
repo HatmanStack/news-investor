@@ -13,6 +13,7 @@ import { useContentWidth } from '@/hooks/useContentWidth';
 import { StockMetadataCard } from '@/components/stock/StockMetadataCard';
 import { SectorBenchmarkCard } from '@/components/sector/SectorBenchmarkCard';
 import { EarningsCard } from '@/components/earnings/EarningsCard';
+import { AnalystConsensusCard } from '@/components/analyst/AnalystConsensusCard';
 import { PriceListHeader } from '@/components/stock/PriceListHeader';
 import { PriceListItem } from '@/components/stock/PriceListItem';
 import { DataTable, DataTableColumn, MonoText } from '@/components/common';
@@ -206,6 +207,7 @@ export default function PriceScreen() {
                   sectorName={symbol?.sector}
                 />
                 <EarningsCard ticker={ticker as string} />
+                <AnalystConsensusCard ticker={ticker as string} />
               </View>
             </View>
           </ScrollView>
@@ -230,6 +232,7 @@ export default function PriceScreen() {
               sectorName={symbol?.sector}
             />
             <EarningsCard ticker={ticker as string} />
+            <AnalystConsensusCard ticker={ticker as string} />
             <View style={styles.tableContainer}>
               <DataTable
                 data={sortedStockData}
@@ -279,6 +282,7 @@ export default function PriceScreen() {
                 sectorName={symbol?.sector}
               />
               <EarningsCard ticker={ticker as string} />
+              <AnalystConsensusCard ticker={ticker as string} />
             </View>
           </View>
         </ScrollView>

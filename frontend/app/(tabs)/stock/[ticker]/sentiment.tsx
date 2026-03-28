@@ -6,7 +6,7 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'react-native-paper';
+import { useTheme, Chip } from 'react-native-paper';
 import { useContentWidth } from '@/hooks/useContentWidth';
 import { useStockDetail } from '@/contexts/StockDetailContext';
 import { SentimentToggle } from '@/components/sentiment/SentimentToggle';
@@ -19,6 +19,8 @@ import { ComparativeSentimentCard } from '@/components/sentiment/ComparativeSent
 import { SentimentVelocityIndicator } from '@/components/sentiment/SentimentVelocityIndicator';
 import { TrackRecordCard } from '@/components/predictions/TrackRecordCard';
 import { PredictionHistory } from '@/components/predictions/PredictionHistory';
+import { EarningsImpactCard } from '@/components/earnings/EarningsImpactCard';
+import { useFreshness, getFreshnessLabel } from '@/hooks/useFreshness';
 import { Skeleton } from '@/components/common/Skeleton';
 import { LoadingIndicator } from '@/components/common/LoadingIndicator';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
@@ -38,6 +40,8 @@ export default function SentimentScreen() {
   const theme = useTheme();
   const { contentWidth } = useContentWidth();
   const [viewMode, setViewMode] = useState<'aggregate' | 'individual'>('aggregate');
+  const { freshnessMap } = useFreshness([ticker]);
+  const freshnessLabel = getFreshnessLabel(freshnessMap?.get(ticker)?.lastUpdated ?? null);
 
   // Sort data by date descending
   const sortedAggregateData = useMemo(() => {
@@ -96,6 +100,19 @@ export default function SentimentScreen() {
           showsHorizontalScrollIndicator={false}
           ListHeaderComponent={() => (
             <>
+              {freshnessLabel && (
+                <Chip
+                  testID="freshness-chip"
+                  style={[
+                    styles.freshnessChip,
+                    freshnessLabel === 'Stale' && { backgroundColor: '#ffcdd2' },
+                  ]}
+                  textStyle={{ fontSize: 12 }}
+                  compact
+                >
+                  {freshnessLabel}
+                </Chip>
+              )}
               <PredictionSummaryCard
                 latestRecord={sortedAggregateData[0] || null}
                 isLoading={isAggregateLoading}
@@ -104,6 +121,7 @@ export default function SentimentScreen() {
               <TrackRecordCard ticker={ticker} />
               <ComparativeSentimentCard ticker={ticker} />
               <PredictionHistory ticker={ticker} limit={5} />
+              <EarningsImpactCard ticker={ticker} />
               <View style={styles.chartContainer}>
                 {isAggregateLoading ? (
                   <Skeleton width="90%" height={220} style={styles.chartSkeleton} />
@@ -190,6 +208,11 @@ const styles = StyleSheet.create({
   },
   chartSkeleton: {
     alignSelf: 'center',
+  },
+  freshnessChip: {
+    alignSelf: 'flex-start',
+    marginLeft: 12,
+    marginTop: 8,
   },
   listContent: {
     paddingBottom: 8,

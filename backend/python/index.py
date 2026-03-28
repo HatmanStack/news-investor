@@ -86,6 +86,11 @@ def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
         elif raw_path == "/etf-holdings" and method == "GET":
             response = handle_etf_holdings(event)
 
+        elif raw_path == "/analyst" and method == "GET":
+            from handlers.analyst import handle_analyst_request
+
+            response = handle_analyst_request(event)
+
         else:
             # Distinguish 405 (known path, wrong method) from 404 (unknown path)
             known_paths = {
@@ -95,6 +100,7 @@ def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
                 "/earnings",
                 "/batch/earnings",
                 "/etf-holdings",
+                "/analyst",
             }
             if raw_path in known_paths:
                 logger.warning("Method not allowed", path=raw_path, method=method)

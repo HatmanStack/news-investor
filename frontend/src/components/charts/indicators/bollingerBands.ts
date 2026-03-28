@@ -8,6 +8,10 @@ export interface OHLCData {
   close: number;
 }
 
+export interface OHLCVData extends OHLCData {
+  volume?: number;
+}
+
 export interface BollingerBandsResult {
   time: Time;
   upper: number;

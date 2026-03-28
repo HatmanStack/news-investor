@@ -6,6 +6,7 @@ import {
   useMainChart,
   useRSIChart,
   useMACDChart,
+  useVolumeChart,
   useChartSync,
   INDICATOR_PANE_HEIGHT,
 } from './hooks';
@@ -14,6 +15,7 @@ import type { AnnotationData, ComparisonSeriesData } from './hooks';
 interface PriceChartDomProps {
   lineData: LineData[];
   candlestickData: CandlestickData[];
+  volumeData: { time: string; volume: number }[];
   showCandlestick: boolean;
   activeIndicators: string[];
   chartColor: string;
@@ -37,6 +39,7 @@ export default function PriceChartDom(props: PriceChartDomProps) {
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
   const macdContainerRef = useRef<HTMLDivElement>(null);
+  const volumeContainerRef = useRef<HTMLDivElement>(null);
 
   const isDark = props.theme === 'dark';
   const theme = {
@@ -64,6 +67,7 @@ export default function PriceChartDom(props: PriceChartDomProps) {
 
   const showRSI = props.activeIndicators.includes('RSI') && props.candlestickData.length > 0;
   const showMACD = props.activeIndicators.includes('MACD') && props.candlestickData.length > 0;
+  const showVolume = props.activeIndicators.includes('Volume') && props.volumeData.length > 0;
 
   const rsiChartRef = useRSIChart({
     containerRef: rsiContainerRef,
@@ -79,10 +83,22 @@ export default function PriceChartDom(props: PriceChartDomProps) {
     theme,
   });
 
+  const volumeChartRef = useVolumeChart({
+    containerRef: volumeContainerRef,
+    candlestickData: props.candlestickData,
+    volumeData: props.volumeData,
+    active: showVolume,
+    theme,
+  });
+
   // Stabilize followers array to avoid unnecessary re-subscriptions in useChartSync
   const rsiChart = rsiChartRef.current;
   const macdChart = macdChartRef.current;
-  const followers = useMemo(() => [rsiChart, macdChart], [rsiChart, macdChart]);
+  const volumeChart = volumeChartRef.current;
+  const followers = useMemo(
+    () => [rsiChart, macdChart, volumeChart],
+    [rsiChart, macdChart, volumeChart],
+  );
 
   // Centralized sync: main chart leads, sub-charts follow
   useChartSync(mainChartRef.current, followers);
@@ -120,6 +136,22 @@ export default function PriceChartDom(props: PriceChartDomProps) {
             MACD (12, 26, 9)
           </div>
           <div ref={macdContainerRef} style={{ width: '100%', height: INDICATOR_PANE_HEIGHT }} />
+        </div>
+      )}
+      {showVolume && (
+        <div style={{ marginTop: 2 }}>
+          <div
+            style={{
+              fontSize: 10,
+              color: theme.textColor,
+              opacity: 0.6,
+              paddingLeft: 4,
+              paddingBottom: 2,
+            }}
+          >
+            Volume
+          </div>
+          <div ref={volumeContainerRef} style={{ width: '100%', height: INDICATOR_PANE_HEIGHT }} />
         </div>
       )}
     </div>

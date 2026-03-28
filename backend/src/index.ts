@@ -78,6 +78,31 @@ export const ROUTES: RouteDefinition[] = [
       return handleDailyHistoryRequest;
     },
   },
+  {
+    path: '/sentiment/trending',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleTrendingRequest } = await import('./handlers/trending.handler');
+      return handleTrendingRequest;
+    },
+  },
+
+  {
+    path: '/sentiment/freshness',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleFreshnessRequest } = await import('./handlers/freshness.handler');
+      return handleFreshnessRequest;
+    },
+  },
+  {
+    path: '/sentiment/earnings-impact',
+    method: 'GET',
+    importHandler: async () => {
+      const { handleEarningsImpactRequest } = await import('./handlers/earningsImpact.handler');
+      return handleEarningsImpactRequest;
+    },
+  },
 
   // ── Prediction ──
   {

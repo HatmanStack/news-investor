@@ -24,6 +24,7 @@ const EntityPrefix = {
   PREDICTION: 'PRED', // Prediction snapshot
   WATCHLIST: 'WATCHLIST', // User watchlist item
   ALERT: 'ALERT', // Alert history
+  TRENDING: 'TRENDING', // Trending sentiment feed
 } as const;
 
 /**
@@ -194,6 +195,12 @@ export interface DailySentimentItem extends BaseTableItem {
   twoWeekProbability?: number;
   oneMonthDirection?: 'up' | 'down';
   oneMonthProbability?: number;
+  // Earnings proximity annotation (Phase 2)
+  earningsProximity?: {
+    daysFromEarnings: number; // Negative = before earnings, positive = after
+    earningsDate: string; // YYYY-MM-DD
+    isPreEarnings: boolean;
+  };
 }
 
 /**
@@ -316,6 +323,7 @@ export interface AlertPrefsItem extends BaseTableItem {
   sentimentShiftEnabled: boolean;
   materialEventEnabled: boolean;
   predictionFlipEnabled: boolean;
+  priceAlertEnabled: boolean;
   optedOut: boolean;
   email: string;
 }
@@ -327,13 +335,33 @@ export interface AlertPrefsItem extends BaseTableItem {
 export interface AlertHistoryItem extends BaseTableItem {
   entityType: 'ALERT' | 'ALERT_HISTORY';
   ticker: string;
-  alertType: 'sentiment_shift' | 'material_event' | 'prediction_flip';
+  alertType: 'sentiment_shift' | 'material_event' | 'prediction_flip' | 'price_change';
   zScore: number;
   baselineMean: number;
   baselineStdDev: number;
   currentValue: number;
   triggeringArticles: Array<{ headline: string; publishedAt: string }>;
   sentAt: string;
+}
+
+// ============================================================
+// Trending Entity Type
+// ============================================================
+
+/**
+ * Trending sentiment feed item
+ * PK: TRENDING#daily, SK: DATE#YYYY-MM-DD
+ */
+export interface TrendingItem extends BaseTableItem {
+  entityType: 'TRENDING';
+  date: string;
+  tickers: Array<{
+    ticker: string;
+    name: string;
+    sentimentDelta: number;
+    direction: 'up' | 'down';
+    currentScore: number;
+  }>;
 }
 
 // ============================================================
@@ -446,4 +474,8 @@ export function makeAnnotSK(ticker: string, annotationId: string): string {
 
 export function makeAlertHistorySK(timestamp: string, ticker: string): string {
   return `${EntityPrefix.ALERT}#${timestamp}#${ticker}`;
+}
+
+export function makeTrendingPK(): string {
+  return `${EntityPrefix.TRENDING}#daily`;
 }

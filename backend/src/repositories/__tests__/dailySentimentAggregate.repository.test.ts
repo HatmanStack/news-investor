@@ -63,6 +63,51 @@ describe('DailySentimentAggregateRepository', () => {
       expect(result?.eventCounts.EARNINGS).toBe(2);
       expect(result?.avgAspectScore).toBe(0.3);
     });
+
+    it('returns earningsProximity when present', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'DAILY#AAPL',
+        sk: 'DATE#2025-01-15',
+        entityType: 'DAILY',
+        ticker: 'AAPL',
+        date: '2025-01-15',
+        eventCounts: {},
+        earningsProximity: {
+          daysFromEarnings: -2,
+          earningsDate: '2025-01-17',
+          isPreEarnings: true,
+        },
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getDailyAggregate('AAPL', '2025-01-15');
+
+      expect(result).not.toBeNull();
+      expect(result?.earningsProximity).toEqual({
+        daysFromEarnings: -2,
+        earningsDate: '2025-01-17',
+        isPreEarnings: true,
+      });
+    });
+
+    it('handles undefined earningsProximity (backward compatibility)', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'DAILY#AAPL',
+        sk: 'DATE#2025-01-15',
+        entityType: 'DAILY',
+        ticker: 'AAPL',
+        date: '2025-01-15',
+        eventCounts: {},
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getDailyAggregate('AAPL', '2025-01-15');
+
+      expect(result).not.toBeNull();
+      expect(result?.earningsProximity).toBeUndefined();
+    });
   });
 
   describe('putDailyAggregate', () => {

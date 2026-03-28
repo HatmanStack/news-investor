@@ -3,7 +3,11 @@ import { View } from 'react-native';
 import { Text as PaperText, Chip } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { transformPriceForLine, transformPriceForCandlestick } from '@/hooks/useChartData';
+import {
+  transformPriceForLine,
+  transformPriceForCandlestick,
+  extractVolumeData,
+} from '@/hooks/useChartData';
 import { useTier } from '@/features/tier';
 import type { StockDetails } from '@/types/database.types';
 import PriceChartDom from './PriceChartDom';
@@ -14,7 +18,7 @@ interface PriceChartProps {
   ticker?: string;
 }
 
-const INDICATOR_LABELS = ['BB', 'RSI', 'MACD'] as const;
+const INDICATOR_LABELS = ['BB', 'RSI', 'MACD', 'Volume'] as const;
 
 const PriceChartComponent = ({ data, height = 220 }: PriceChartProps) => {
   const theme = useAppTheme();
@@ -25,6 +29,7 @@ const PriceChartComponent = ({ data, height = 220 }: PriceChartProps) => {
 
   const lineData = useMemo(() => transformPriceForLine(data), [data]);
   const candlestickData = useMemo(() => transformPriceForCandlestick(data), [data]);
+  const volumeData = useMemo(() => extractVolumeData(data), [data]);
 
   const priceChange = useMemo(() => {
     if (lineData.length < 2) return { isPositive: false };
@@ -72,6 +77,7 @@ const PriceChartComponent = ({ data, height = 220 }: PriceChartProps) => {
       <PriceChartDom
         lineData={lineData}
         candlestickData={candlestickData}
+        volumeData={volumeData}
         showCandlestick={showCandlestick}
         activeIndicators={activeIndicators}
         chartColor={chartColor}

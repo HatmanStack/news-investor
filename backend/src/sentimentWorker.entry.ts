@@ -11,6 +11,8 @@ import { z } from 'zod';
 import { processSentimentForTicker } from './services/sentimentProcessing.service.js';
 import * as SentimentJobsRepository from './repositories/sentimentJobs.repository.js';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util.js';
+import { annotateEarningsProximity } from './services/earningsProximity.service.js';
+import { recomputeTrending } from './services/trending.service.js';
 
 const sqsMessageSchema = z.object({
   jobId: z.string().min(1),
@@ -40,6 +42,22 @@ async function processRecord(record: SQSRecord): Promise<void> {
       jobId,
       articlesProcessed: result.articlesProcessed,
     });
+
+    // Annotate daily aggregates with earnings proximity
+    try {
+      await annotateEarningsProximity(ticker);
+    } catch (earningsError) {
+      logger.warn('Earnings proximity annotation failed (non-fatal)', {
+        error: earningsError,
+      });
+    }
+
+    // Recompute trending data after successful sentiment processing
+    try {
+      await recomputeTrending();
+    } catch (trendingError) {
+      logger.warn('Trending recomputation failed (non-fatal)', { error: trendingError });
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await SentimentJobsRepository.markJobFailed(jobId, errorMessage);

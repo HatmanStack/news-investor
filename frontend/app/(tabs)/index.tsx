@@ -18,6 +18,7 @@ import { DateRangePicker } from '@/components/common/DateRangePicker';
 import { LoadingIndicator } from '@/components/common/LoadingIndicator';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { EmptyState } from '@/components/common/EmptyState';
+import { TrendingFeed } from '@/components/trending/TrendingFeed';
 import { OfflineIndicator } from '@/components/common/OfflineIndicator';
 import { useSymbolSearch } from '@/hooks/useSymbolSearch';
 import { useStock } from '@/contexts/StockContext';
@@ -147,6 +148,13 @@ export default function SearchScreen() {
     [setSelectedTicker, startDate, endDate, queryClient, toast],
   );
 
+  const handleTrendingSelect = useCallback(
+    (ticker: string) => {
+      handleSelectStock({ ticker, name: '', assetType: 'Stock', isActive: true });
+    },
+    [handleSelectStock],
+  );
+
   const renderSearchResult = useCallback(
     ({ item }: { item: SymbolDetails }) => (
       <Animated.View entering={FadeIn.duration(200)}>
@@ -175,11 +183,14 @@ export default function SearchScreen() {
   const renderEmptyState = () => {
     if (searchQuery.length === 0) {
       return (
-        <EmptyState
-          message="Search for stocks"
-          description="Enter a ticker symbol or company name to get started"
-          icon="search-outline"
-        />
+        <View>
+          <TrendingFeed onSelectTicker={handleTrendingSelect} />
+          <EmptyState
+            message="Search for stocks"
+            description="Enter a ticker symbol or company name to get started"
+            icon="search-outline"
+          />
+        </View>
       );
     }
 
