@@ -5,6 +5,7 @@
 import * as StockRepository from '../stock.repository';
 import { getAdapter } from '../../index';
 import { StockDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 jest.mock('../../index', () => ({
   getAdapter: jest.fn(),
@@ -13,6 +14,8 @@ jest.mock('../../index', () => ({
 jest.mock('@/utils/logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const mockAdapter = {
   query: jest.fn(),
@@ -74,6 +77,21 @@ describe('StockRepository', () => {
       expect(result).toEqual(records);
     });
 
+    it('filters out malformed rows and logs warning', async () => {
+      const malformedRow = { ticker: 'AAPL', date: '2025-01-15' }; // missing required fields
+      mockAdapter.query.mockResolvedValue([sampleStockWithId, malformedRow]);
+
+      const result = await StockRepository.findByTicker('AAPL');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(sampleStockWithId);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'StockRepository',
+        expect.stringContaining('findByTicker'),
+        expect.any(Object),
+      );
+    });
+
     it('throws on adapter error', async () => {
       mockAdapter.query.mockRejectedValue(new Error('Query failed'));
 
@@ -99,6 +117,20 @@ describe('StockRepository', () => {
         orderDirection: 'DESC',
       });
       expect(result).toEqual(records);
+    });
+
+    it('filters out malformed rows in date range query', async () => {
+      const malformedRow = { ticker: 'AAPL' };
+      mockAdapter.query.mockResolvedValue([sampleStockWithId, malformedRow]);
+
+      const result = await StockRepository.findByTickerAndDateRange(
+        'AAPL',
+        '2025-01-10',
+        '2025-01-20',
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(sampleStockWithId);
     });
 
     it('throws on adapter error', async () => {
@@ -130,6 +162,16 @@ describe('StockRepository', () => {
       mockAdapter.put.mockRejectedValue(new Error('Insert failed'));
 
       await expect(StockRepository.insert(sampleStock)).rejects.toThrow('Insert failed');
+    });
+
+    it('throws on malformed write data', async () => {
+      const malformed = { ticker: 'AAPL', date: '2025-01-15' } as unknown as Omit<
+        StockDetails,
+        'id'
+      >;
+
+      await expect(StockRepository.insert(malformed)).rejects.toThrow();
+      expect(mockAdapter.put).not.toHaveBeenCalled();
     });
   });
 
@@ -209,6 +251,19 @@ describe('StockRepository', () => {
         orderDirection: 'DESC',
       });
       expect(result).toEqual(sampleStockWithId);
+    });
+
+    it('returns null for malformed data and logs warning', async () => {
+      mockAdapter.queryOne.mockResolvedValue({ ticker: 'AAPL' }); // missing fields
+
+      const result = await StockRepository.findLatestByTicker('AAPL');
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'StockRepository',
+        expect.stringContaining('findLatestByTicker'),
+        expect.any(Object),
+      );
     });
 
     it('returns null when no data exists', async () => {

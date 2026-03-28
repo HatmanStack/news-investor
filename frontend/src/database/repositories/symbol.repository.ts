@@ -5,6 +5,8 @@
 
 import { getAdapter } from '../index';
 import { SymbolDetails } from '@/types/database.types';
+import { symbolDetailsSchema } from '../schemas';
+import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 import type { PutResult } from '../storageAdapter';
 
@@ -18,8 +20,16 @@ const TABLE = 'symbol_details';
 export async function findByTicker(ticker: string): Promise<SymbolDetails | null> {
   return withRepoLoggingDefault('SymbolRepository', 'findByTicker', null, async () => {
     const adapter = getAdapter();
-    const result = await adapter.queryOne(TABLE, { filter: { ticker } });
-    return result as unknown as SymbolDetails;
+    const row = await adapter.queryOne(TABLE, { filter: { ticker } });
+    if (!row) return null;
+    const result = symbolDetailsSchema.safeParse(row);
+    if (result.success) {
+      return result.data;
+    }
+    logger.warn('SymbolRepository', 'findByTicker: malformed row', {
+      error: result.error.message,
+    });
+    return null;
   });
 }
 
@@ -34,7 +44,18 @@ export async function findAll(): Promise<SymbolDetails[]> {
       orderBy: 'ticker',
       orderDirection: 'ASC',
     });
-    return results as unknown as SymbolDetails[];
+    const parsed: SymbolDetails[] = [];
+    for (const row of results) {
+      const result = symbolDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('SymbolRepository', 'findAll: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -45,8 +66,7 @@ export async function findAll(): Promise<SymbolDetails[]> {
  */
 export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('SymbolRepository', 'insert', async () => {
-    const adapter = getAdapter();
-    return adapter.put(TABLE, {
+    const data = {
       longDescription: symbol.longDescription,
       exchangeCode: symbol.exchangeCode,
       name: symbol.name,
@@ -56,7 +76,10 @@ export async function insert(symbol: Omit<SymbolDetails, 'id'>): Promise<PutResu
       sector: symbol.sector ?? null,
       industry: symbol.industry ?? null,
       sectorEtf: symbol.sectorEtf ?? null,
-    });
+    };
+    symbolDetailsSchema.omit({ id: true }).parse(data);
+    const adapter = getAdapter();
+    return adapter.put(TABLE, data);
   });
 }
 

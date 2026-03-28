@@ -78,9 +78,7 @@ frontend/
 │   ├── contexts/        # React Context providers (StockContext, StockDetailContext)
 │   ├── hooks/           # Custom hooks (see hooks/index.ts barrel export)
 │   ├── services/api/    # API client layer
-│   ├── database/        # Platform abstraction (SQLite native, localStorage web)
-│   │   ├── database.ts      # Native SQLite implementation
-│   │   ├── database.web.ts  # Web localStorage implementation
+│   ├── database/        # Platform abstraction (StorageAdapter with SqliteAdapter/LocalStorageAdapter)
 │   │   └── repositories/    # Repository pattern for data access
 │   ├── ml/              # Browser-side ML (sentiment analysis, predictions)
 │   └── components/      # Reusable UI components
@@ -88,7 +86,7 @@ frontend/
 
 **Key Patterns**:
 
-- **Platform Abstraction**: `database.ts` vs `database.web.ts` - bundler resolves `.web.ts` for web builds
+- **Platform Abstraction**: `StorageAdapter` interface with `SqliteAdapter` (native) and `LocalStorageAdapter` (web) implementations in `src/database/`
 - **Repository Pattern**: All data access through `src/database/repositories/`
 - **TanStack Query**: Used for API caching and data synchronization
 - **Path Aliases**: `@/` maps to `src/` (configured in tsconfig.json)
@@ -132,7 +130,7 @@ backend/
 - **Backend tests**: Jest with ESM support (`--experimental-vm-modules`)
 - **Backend E2E tests**: Real DynamoDB via LocalStack (`make localstack && make test-e2e`)
 - **Python tests**: pytest in `backend/python_tests/`
-- **Coverage thresholds**: Frontend 50% (branches/functions/lines/statements), Backend 55% branches / 60% functions / 65% lines+statements
+- **Coverage thresholds**: Frontend 45% branches / 55% functions / 55% lines / 56% statements, Backend 63% branches / 75% functions / 71% lines / 70% statements
 - **Pre-commit hooks**: Husky runs Prettier (TS/JSON/MD) and ruff (Python) via lint-staged
 - **Commit messages**: Enforced conventional commits via commitlint
 

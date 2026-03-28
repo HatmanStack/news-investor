@@ -8,7 +8,7 @@ for improved type safety and documentation.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Protocol, TypedDict
 
 # ---------------------------------------------------------------------------
 # API Gateway types
@@ -43,6 +43,15 @@ class ApiGatewayResponse(TypedDict):
     statusCode: int
     headers: dict[str, str]
     body: str
+
+
+class LambdaContext(Protocol):
+    """AWS Lambda context object (subset of fields provided at runtime)."""
+
+    function_name: str
+    memory_limit_in_mb: int
+    invoked_function_arn: str
+    aws_request_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -175,8 +184,8 @@ class StockCacheItem(TypedDict, total=False):
     sk: str
     ticker: str
     date: str
-    priceData: dict[str, Any]
-    metadata: dict[str, Any]
+    priceData: PriceRecord
+    metadata: StockMetadata
     ttl: int
     fetchedAt: int
 
@@ -207,4 +216,4 @@ class MetricDefinition(TypedDict, total=False):
 
     name: str
     value: float
-    unit: Any  # MetricUnit enum
+    unit: str

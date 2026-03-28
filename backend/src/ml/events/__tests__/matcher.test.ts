@@ -90,6 +90,13 @@ describe('Keyword Matching', () => {
     expect(result.matchCount).toBe(2);
   });
 
+  it('should match keywords containing regex metacharacters', () => {
+    expect(matchKeywords('Company completed M&A deal', ['M&A']).matchCount).toBe(1);
+    expect(matchKeywords('P/E ratio is high', ['P/E']).matchCount).toBe(1);
+    expect(matchKeywords('S&P 500 index', ['S&P 500']).matchCount).toBe(1);
+    expect(matchKeywords('Nothing matches here', ['M&A']).matchCount).toBe(0);
+  });
+
   it('should return empty array for no matches', () => {
     const text = 'unrelated news article';
     const keywords = ['earnings', 'merger'];

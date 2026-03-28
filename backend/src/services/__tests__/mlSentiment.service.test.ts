@@ -196,7 +196,7 @@ describe('MlSentimentService', () => {
       expect(mockRecordSuccess).toHaveBeenCalled();
     });
 
-    it('logs metrics on successful call', async () => {
+    it('logs metrics on successful call with UNKNOWN ticker by default', async () => {
       mockFetchResponse(200, validSentimentResponse());
 
       await getMlSentiment('test');
@@ -207,6 +207,14 @@ describe('MlSentimentService', () => {
         true,
         false,
       );
+    });
+
+    it('logs metrics with provided ticker', async () => {
+      mockFetchResponse(200, validSentimentResponse());
+
+      await getMlSentiment('test', 'AAPL');
+
+      expect(mockLogMlSentimentCall).toHaveBeenCalledWith('AAPL', expect.any(Number), true, false);
     });
 
     it('sends POST request with correct body', async () => {

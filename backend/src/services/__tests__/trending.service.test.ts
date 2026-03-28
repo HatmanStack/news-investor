@@ -4,22 +4,21 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 
-const mockGetDailyAggregate = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockQueryByEntityType = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
+const mockBatchGetItemsSingleTable = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockPutTrending = jest.fn<(...args: unknown[]) => Promise<void>>();
-
-jest.unstable_mockModule('../../repositories/dailySentimentAggregate.repository.js', () => ({
-  getDailyAggregate: mockGetDailyAggregate,
-  getLatestDailyAggregate: jest.fn(),
-  putDailyAggregate: jest.fn(),
-  queryByTickerAndDateRange: jest.fn(),
-}));
 
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   queryByEntityType: mockQueryByEntityType,
+  batchGetItemsSingleTable: mockBatchGetItemsSingleTable,
   getItem: jest.fn(),
   putItem: jest.fn(),
   queryItems: jest.fn(),
+}));
+
+jest.unstable_mockModule('../../types/dynamodb.types.js', () => ({
+  makeDailyPK: (ticker: string) => `DAILY#${ticker.toUpperCase()}`,
+  makeDateSK: (date: string) => `DATE#${date}`,
 }));
 
 jest.unstable_mockModule('../../repositories/trending.repository.js', () => ({
@@ -61,15 +60,12 @@ describe('TrendingService', () => {
     );
     mockQueryByEntityType.mockResolvedValueOnce(todayItems);
 
-    // Yesterday data: each has score 0.5
-    mockGetDailyAggregate.mockImplementation(async (ticker: unknown) => {
-      return {
-        ticker,
-        date: '2025-11-01',
-        avgAspectScore: 0.5,
-        eventCounts: {},
-      };
-    });
+    // Yesterday data via batch get: each has score 0.5
+    mockBatchGetItemsSingleTable.mockResolvedValueOnce(
+      todayItems.map((item) => ({
+        ...makeDailyItem(item.ticker, '2025-11-01', 0.5),
+      })),
+    );
 
     await recomputeTrending();
 
@@ -84,12 +80,9 @@ describe('TrendingService', () => {
     );
     mockQueryByEntityType.mockResolvedValueOnce(todayItems);
 
-    mockGetDailyAggregate.mockResolvedValue({
-      ticker: 'X',
-      date: '2025-11-01',
-      avgAspectScore: 0.5,
-      eventCounts: {},
-    });
+    mockBatchGetItemsSingleTable.mockResolvedValueOnce(
+      todayItems.map((item) => makeDailyItem(item.ticker, '2025-11-01', 0.5)),
+    );
 
     await recomputeTrending();
 
@@ -114,14 +107,10 @@ describe('TrendingService', () => {
     mockQueryByEntityType.mockResolvedValueOnce(todayItems);
 
     // Yesterday: BULL=0.5 (delta=+0.3), BEAR=0.5 (delta=-0.8)
-    mockGetDailyAggregate.mockImplementation(async (ticker: unknown) => {
-      return {
-        ticker,
-        date: '2025-11-01',
-        avgAspectScore: 0.5,
-        eventCounts: {},
-      };
-    });
+    mockBatchGetItemsSingleTable.mockResolvedValueOnce([
+      makeDailyItem('BULL', '2025-11-01', 0.5),
+      makeDailyItem('BEAR', '2025-11-01', 0.5),
+    ]);
 
     await recomputeTrending();
 
@@ -138,7 +127,8 @@ describe('TrendingService', () => {
     const todayItems = [makeDailyItem('NEW', '2025-11-02', 0.7)];
     mockQueryByEntityType.mockResolvedValueOnce(todayItems);
 
-    mockGetDailyAggregate.mockResolvedValueOnce(null);
+    // Batch get returns empty (no yesterday data for this ticker)
+    mockBatchGetItemsSingleTable.mockResolvedValueOnce([]);
 
     await recomputeTrending();
 
@@ -147,5 +137,36 @@ describe('TrendingService', () => {
       sentimentDelta: number;
     }>;
     expect(tickers[0]!.sentimentDelta).toBeCloseTo(0.7);
+  });
+
+  it('handles 100+ tickers by chunking batch get calls', async () => {
+    // Create 150 tickers
+    const todayItems = Array.from({ length: 150 }, (_, i) =>
+      makeDailyItem(`T${i}`, '2025-11-02', (i + 1) * 0.01),
+    );
+    mockQueryByEntityType.mockResolvedValueOnce(todayItems);
+
+    // Two batch get calls: first 100, then 50
+    mockBatchGetItemsSingleTable
+      .mockResolvedValueOnce(
+        todayItems.slice(0, 100).map((item) => makeDailyItem(item.ticker, '2025-11-01', 0.5)),
+      )
+      .mockResolvedValueOnce(
+        todayItems.slice(100).map((item) => makeDailyItem(item.ticker, '2025-11-01', 0.5)),
+      );
+
+    await recomputeTrending();
+
+    // Should have called batchGetItemsSingleTable twice (100 + 50)
+    expect(mockBatchGetItemsSingleTable).toHaveBeenCalledTimes(2);
+    const firstCallKeys = mockBatchGetItemsSingleTable.mock.calls[0]![0] as Array<unknown>;
+    const secondCallKeys = mockBatchGetItemsSingleTable.mock.calls[1]![0] as Array<unknown>;
+    expect(firstCallKeys).toHaveLength(100);
+    expect(secondCallKeys).toHaveLength(50);
+
+    // Should still produce top 10 trending
+    expect(mockPutTrending).toHaveBeenCalledTimes(1);
+    const trending = mockPutTrending.mock.calls[0]![1] as Array<{ ticker: string }>;
+    expect(trending).toHaveLength(10);
   });
 });

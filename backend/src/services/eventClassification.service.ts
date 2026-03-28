@@ -108,7 +108,7 @@ function logMetricsSummary(): void {
     avgDuration: `${avgDuration.toFixed(2)}ms`,
     multiEventConflicts: metrics.multiEventConflicts,
     lowConfidenceCount: metrics.lowConfidenceCount,
-    eventTypeCounts: metrics.eventTypeCounts as unknown as Record<string, unknown>,
+    eventTypeCounts: { ...metrics.eventTypeCounts },
   });
 }
 

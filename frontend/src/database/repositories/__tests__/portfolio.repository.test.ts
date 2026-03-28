@@ -5,10 +5,17 @@
 import * as PortfolioRepository from '../portfolio.repository';
 import { getAdapter } from '../../index';
 import { PortfolioDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 jest.mock('../../index', () => ({
   getAdapter: jest.fn(),
 }));
+
+jest.mock('@/utils/logger', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const mockAdapter = {
   query: jest.fn(),
@@ -61,6 +68,17 @@ describe('PortfolioRepository', () => {
       expect(result).toEqual(entries);
     });
 
+    it('filters out malformed rows and logs warning', async () => {
+      const malformedRow = { ticker: 'BAD' }; // missing required fields
+      mockAdapter.query.mockResolvedValue([samplePortfolio, malformedRow]);
+
+      const result = await PortfolioRepository.findAll();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(samplePortfolio);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
     it('returns empty array on error', async () => {
       mockAdapter.query.mockRejectedValue(new Error('DB failure'));
 
@@ -80,6 +98,15 @@ describe('PortfolioRepository', () => {
         filter: { ticker: 'AAPL' },
       });
       expect(result).toEqual(samplePortfolio);
+    });
+
+    it('returns null for malformed data and logs warning', async () => {
+      mockAdapter.queryOne.mockResolvedValue({ ticker: 'AAPL' }); // missing required fields
+
+      const result = await PortfolioRepository.findByTicker('AAPL');
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('returns null when not found', async () => {
@@ -112,6 +139,13 @@ describe('PortfolioRepository', () => {
       mockAdapter.put.mockRejectedValue(new Error('Write error'));
 
       await expect(PortfolioRepository.upsert(samplePortfolio)).rejects.toThrow('Write error');
+    });
+
+    it('throws on malformed write data', async () => {
+      const malformed = { ticker: 'AAPL' } as unknown as PortfolioDetails;
+
+      await expect(PortfolioRepository.upsert(malformed)).rejects.toThrow();
+      expect(mockAdapter.put).not.toHaveBeenCalled();
     });
   });
 

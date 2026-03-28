@@ -400,7 +400,7 @@ async function analyzeMlSentimentBatch(
       if (eventType && isMaterialEvent(eventType)) {
         try {
           const text = `${item.article.title || ''} ${item.article.description || ''}`.trim();
-          const score = await getMlSentiment(text);
+          const score = await getMlSentiment(text, ticker);
           return { articleHash: item.articleHash, mlScore: score };
         } catch (error) {
           logger.error('MlSentiment analysis failed', error, {

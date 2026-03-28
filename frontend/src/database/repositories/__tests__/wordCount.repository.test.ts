@@ -5,10 +5,17 @@
 import * as WordCountRepository from '../wordCount.repository';
 import { getAdapter } from '../../index';
 import { WordCountDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 jest.mock('../../index', () => ({
   getAdapter: jest.fn(),
 }));
+
+jest.mock('@/utils/logger', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const mockAdapter = {
   query: jest.fn(),
@@ -59,6 +66,17 @@ describe('WordCountRepository', () => {
         orderDirection: 'DESC',
       });
       expect(result).toEqual([sampleWordCount]);
+    });
+
+    it('filters out malformed rows and logs warning', async () => {
+      const malformedRow = { ticker: 'AAPL' }; // missing required fields
+      mockAdapter.query.mockResolvedValue([sampleWordCount, malformedRow]);
+
+      const result = await WordCountRepository.findByTicker('AAPL');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(sampleWordCount);
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('returns empty array on error', async () => {
@@ -123,6 +141,13 @@ describe('WordCountRepository', () => {
       mockAdapter.put.mockRejectedValue(new Error('Insert failed'));
 
       await expect(WordCountRepository.insert(sampleWordCount)).rejects.toThrow('Insert failed');
+    });
+
+    it('throws on malformed write data', async () => {
+      const malformed = { ticker: 'AAPL' } as unknown as Omit<WordCountDetails, 'id'>;
+
+      await expect(WordCountRepository.insert(malformed)).rejects.toThrow();
+      expect(mockAdapter.put).not.toHaveBeenCalled();
     });
   });
 

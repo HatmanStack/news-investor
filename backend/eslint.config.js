@@ -9,9 +9,16 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_',
+        },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      'no-empty': ['error', { allowEmptyCatch: false }],
     },
   },
   {

@@ -70,12 +70,14 @@ async function fetchSentimentData(
   endDate: string,
 ): Promise<ArticleSentiment[]> {
   try {
-    const allItems = await queryItems<ArticleAnalysisItem>(makeArticlePK(ticker), {
+    // SK is HASH#hash#DATE#date (not date-sortable), so use DynamoDB FilterExpression
+    // to push date-range filtering to the server and reduce data transfer.
+    const items = await queryItems<ArticleAnalysisItem>(makeArticlePK(ticker), {
       skPrefix: `${SortKeyPrefix.HASH}#`,
+      filterExpression: '#d BETWEEN :startDate AND :endDate',
+      filterAttributeNames: { '#d': 'date' },
+      filterAttributeValues: { ':startDate': startDate, ':endDate': endDate },
     });
-
-    // Filter by date range client-side (SK is HASH#hash#DATE#date, not date-sortable)
-    const items = allItems.filter((item) => item.date >= startDate && item.date <= endDate);
 
     return items.map((item: ArticleAnalysisItem) => ({
       hash: item.articleHash,

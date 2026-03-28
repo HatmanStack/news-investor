@@ -16,7 +16,7 @@ module.exports = {
   },
   setupFiles: ['<rootDir>/jest.setup.js'],
   setupFilesAfterEnv: ['@testing-library/react-native/build/matchers/extend-expect'],
-  testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
+  testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/', '/__fixtures__/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^expo$': '<rootDir>/__mocks__/expo.ts',

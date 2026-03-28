@@ -5,9 +5,9 @@
  * consecutive days. Runs after daily aggregates are written.
  */
 
-import { queryByEntityType } from '../utils/dynamodb.util.js';
-import { getDailyAggregate } from '../repositories/dailySentimentAggregate.repository.js';
+import { queryByEntityType, batchGetItemsSingleTable } from '../utils/dynamodb.util.js';
 import { putTrending } from '../repositories/trending.repository.js';
+import { makeDailyPK, makeDateSK } from '../types/dynamodb.types.js';
 import type { DailySentimentItem } from '../types/dynamodb.types.js';
 import { logger } from '../utils/logger.util.js';
 
@@ -37,7 +37,27 @@ export async function recomputeTrending(): Promise<void> {
 
   logger.info(`Computing trending from ${todayItems.length} tickers`);
 
-  // Fetch yesterday's data for each ticker
+  // Fetch yesterday's data via batch get instead of N individual queries.
+  // batchGetItemsSingleTable supports max 100 keys, so chunk if needed.
+  const yesterdaySK = makeDateSK(yesterday);
+  const allKeys = todayItems.map((item) => ({
+    pk: makeDailyPK(item.ticker),
+    sk: yesterdaySK,
+  }));
+
+  const yesterdayItems: DailySentimentItem[] = [];
+  for (let i = 0; i < allKeys.length; i += 100) {
+    const chunk = allKeys.slice(i, i + 100);
+    const results = await batchGetItemsSingleTable<DailySentimentItem>(chunk);
+    yesterdayItems.push(...results);
+  }
+
+  // Index yesterday data by ticker for O(1) lookup
+  const yesterdayByTicker = new Map<string, DailySentimentItem>();
+  for (const item of yesterdayItems) {
+    yesterdayByTicker.set(item.ticker, item);
+  }
+
   const deltas: Array<{
     ticker: string;
     sentimentDelta: number;
@@ -45,26 +65,22 @@ export async function recomputeTrending(): Promise<void> {
     currentScore: number;
   }> = [];
 
-  const yesterdayResults = await Promise.allSettled(
-    todayItems.map(async (item) => {
-      const yesterdayData = await getDailyAggregate(item.ticker, yesterday);
-      const todayScore = item.avgAspectScore ?? 0;
-      const yesterdayScore = yesterdayData?.avgAspectScore ?? 0;
-      const delta = todayScore - yesterdayScore;
+  for (const item of todayItems) {
+    const todayScore = item.avgAspectScore ?? 0;
+    const yesterdayData = yesterdayByTicker.get(item.ticker);
+    // When no yesterday data exists, yesterdayScore defaults to 0. This means
+    // newly tracked tickers with no prior history will have delta = currentScore - 0,
+    // causing them to rank highly in the trending feed until they accumulate at
+    // least 2 days of data. This is acceptable behavior but worth being aware of.
+    const yesterdayScore = yesterdayData?.avgAspectScore ?? 0;
+    const delta = todayScore - yesterdayScore;
 
-      return {
-        ticker: item.ticker,
-        sentimentDelta: delta,
-        direction: (delta >= 0 ? 'up' : 'down') as 'up' | 'down',
-        currentScore: todayScore,
-      };
-    }),
-  );
-
-  for (const result of yesterdayResults) {
-    if (result.status === 'fulfilled') {
-      deltas.push(result.value);
-    }
+    deltas.push({
+      ticker: item.ticker,
+      sentimentDelta: delta,
+      direction: delta >= 0 ? 'up' : 'down',
+      currentScore: todayScore,
+    });
   }
 
   // Sort by absolute delta descending, take top 10

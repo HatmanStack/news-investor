@@ -4,9 +4,8 @@ Routes requests to appropriate handlers based on path and method.
 """
 
 import time
-from typing import Any
 
-from typedefs import ApiGatewayEvent, ApiGatewayResponse
+from typedefs import ApiGatewayEvent, ApiGatewayResponse, LambdaContext
 from utils.logger import (
     clear_request_context,
     get_structured_logger,
@@ -20,7 +19,7 @@ logger = get_structured_logger(__name__)
 _is_first_invocation = True
 
 
-def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
+def handler(event: ApiGatewayEvent, context: LambdaContext) -> ApiGatewayResponse:
     """
     Lambda handler - routes requests to appropriate handler functions.
 
@@ -34,6 +33,7 @@ def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
     global _is_first_invocation
 
     # Import handlers here to avoid circular imports and improve cold start
+    from handlers.analyst import handle_analyst_request
     from handlers.batch import handle_batch_stocks_request
     from handlers.earnings import handle_batch_earnings_request, handle_earnings_request
     from handlers.etf_holdings import handle_etf_holdings
@@ -87,8 +87,6 @@ def handler(event: ApiGatewayEvent, context: Any) -> ApiGatewayResponse:
             response = handle_etf_holdings(event)
 
         elif raw_path == "/analyst" and method == "GET":
-            from handlers.analyst import handle_analyst_request
-
             response = handle_analyst_request(event)
 
         else:

@@ -19,12 +19,16 @@ const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const FINNHUB_TIMEOUT = 10000; // 10 seconds
 
 /**
- * Retry logic with exponential backoff
+ * Retry logic with exponential backoff.
+ *
+ * Retry budget (ADR-003): must fit within 80% of Lambda timeout (30s = 24s budget).
+ * With retries=1: worst case = 10s (attempt 1) + 2s (backoff) + 10s (attempt 2) = 22s < 24s.
+ *
  * @param fn - Function to retry
- * @param retries - Number of retries (default: 3)
+ * @param retries - Number of retries (default: 1)
  * @returns Promise with result
  */
-async function retryWithBackoff<T>(fn: () => Promise<T>, retries: number = 3): Promise<T> {
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries: number = 1): Promise<T> {
   let lastError: Error | null = null;
 
   for (let i = 0; i <= retries; i++) {

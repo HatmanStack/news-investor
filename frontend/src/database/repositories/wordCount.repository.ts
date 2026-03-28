@@ -5,6 +5,8 @@
 
 import { getAdapter } from '../index';
 import { WordCountDetails } from '@/types/database.types';
+import { wordCountDetailsSchema } from '../schemas';
+import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 import type { PutResult } from '../storageAdapter';
 
@@ -23,7 +25,18 @@ export async function findByTicker(ticker: string): Promise<WordCountDetails[]> 
       orderBy: 'date',
       orderDirection: 'DESC',
     });
-    return results as unknown as WordCountDetails[];
+    const parsed: WordCountDetails[] = [];
+    for (const row of results) {
+      const result = wordCountDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('WordCountRepository', 'findByTicker: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -34,6 +47,7 @@ export async function findByTicker(ticker: string): Promise<WordCountDetails[]> 
  */
 export async function insert(wordCount: Omit<WordCountDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('WordCountRepository', 'insert', async () => {
+    wordCountDetailsSchema.omit({ id: true }).parse(wordCount);
     const adapter = getAdapter();
     return adapter.put(TABLE, {
       date: wordCount.date,

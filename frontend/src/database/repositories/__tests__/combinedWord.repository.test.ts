@@ -4,10 +4,17 @@
 
 import * as CombinedWordRepository from '../combinedWord.repository';
 import { getAdapter } from '../../index';
+import { logger } from '@/utils/logger';
 
 jest.mock('../../index', () => ({
   getAdapter: jest.fn(),
 }));
+
+jest.mock('@/utils/logger', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const mockAdapter = {
   query: jest.fn(),
@@ -63,6 +70,15 @@ describe('CombinedWordRepository', () => {
       expect(result).toBeNull();
     });
 
+    it('returns null for malformed data and logs warning', async () => {
+      mockAdapter.queryOne.mockResolvedValue({ ticker: 'AAPL' }); // missing required fields
+
+      const result = await CombinedWordRepository.findLatestByTicker('AAPL');
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
     it('returns null on database error', async () => {
       mockAdapter.queryOne.mockRejectedValue(new Error('DB failure'));
 
@@ -84,6 +100,17 @@ describe('CombinedWordRepository', () => {
         orderDirection: 'DESC',
       });
       expect(result).toEqual([sampleRecord]);
+    });
+
+    it('filters out malformed rows and logs warning', async () => {
+      const malformedRow = { ticker: 'BAD' };
+      mockAdapter.query.mockResolvedValue([sampleRecord, malformedRow]);
+
+      const result = await CombinedWordRepository.findByTicker('AAPL');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(sampleRecord);
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('returns empty array on error', async () => {
@@ -121,10 +148,6 @@ describe('CombinedWordRepository', () => {
 
       await CombinedWordRepository.upsert({
         ...sampleRecord,
-        eventCounts: null,
-        avgAspectScore: null,
-        avgMlScore: null,
-        avgSignalScore: null,
         materialEventCount: 0,
       });
 
@@ -144,13 +167,18 @@ describe('CombinedWordRepository', () => {
       await expect(
         CombinedWordRepository.upsert({
           ...sampleRecord,
-          eventCounts: null,
-          avgAspectScore: null,
-          avgMlScore: null,
-          avgSignalScore: null,
           materialEventCount: 0,
         }),
       ).rejects.toThrow('Write error');
+    });
+
+    it('throws on malformed write data', async () => {
+      const malformed = { ticker: 'AAPL' } as unknown as Parameters<
+        typeof CombinedWordRepository.upsert
+      >[0];
+
+      await expect(CombinedWordRepository.upsert(malformed)).rejects.toThrow();
+      expect(mockAdapter.put).not.toHaveBeenCalled();
     });
   });
 });

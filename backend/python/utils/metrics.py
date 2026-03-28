@@ -107,9 +107,7 @@ def log_metrics(
                     "Metrics": [
                         {
                             "Name": m["name"],
-                            "Unit": m.get("unit", MetricUnit.NONE).value
-                            if isinstance(m.get("unit"), MetricUnit)
-                            else m.get("unit", "None"),
+                            "Unit": str(m.get("unit", MetricUnit.NONE)),
                         }
                         for m in metrics
                     ],

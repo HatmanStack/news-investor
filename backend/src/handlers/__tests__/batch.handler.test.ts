@@ -38,6 +38,21 @@ jest.unstable_mockModule('../../utils/metrics.util', () => ({
   logMetrics: mockLogMetrics,
   MetricUnit: { Milliseconds: 'Milliseconds', Count: 'Count' },
 }));
+// Use the real mapWithConcurrency (no need to mock it)
+jest.unstable_mockModule('../../utils/concurrency.util', () => ({
+  mapWithConcurrency: async <T, R>(
+    items: T[],
+    fn: (item: T, index: number) => Promise<R>,
+    _concurrency: number,
+  ): Promise<R[]> => {
+    // Sequential execution in tests (simulates concurrency limiting)
+    const results: R[] = [];
+    for (let i = 0; i < items.length; i++) {
+      results.push(await fn(items[i]!, i));
+    }
+    return results;
+  },
+}));
 
 // Import handler after mocking
 const { handleBatchNewsRequest, handleBatchSentimentRequest } = await import('../batch.handler.js');
@@ -174,6 +189,31 @@ describe('Batch Handler', () => {
       expect(body.errors.FAIL).toBeDefined();
       expect(body._meta.successCount).toBe(1);
       expect(body._meta.errorCount).toBe(1);
+    });
+
+    it('should process all 10 tickers even when some fail', async () => {
+      const tickers = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10'];
+      // Odd-indexed tickers fail
+      tickers.forEach((_, i) => {
+        if (i % 2 === 1) {
+          mockHandleNewsWithCache.mockRejectedValueOnce(new Error(`Fail ${i}`));
+        } else {
+          mockHandleNewsWithCache.mockResolvedValueOnce(
+            createMockNewsCacheResult({ newArticlesCount: 1 }),
+          );
+        }
+      });
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ tickers }),
+      });
+
+      const response = await handleBatchNewsRequest(event);
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body._meta.successCount).toBe(5);
+      expect(body._meta.errorCount).toBe(5);
     });
   });
 

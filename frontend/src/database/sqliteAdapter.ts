@@ -32,6 +32,7 @@ export class SqliteAdapter implements StorageAdapter {
   async query(table: string, options?: QueryOptions): Promise<Record<string, unknown>[]> {
     const db = await getDatabase();
     const { sql, params } = this.buildSelectQuery(table, options);
+    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
     return db.getAllAsync<Record<string, unknown>>(sql, params as SqlParams as any);
   }
 
@@ -59,6 +60,7 @@ export class SqliteAdapter implements StorageAdapter {
     }
 
     const sql = `${prefix} ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
     const result = await db.runAsync(sql, values as any);
     return { changes: result.changes, lastInsertRowId: result.lastInsertRowId };
   }
@@ -78,6 +80,7 @@ export class SqliteAdapter implements StorageAdapter {
     const values = [...Object.values(data), ...Object.values(filter)];
 
     const sql = `UPDATE ${table} SET ${setClause} WHERE ${whereClause}`;
+    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
     const result = await db.runAsync(sql, values as any);
     return result.changes;
   }
@@ -95,6 +98,7 @@ export class SqliteAdapter implements StorageAdapter {
       sql = `DELETE FROM ${table} WHERE ${whereClause}`;
     }
 
+    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
     const result = await db.runAsync(sql, values as any);
     return result.changes;
   }
@@ -112,6 +116,7 @@ export class SqliteAdapter implements StorageAdapter {
       params.push(...Object.values(filter));
     }
 
+    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
     const results = await db.getAllAsync<{ count: number }>(sql, params as any);
     return results[0]?.count ?? 0;
   }

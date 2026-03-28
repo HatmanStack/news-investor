@@ -67,5 +67,17 @@
     "date": "2026-03-27",
     "plan": "2026-03-27-roadmap-feature-batch",
     "verdict": "GO"
+  },
+  {
+    "skill": "audit",
+    "date": "2026-03-27",
+    "plan": "2026-03-27-audit-news-investor-pro",
+    "audits": ["health", "eval", "docs"]
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-03-27",
+    "plan": "2026-03-27-audit-news-investor-pro",
+    "verdict": "GO"
   }
 ]

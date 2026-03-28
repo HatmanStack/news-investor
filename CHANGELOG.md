@@ -9,6 +9,51 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+### Fixed
+
+- Bare `catch {}` blocks in prediction and track record handlers now capture and log the error object instead of silently swallowing failures
+- Alert sweep subscriber watchlist fetch bounded to 25 concurrent DynamoDB queries via `mapWithConcurrency` (was unbounded `Promise.all`)
+- Alert sweep error logging passes errors as logger parameters instead of embedding in data objects, restoring stack traces in structured logs
+- ML sentiment metric calls now receive ticker context (`ticker ?? 'UNKNOWN'`) instead of hardcoded `'UNKNOWN'` for all tickers
+- `as unknown as` type casts removed from `mlSentiment.service.ts` and `eventClassification.service.ts` (replaced with explicit field extraction and spread operators)
+- Regex metacharacter escaping in event matcher keyword matching (`escapeRegExp` utility prevents broken patterns from keywords like "M&A" or "P/E")
+- Alert history `getRecentAlerts` uses `skBetween` date-bounded range query instead of `limit: 50` with client-side filtering
+- `fetchSentimentData` pushes date-range filtering to DynamoDB via `FilterExpression` instead of loading entire article partition into memory
+- Finnhub retry budget reduced from 54s worst-case to 22s (1 retry instead of 3), fitting within 30s Lambda timeout per ADR-003
+- Python yfinance retry budget reduced from 32s to 21s (`MAX_RETRIES` 2 to 1)
+- Batch news and sentiment handlers limited to 3 concurrent Finnhub calls via `mapWithConcurrency` (was unbounded `Promise.allSettled`)
+- Trending service uses `batchGetItemsSingleTable` for yesterday's aggregates instead of N individual `getDailyAggregate` calls
+- Admin dashboard `fetch` calls now include 15s `AbortSignal.timeout` (was no timeout)
+- Root layout `console.error` replaced with structured `logger.error`
+- Handler import extensions normalized to extensionless (two `.js` imports removed)
+- Python Lambda handler imports all handlers eagerly at function entry (removed asymmetric conditional import for analyst handler)
+- Python `handler` function typed with `LambdaContext` Protocol instead of `Any`
+- Python `MetricDefinition.unit` typed as `str` instead of `Any`
+- Python `StockCacheItem` fields typed with `PriceRecord` and `StockMetadata` instead of `dict[str, Any]`
+
+### Added
+
+- Zod runtime validation schemas for all 7 frontend database repositories (`stock`, `symbol`, `portfolio`, `notes`, `wordCount`, `combinedWord`, `annotations`), replacing 25 `as unknown as` type casts with `safeParse` and graceful degradation
+- Shared hook test fixtures at `frontend/src/hooks/__tests__/__fixtures__/` (`createTestQueryClient`, `createQueryWrapper`, `createTestProviders`, `mockLogger`)
+- Admin dashboard page tests for `DashboardPage`, `BusinessPage`, `CostsPage`, `UsersPage` covering loading, data, and error states
+- ESLint `no-empty` rule with `allowEmptyCatch: false` to prevent future bare catch blocks in backend
+- ESLint `caughtErrors: 'all'` with `caughtErrorsIgnorePattern: '^_'` to enforce caught error usage in backend
+- `admin/.env.example` documenting `VITE_API_URL`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`
+- `escapeRegExp` utility in event matcher for safe dynamic regex construction
+- `filterExpression` support in `queryItems` DynamoDB utility
+
+### Changed
+
+- CLAUDE.md coverage thresholds corrected to match jest config (frontend 45/55/55/56, backend 63/75/71/70)
+- `as any` casts in `sqliteAdapter.ts` documented with rationale comments
+
+### Documentation
+
+- CLAUDE.md: hook count corrected to 30, Lambda count to 7, platform abstraction updated from `database.web.ts` to `StorageAdapter`, `sentimentWorker.entry.ts` added to directory tree, 4 DynamoDB entity types added (JOB#, ARTICLE#, MODEL#, CIRCUIT#)
+- ARCHITECTURE.md: all 30 hooks listed in file map, missing components added (TrendingFeed, AnalystConsensusCard, EarningsImpactCard, SectorSentimentDetailCard, chart hooks, portfolio decomposition), missing handlers added (trending, freshness, earningsImpact, sectorSentiment, batch, analyst.py, sentimentWorker.entry.ts), feature count updated to 23, new sections for Async Sentiment Pipeline, StorageAdapter, Volume Bars, Trending Sentiment Feed, Analyst Consensus, Data Freshness, Price Alerts, Earnings Impact Analysis
+- API.md: 5 undocumented endpoints added (`/sentiment/trending`, `/sentiment/freshness`, `/sentiment/earnings-impact`, `/sentiment/sector`, `/analyst`), `backtesting` added to `/auth/tier` response, `SENTIMENT_QUEUE_URL` and admin/ML environment variables documented
+- CHANGELOG.md v2.9.0: bundle count updated from five to six (Sentiment Worker)
+
 ## [2.11.0] - 2026-03-27
 
 ### Added
@@ -70,6 +115,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ### Changed
 
+- Backend build now produces six bundles (API, Sentiment Worker, Reports, Alerts, Admin, Aggregation)
 - PriceChartDom decomposed from 552-line monolith into 8 focused hooks/helpers (`useMainChart`, `chartSeries`, `chartAnnotations`, `useRSIChart`, `useMACDChart`, `useChartSync`, `types`, barrel `index`)
 - PortfolioItem decomposed from 477-line component into 4 child components (`PortfolioItemHeader`, `PortfolioItemPrice`, `PortfolioItemPrediction`, `ExpandedHeatmapSection`) with co-located tests
 - Frontend console calls reduced from 89 to 6 (4 in logger delegation, 2 in JSDoc examples)

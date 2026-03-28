@@ -7,6 +7,11 @@
 
 import type { EventKeywordSet } from '../../types/event.types.js';
 
+/** Escape regex metacharacters so the string matches literally. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Result of keyword matching operation
  */
@@ -70,8 +75,9 @@ export function matchKeywords(text: string, keywords: string[]): KeywordMatchRes
 
   for (const keyword of keywords) {
     // Create word boundary regex for the keyword
-    // For multi-word keywords, match the exact phrase
-    const pattern = `\\b${keyword.replace(/\s+/g, '\\s+')}\\b`;
+    // Escape metacharacters first, then replace whitespace for multi-word matching
+    const escaped = escapeRegExp(keyword).replace(/\s+/g, '\\s+');
+    const pattern = `\\b${escaped}\\b`;
     const regex = new RegExp(pattern, 'i');
 
     if (regex.test(text)) {

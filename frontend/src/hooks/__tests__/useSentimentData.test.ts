@@ -3,8 +3,6 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react-native';
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import {
   useSentimentData,
@@ -12,6 +10,7 @@ import {
   useCurrentSentiment,
   useSentimentByDate,
 } from '../useSentimentData';
+import { createTestProviders } from './__fixtures__';
 
 // Mock dependencies
 jest.mock('@/services/data/sentimentDataFetcher', () => ({
@@ -47,16 +46,6 @@ const { fetchCombinedSentiment, fetchArticleSentiment } = jest.requireMock(
 const { generateBrowserPredictions } = jest.requireMock('@/ml/prediction/browserPredictions');
 const CombinedWordRepository = jest.requireMock('@/database/repositories/combinedWord.repository');
 
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(QueryClientProvider, { client: queryClient }, children);
-  }
-  return Wrapper;
-}
-
 describe('useSentimentData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -69,7 +58,9 @@ describe('useSentimentData', () => {
     fetchCombinedSentiment.mockResolvedValue({ data: mockData });
     generateBrowserPredictions.mockResolvedValue(null);
 
-    const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useSentimentData('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -80,7 +71,9 @@ describe('useSentimentData', () => {
   it('returns empty array when no data', async () => {
     fetchCombinedSentiment.mockResolvedValue({ data: [] });
 
-    const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useSentimentData('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([]);
@@ -102,7 +95,9 @@ describe('useSentimentData', () => {
       oneMonth: null,
     });
 
-    const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useSentimentData('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -123,20 +118,22 @@ describe('useSentimentData', () => {
     }));
     fetchCombinedSentiment.mockResolvedValue({ data: mockData });
 
-    const { result } = renderHook(() => useSentimentData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useSentimentData('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(generateBrowserPredictions).not.toHaveBeenCalled();
   });
 
   it('is disabled when ticker is empty', () => {
-    const { result } = renderHook(() => useSentimentData(''), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useSentimentData(''), { wrapper: createTestProviders() });
     expect(result.current.fetchStatus).toBe('idle');
   });
 
   it('respects enabled option', () => {
     const { result } = renderHook(() => useSentimentData('AAPL', { enabled: false }), {
-      wrapper: createWrapper(),
+      wrapper: createTestProviders(),
     });
     expect(result.current.fetchStatus).toBe('idle');
   });
@@ -153,7 +150,9 @@ describe('useArticleSentiment', () => {
     ];
     fetchArticleSentiment.mockResolvedValue(mockArticles);
 
-    const { result } = renderHook(() => useArticleSentiment('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useArticleSentiment('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetchArticleSentiment).toHaveBeenCalledWith('AAPL', '2025-01-15', '2025-01-15', 7);
@@ -164,7 +163,7 @@ describe('useArticleSentiment', () => {
     fetchArticleSentiment.mockResolvedValue([]);
 
     const { result } = renderHook(() => useArticleSentiment('AAPL', { days: 14 }), {
-      wrapper: createWrapper(),
+      wrapper: createTestProviders(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -184,7 +183,9 @@ describe('useCurrentSentiment', () => {
     ];
     CombinedWordRepository.findByTicker.mockResolvedValue(mockData);
 
-    const { result } = renderHook(() => useCurrentSentiment('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useCurrentSentiment('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.date).toBe('2025-01-12');
@@ -193,7 +194,9 @@ describe('useCurrentSentiment', () => {
   it('returns null when no data', async () => {
     CombinedWordRepository.findByTicker.mockResolvedValue([]);
 
-    const { result } = renderHook(() => useCurrentSentiment('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useCurrentSentiment('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
@@ -210,7 +213,7 @@ describe('useSentimentByDate', () => {
     CombinedWordRepository.findByTickerAndDateRange.mockResolvedValue(mockData);
 
     const { result } = renderHook(() => useSentimentByDate('AAPL', '2025-01-10'), {
-      wrapper: createWrapper(),
+      wrapper: createTestProviders(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -221,7 +224,7 @@ describe('useSentimentByDate', () => {
     CombinedWordRepository.findByTickerAndDateRange.mockResolvedValue([]);
 
     const { result } = renderHook(() => useSentimentByDate('AAPL', '2020-01-01'), {
-      wrapper: createWrapper(),
+      wrapper: createTestProviders(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -230,7 +233,7 @@ describe('useSentimentByDate', () => {
 
   it('is disabled without date', () => {
     const { result } = renderHook(() => useSentimentByDate('AAPL', ''), {
-      wrapper: createWrapper(),
+      wrapper: createTestProviders(),
     });
     expect(result.current.fetchStatus).toBe('idle');
   });

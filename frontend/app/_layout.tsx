@@ -25,6 +25,9 @@ import { StockProvider } from '../src/contexts/StockContext';
 import { theme } from '../src/theme/theme';
 import { colors } from '../src/theme/colors';
 
+// Logging
+import { logger } from '../src/utils/logger';
+
 // Error Boundary
 import { ErrorBoundary } from '../src/components/common/ErrorBoundary';
 
@@ -65,7 +68,7 @@ export default function RootLayout() {
 
         setIsReady(true);
       } catch (error) {
-        console.error('[App] Initialization error:', error);
+        logger.error('App', 'Initialization error', error);
 
         // Re-throw validation errors - app cannot start with invalid config
         if (error instanceof Error && error.message.includes('Environment Configuration Error')) {

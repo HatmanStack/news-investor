@@ -184,8 +184,11 @@ class TestRetryWithBackoff:
 
     @patch("services.yfinance_service.time.sleep")
     @patch("services.yfinance_service.requests.get")
-    def test_retries_twice_on_server_error(self, mock_get, mock_sleep):
-        """Function is called max 3 times (1 initial + 2 retries) with MAX_RETRIES=2."""
+    def test_retries_once_on_server_error(self, mock_get, mock_sleep):
+        """Function is called max 2 times (1 initial + 1 retry) with MAX_RETRIES=1.
+
+        Retry budget (ADR-003): 10s + 1s + 10s = 21s < 24s (80% of 30s timeout).
+        """
         import requests as req
 
         mock_get.side_effect = req.exceptions.Timeout()
@@ -193,10 +196,10 @@ class TestRetryWithBackoff:
         with pytest.raises(APIError):
             search_tickers("AAPL")
 
-        # 1 initial call + 2 retries = 3 total calls
-        assert mock_get.call_count == 3
-        # sleep called twice (between retries)
-        assert mock_sleep.call_count == 2
+        # 1 initial call + 1 retry = 2 total calls
+        assert mock_get.call_count == 2
+        # sleep called once (between retries)
+        assert mock_sleep.call_count == 1
 
     @patch("services.yfinance_service.time.sleep")
     @patch("services.yfinance_service.requests.get")

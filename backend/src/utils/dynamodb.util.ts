@@ -134,10 +134,14 @@ export async function queryItems<T>(
     skBetween?: { start: string; end: string };
     limit?: number;
     scanIndexForward?: boolean;
+    filterExpression?: string;
+    filterAttributeNames?: Record<string, string>;
+    filterAttributeValues?: Record<string, unknown>;
   },
 ): Promise<T[]> {
   let keyConditionExpression = 'pk = :pk';
   const expressionAttributeValues: Record<string, unknown> = { ':pk': pk };
+  const expressionAttributeNames: Record<string, string> = {};
 
   if (options?.skPrefix) {
     keyConditionExpression += ' AND begins_with(sk, :skPrefix)';
@@ -146,6 +150,14 @@ export async function queryItems<T>(
     keyConditionExpression += ' AND sk BETWEEN :skStart AND :skEnd';
     expressionAttributeValues[':skStart'] = options.skBetween.start;
     expressionAttributeValues[':skEnd'] = options.skBetween.end;
+  }
+
+  // Merge caller-supplied filter attribute values/names
+  if (options?.filterAttributeValues) {
+    Object.assign(expressionAttributeValues, options.filterAttributeValues);
+  }
+  if (options?.filterAttributeNames) {
+    Object.assign(expressionAttributeNames, options.filterAttributeNames);
   }
 
   const allItems: T[] = [];
@@ -159,6 +171,10 @@ export async function queryItems<T>(
       Limit: options?.limit,
       ScanIndexForward: options?.scanIndexForward ?? true,
       ExclusiveStartKey: exclusiveStartKey,
+      ...(options?.filterExpression && { FilterExpression: options.filterExpression }),
+      ...(Object.keys(expressionAttributeNames).length > 0 && {
+        ExpressionAttributeNames: expressionAttributeNames,
+      }),
     };
 
     const result = await dynamoDb.send(new QueryCommand(params));
@@ -419,6 +435,13 @@ export const ENTITY_TYPE_INDEX = 'EntityTypeIndex';
 /**
  * Query the EntityTypeIndex GSI by entity type.
  * Automatically paginates through all results.
+ *
+ * Caller warnings:
+ * - If `expressionAttributeValues` contains `:entityType`, it will silently
+ *   override the GSI key condition value (spread happens after the default).
+ * - The `limit` option stops after the first DynamoDB page. Because DynamoDB's
+ *   Limit controls items *evaluated* (not items *returned*), callers using it
+ *   as "top N" may receive fewer results when a FilterExpression is active.
  */
 export async function queryByEntityType<T>(
   entityType: string,

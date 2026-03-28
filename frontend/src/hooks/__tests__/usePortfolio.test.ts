@@ -3,10 +3,9 @@
  */
 
 import { renderHook, waitFor, act } from '@testing-library/react-native';
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { usePortfolio } from '../usePortfolio';
+import { createTestProviders } from './__fixtures__';
 
 // Mock dependencies
 jest.mock('@/database/repositories/portfolio.repository', () => ({
@@ -36,16 +35,6 @@ jest.mock('@/hooks/useWatchlistSync', () => ({
 
 const PortfolioRepository = jest.requireMock('@/database/repositories/portfolio.repository');
 
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(QueryClientProvider, { client: queryClient }, children);
-  }
-  return Wrapper;
-}
-
 describe('usePortfolio', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -58,7 +47,7 @@ describe('usePortfolio', () => {
     ];
     PortfolioRepository.findAll.mockResolvedValue(mockPortfolio);
 
-    const { result } = renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -78,7 +67,7 @@ describe('usePortfolio', () => {
       .mockResolvedValueOnce(initialPortfolio)
       .mockResolvedValue(updatedPortfolio);
 
-    const { result } = renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -103,7 +92,7 @@ describe('usePortfolio', () => {
       .mockResolvedValueOnce(initialPortfolio)
       .mockResolvedValue(updatedPortfolio);
 
-    const { result } = renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -122,7 +111,7 @@ describe('usePortfolio', () => {
     ];
     PortfolioRepository.findAll.mockResolvedValue(mockPortfolio);
 
-    const { result } = renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -133,7 +122,7 @@ describe('usePortfolio', () => {
   it('handles error from findAll gracefully', async () => {
     PortfolioRepository.findAll.mockRejectedValue(new Error('DB error'));
 
-    const { result } = renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.error).toBeTruthy());
 
@@ -143,7 +132,7 @@ describe('usePortfolio', () => {
   it('calls pullAndMerge on mount', async () => {
     PortfolioRepository.findAll.mockResolvedValue([]);
 
-    renderHook(() => usePortfolio(), { wrapper: createWrapper() });
+    renderHook(() => usePortfolio(), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(mockPullAndMerge).toHaveBeenCalledTimes(1));
   });

@@ -129,7 +129,7 @@ async function recordFailure(): Promise<void> {
  * @param text - Financial news text to analyze
  * @returns Sentiment score -1 to +1, or null on error
  */
-export async function getMlSentiment(text: string): Promise<number | null> {
+export async function getMlSentiment(text: string, ticker?: string): Promise<number | null> {
   // Validate configuration (read at runtime for testability)
   const apiUrl = getApiUrl();
   if (!apiUrl) {
@@ -184,7 +184,7 @@ export async function getMlSentiment(text: string): Promise<number | null> {
       const duration = Date.now() - startTime;
 
       if (!response.ok) {
-        logMlSentimentCall('UNKNOWN', duration, false, false); // Ticker not available here, use UNKNOWN
+        logMlSentimentCall(ticker ?? 'UNKNOWN', duration, false, false); // Ticker not available here, use UNKNOWN
         const isLastAttempt = attempt === ML_MAX_RETRIES;
         const canRetry = shouldRetry(null, response.status);
 
@@ -206,14 +206,14 @@ export async function getMlSentiment(text: string): Promise<number | null> {
         continue;
       }
 
-      logMlSentimentCall('UNKNOWN', duration, true, false); // Success, no cache hit here
+      logMlSentimentCall(ticker ?? 'UNKNOWN', duration, true, false); // Success, no cache hit here
 
       const data = (await response.json()) as MlSentimentResponse;
 
       // Validate response structure
       if (!data || typeof data.sentiment !== 'number') {
         logger.error('Invalid response format', undefined, {
-          data: data as unknown as Record<string, unknown>,
+          data: { sentiment: data?.sentiment, label: data?.label },
         });
         throw new Error('Invalid response format from MlSentiment API');
       }
@@ -236,7 +236,7 @@ export async function getMlSentiment(text: string): Promise<number | null> {
       return rawScore;
     } catch (error) {
       const duration = Date.now() - startTime;
-      logMlSentimentCall('UNKNOWN', duration, false, false);
+      logMlSentimentCall(ticker ?? 'UNKNOWN', duration, false, false);
 
       const isLastAttempt = attempt === ML_MAX_RETRIES;
       const canRetry = shouldRetry(error);
@@ -251,7 +251,7 @@ export async function getMlSentiment(text: string): Promise<number | null> {
         logger.warn('All retries exhausted or non-retryable error, using fallback');
         await recordFailure();
         logMlSentimentFallback(
-          'UNKNOWN',
+          ticker ?? 'UNKNOWN',
           1,
           1,
           error instanceof Error ? error.message : 'Unknown error',

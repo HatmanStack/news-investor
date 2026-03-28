@@ -40,7 +40,9 @@ logger.setLevel(logging.INFO)
 
 # Configuration
 REQUEST_TIMEOUT = 10  # seconds
-MAX_RETRIES = 2  # Total retry delay: 1s + 1s = 2s (7% of 30s timeout)
+# Retry budget (ADR-003): must fit within 80% of Lambda timeout (30s = 24s budget).
+# With MAX_RETRIES=1: worst case = 10s (attempt 1) + 1s (backoff) + 10s (attempt 2) = 21s < 24s.
+MAX_RETRIES = 1
 RETRY_DELAY_SECONDS = 1
 
 # Circuit breaker: fail fast after 3 consecutive yfinance failures, cooldown 60s

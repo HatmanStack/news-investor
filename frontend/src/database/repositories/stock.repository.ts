@@ -5,6 +5,7 @@
 
 import { getAdapter } from '../index';
 import { StockDetails } from '@/types/database.types';
+import { stockDetailsSchema } from '../schemas';
 import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 import type { PutResult } from '../storageAdapter';
@@ -25,7 +26,18 @@ export async function findByTicker(ticker: string): Promise<StockDetails[]> {
       orderDirection: 'DESC',
     });
     logger.debug('StockRepository', 'Found price records', { count: results.length, ticker });
-    return results as unknown as StockDetails[];
+    const parsed: StockDetails[] = [];
+    for (const row of results) {
+      const result = stockDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('StockRepository', 'findByTicker: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -49,7 +61,18 @@ export async function findByTickerAndDateRange(
       orderBy: 'date',
       orderDirection: 'DESC',
     });
-    return results as unknown as StockDetails[];
+    const parsed: StockDetails[] = [];
+    for (const row of results) {
+      const result = stockDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('StockRepository', 'findByTickerAndDateRange: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -60,8 +83,10 @@ export async function findByTickerAndDateRange(
  */
 export async function insert(stock: Omit<StockDetails, 'id'>): Promise<PutResult> {
   return withRepoLogging('StockRepository', 'insert', async () => {
+    const data = { ...stock };
+    stockDetailsSchema.omit({ id: true }).parse(data);
     const adapter = getAdapter();
-    return adapter.put(TABLE, { ...stock });
+    return adapter.put(TABLE, data);
   });
 }
 
@@ -111,11 +136,19 @@ export async function countByTicker(ticker: string): Promise<number> {
 export async function findLatestByTicker(ticker: string): Promise<StockDetails | null> {
   return withRepoLoggingDefault('StockRepository', 'findLatestByTicker', null, async () => {
     const adapter = getAdapter();
-    const result = await adapter.queryOne(TABLE, {
+    const row = await adapter.queryOne(TABLE, {
       filter: { ticker },
       orderBy: 'date',
       orderDirection: 'DESC',
     });
-    return result as unknown as StockDetails | null;
+    if (!row) return null;
+    const result = stockDetailsSchema.safeParse(row);
+    if (result.success) {
+      return result.data;
+    }
+    logger.warn('StockRepository', 'findLatestByTicker: malformed row', {
+      error: result.error.message,
+    });
+    return null;
   });
 }

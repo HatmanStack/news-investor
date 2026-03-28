@@ -5,6 +5,8 @@
 
 import { getAdapter } from '../index';
 import { CombinedWordDetails } from '@/types/database.types';
+import { combinedWordDetailsSchema } from '../schemas';
+import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 
 const TABLE = 'combined_word_count_details';
@@ -17,12 +19,20 @@ const TABLE = 'combined_word_count_details';
 export async function findLatestByTicker(ticker: string): Promise<CombinedWordDetails | null> {
   return withRepoLoggingDefault('CombinedWordRepository', 'findLatestByTicker', null, async () => {
     const adapter = getAdapter();
-    const result = await adapter.queryOne(TABLE, {
+    const row = await adapter.queryOne(TABLE, {
       filter: { ticker },
       orderBy: 'date',
       orderDirection: 'DESC',
     });
-    return result as unknown as CombinedWordDetails | null;
+    if (!row) return null;
+    const parsed = combinedWordDetailsSchema.safeParse(row);
+    if (parsed.success) {
+      return parsed.data;
+    }
+    logger.warn('CombinedWordRepository', 'findLatestByTicker: malformed row', {
+      error: parsed.error.message,
+    });
+    return null;
   });
 }
 
@@ -39,7 +49,18 @@ export async function findByTicker(ticker: string): Promise<CombinedWordDetails[
       orderBy: 'date',
       orderDirection: 'DESC',
     });
-    return results as unknown as CombinedWordDetails[];
+    const parsed: CombinedWordDetails[] = [];
+    for (const row of results) {
+      const result = combinedWordDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('CombinedWordRepository', 'findByTicker: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -67,7 +88,20 @@ export async function findByTickerAndDateRange(
         orderBy: 'date',
         orderDirection: 'DESC',
       });
-      return results as unknown as CombinedWordDetails[];
+      const parsed: CombinedWordDetails[] = [];
+      for (const row of results) {
+        const result = combinedWordDetailsSchema.safeParse(row);
+        if (result.success) {
+          parsed.push(result.data);
+        } else {
+          logger.warn(
+            'CombinedWordRepository',
+            'findByTickerAndDateRange: skipping malformed row',
+            { error: result.error.message },
+          );
+        }
+      }
+      return parsed;
     },
   );
 }
@@ -80,6 +114,7 @@ export async function findByTickerAndDateRange(
  */
 export async function upsert(combinedWord: CombinedWordDetails): Promise<void> {
   return withRepoLogging('CombinedWordRepository', 'upsert', async () => {
+    combinedWordDetailsSchema.parse(combinedWord);
     const adapter = getAdapter();
     await adapter.put(
       TABLE,

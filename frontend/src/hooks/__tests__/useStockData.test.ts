@@ -3,10 +3,9 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react-native';
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { useStockData, useLatestStockPrice } from '../useStockData';
+import { createTestProviders } from './__fixtures__';
 
 // Mock dependencies
 jest.mock('@/database/repositories/stock.repository', () => ({
@@ -26,16 +25,6 @@ jest.mock('date-fns', () => ({
 const StockRepository = jest.requireMock('@/database/repositories/stock.repository');
 const { syncStockData } = jest.requireMock('@/services/sync/stockDataSync');
 
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(QueryClientProvider, { client: queryClient }, children);
-  }
-  return Wrapper;
-}
-
 describe('useStockData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -54,7 +43,7 @@ describe('useStockData', () => {
     }));
     StockRepository.findByTickerAndDateRange.mockResolvedValue(sufficientData);
 
-    const { result } = renderHook(() => useStockData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useStockData('AAPL'), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -93,7 +82,7 @@ describe('useStockData', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(dataAfterSync);
 
-    const { result } = renderHook(() => useStockData('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useStockData('AAPL'), { wrapper: createTestProviders() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -103,7 +92,7 @@ describe('useStockData', () => {
   });
 
   it('is disabled when ticker is empty', () => {
-    const { result } = renderHook(() => useStockData(''), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useStockData(''), { wrapper: createTestProviders() });
     expect(result.current.fetchStatus).toBe('idle');
   });
 });
@@ -125,7 +114,9 @@ describe('useLatestStockPrice', () => {
     };
     StockRepository.findLatestByTicker.mockResolvedValue(mockLatest);
 
-    const { result } = renderHook(() => useLatestStockPrice('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useLatestStockPrice('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -149,7 +140,9 @@ describe('useLatestStockPrice', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(mockLatestAfterSync);
 
-    const { result } = renderHook(() => useLatestStockPrice('AAPL'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useLatestStockPrice('AAPL'), {
+      wrapper: createTestProviders(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 

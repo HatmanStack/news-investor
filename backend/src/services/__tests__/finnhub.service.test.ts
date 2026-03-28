@@ -198,7 +198,7 @@ describe('FinnhubService', () => {
       const fetchMock = mockFetchResponse(429);
 
       // Use real timers - mock delays are short since fn resolves instantly
-      // retryWithBackoff uses exponential backoff: 2s, 4s, 8s
+      // retryWithBackoff uses exponential backoff: 2s
       // Override setTimeout to resolve immediately for this test
       const origSetTimeout = globalThis.setTimeout;
       globalThis.setTimeout = ((fn: () => void) => origSetTimeout(fn, 0)) as typeof setTimeout;
@@ -208,8 +208,8 @@ describe('FinnhubService', () => {
           expect.objectContaining({ name: 'APIError', statusCode: 429 }),
         );
 
-        // Initial attempt + 3 retries = 4 calls
-        expect(fetchMock).toHaveBeenCalledTimes(4);
+        // Initial attempt + 1 retry = 2 calls (retry budget: 22s < 24s)
+        expect(fetchMock).toHaveBeenCalledTimes(2);
         expect(mockRecordFailure).toHaveBeenCalled();
       } finally {
         globalThis.setTimeout = origSetTimeout;
@@ -228,8 +228,8 @@ describe('FinnhubService', () => {
           expect.objectContaining({ name: 'APIError', statusCode: 500 }),
         );
 
-        // Initial attempt + 3 retries = 4 calls
-        expect(fetchMock).toHaveBeenCalledTimes(4);
+        // Initial attempt + 1 retry = 2 calls (retry budget: 22s < 24s)
+        expect(fetchMock).toHaveBeenCalledTimes(2);
       } finally {
         globalThis.setTimeout = origSetTimeout;
       }

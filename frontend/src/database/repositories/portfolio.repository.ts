@@ -5,6 +5,8 @@
 
 import { getAdapter } from '../index';
 import { PortfolioDetails } from '@/types/database.types';
+import { portfolioDetailsSchema } from '../schemas';
+import { logger } from '@/utils/logger';
 import { withRepoLogging, withRepoLoggingDefault } from '@/utils/repoLogging';
 
 const TABLE = 'portfolio_details';
@@ -20,7 +22,18 @@ export async function findAll(): Promise<PortfolioDetails[]> {
       orderBy: 'ticker',
       orderDirection: 'ASC',
     });
-    return results as unknown as PortfolioDetails[];
+    const parsed: PortfolioDetails[] = [];
+    for (const row of results) {
+      const result = portfolioDetailsSchema.safeParse(row);
+      if (result.success) {
+        parsed.push(result.data);
+      } else {
+        logger.warn('PortfolioRepository', 'findAll: skipping malformed row', {
+          error: result.error.message,
+        });
+      }
+    }
+    return parsed;
   });
 }
 
@@ -32,8 +45,16 @@ export async function findAll(): Promise<PortfolioDetails[]> {
 export async function findByTicker(ticker: string): Promise<PortfolioDetails | null> {
   return withRepoLoggingDefault('PortfolioRepository', 'findByTicker', null, async () => {
     const adapter = getAdapter();
-    const result = await adapter.queryOne(TABLE, { filter: { ticker } });
-    return (result as unknown as PortfolioDetails) || null;
+    const row = await adapter.queryOne(TABLE, { filter: { ticker } });
+    if (!row) return null;
+    const result = portfolioDetailsSchema.safeParse(row);
+    if (result.success) {
+      return result.data;
+    }
+    logger.warn('PortfolioRepository', 'findByTicker: malformed row', {
+      error: result.error.message,
+    });
+    return null;
   });
 }
 
@@ -44,6 +65,7 @@ export async function findByTicker(ticker: string): Promise<PortfolioDetails | n
  */
 export async function upsert(portfolio: PortfolioDetails): Promise<void> {
   return withRepoLogging('PortfolioRepository', 'upsert', async () => {
+    portfolioDetailsSchema.parse(portfolio);
     const adapter = getAdapter();
     await adapter.put(
       TABLE,

@@ -5,10 +5,17 @@
 import * as SymbolRepository from '../symbol.repository';
 import { getAdapter } from '../../index';
 import { SymbolDetails } from '@/types/database.types';
+import { logger } from '@/utils/logger';
 
 jest.mock('../../index', () => ({
   getAdapter: jest.fn(),
 }));
+
+jest.mock('@/utils/logger', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const mockAdapter = {
   query: jest.fn(),
@@ -53,6 +60,19 @@ describe('SymbolRepository', () => {
       expect(result).toEqual(sampleSymbol);
     });
 
+    it('returns null for malformed data and logs warning', async () => {
+      mockAdapter.queryOne.mockResolvedValue({ ticker: 'AAPL' }); // missing required fields
+
+      const result = await SymbolRepository.findByTicker('AAPL');
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'SymbolRepository',
+        expect.stringContaining('findByTicker'),
+        expect.any(Object),
+      );
+    });
+
     it('returns null when not found', async () => {
       mockAdapter.queryOne.mockResolvedValue(null);
 
@@ -82,6 +102,17 @@ describe('SymbolRepository', () => {
         orderDirection: 'ASC',
       });
       expect(result).toEqual(symbols);
+    });
+
+    it('filters out malformed rows and logs warning', async () => {
+      const malformedRow = { ticker: 'BAD' }; // missing required fields
+      mockAdapter.query.mockResolvedValue([sampleSymbol, malformedRow]);
+
+      const result = await SymbolRepository.findAll();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(sampleSymbol);
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('returns empty array on error', async () => {
@@ -117,6 +148,13 @@ describe('SymbolRepository', () => {
       mockAdapter.put.mockRejectedValue(new Error('Insert failed'));
 
       await expect(SymbolRepository.insert(sampleSymbol)).rejects.toThrow('Insert failed');
+    });
+
+    it('throws on malformed write data', async () => {
+      const malformed = { ticker: 'AAPL' } as unknown as Omit<SymbolDetails, 'id'>;
+
+      await expect(SymbolRepository.insert(malformed)).rejects.toThrow();
+      expect(mockAdapter.put).not.toHaveBeenCalled();
     });
   });
 

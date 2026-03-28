@@ -10,6 +10,7 @@ import {
   parseBody,
 } from '../utils/schemas.util';
 import type { FinnhubNewsArticle } from '../types/finnhub.types';
+import { mapWithConcurrency } from '../utils/concurrency.util';
 
 interface BatchNewsResponse {
   data: Record<string, FinnhubNewsArticle[]>;
@@ -65,9 +66,19 @@ export async function handleBatchNewsRequest(
     fromDate.setDate(fromDate.getDate() - 7);
     const from = fromDate.toISOString().split('T')[0]!;
 
-    // Process tickers in parallel
-    const results = await Promise.allSettled(
-      tickers.map((ticker) => handleNewsWithCache(ticker.toUpperCase(), from, to, apiKey)),
+    // Process tickers with bounded concurrency (3) to avoid Finnhub rate limits
+    const results = await mapWithConcurrency(
+      tickers,
+      async (rawTicker) => {
+        const ticker = rawTicker.toUpperCase();
+        try {
+          const data = await handleNewsWithCache(ticker, from, to, apiKey);
+          return { status: 'fulfilled' as const, ticker, data };
+        } catch (error) {
+          return { status: 'rejected' as const, ticker, error };
+        }
+      },
+      3,
     );
 
     // Build response
@@ -82,23 +93,18 @@ export async function handleBatchNewsRequest(
       },
     };
 
-    results.forEach((result, idx) => {
-      const rawTicker = tickers[idx];
-      if (!rawTicker) return;
-      const ticker = rawTicker.toUpperCase();
+    for (const result of results) {
       if (result.status === 'fulfilled') {
-        // Apply limit per ticker
-        response.data[ticker] = result.value.data.slice(0, limit);
-        response._meta.cached[ticker] = result.value.cached;
+        response.data[result.ticker] = result.data.data.slice(0, limit);
+        response._meta.cached[result.ticker] = result.data.cached;
         response._meta.successCount++;
       } else {
-        const errorMessage =
-          result.reason instanceof Error ? result.reason.message : 'Unknown error';
-        response.errors[ticker] = errorMessage;
+        const errorMessage = result.error instanceof Error ? result.error.message : 'Unknown error';
+        response.errors[result.ticker] = errorMessage;
         response._meta.errorCount++;
-        logError('BatchNewsHandler', result.reason, { requestId, ticker });
+        logError('BatchNewsHandler', result.error, { requestId, ticker: result.ticker });
       }
-    });
+    }
 
     // Log metrics
     const duration = Date.now() - startTime;
@@ -149,16 +155,24 @@ export async function handleBatchSentimentRequest(
 
     const { tickers, startDate, endDate } = parsed.data;
 
-    // Process tickers in parallel
-    const results = await Promise.allSettled(
-      tickers.map(async (ticker) => {
-        const result = await getSentimentResults(ticker.toUpperCase(), startDate, endDate);
-
-        return {
-          data: result.dailySentiment,
-          cached: result.cached,
-        };
-      }),
+    // Process tickers with bounded concurrency (3) to avoid overwhelming DynamoDB
+    const results = await mapWithConcurrency(
+      tickers,
+      async (rawTicker) => {
+        const ticker = rawTicker.toUpperCase();
+        try {
+          const result = await getSentimentResults(ticker, startDate, endDate);
+          return {
+            status: 'fulfilled' as const,
+            ticker,
+            data: result.dailySentiment,
+            cached: result.cached,
+          };
+        } catch (error) {
+          return { status: 'rejected' as const, ticker, error };
+        }
+      },
+      3,
     );
 
     // Build response
@@ -173,22 +187,18 @@ export async function handleBatchSentimentRequest(
       },
     };
 
-    results.forEach((result, idx) => {
-      const rawTicker = tickers[idx];
-      if (!rawTicker) return;
-      const ticker = rawTicker.toUpperCase();
+    for (const result of results) {
       if (result.status === 'fulfilled') {
-        response.data[ticker] = result.value.data;
-        response._meta.cached[ticker] = result.value.cached;
+        response.data[result.ticker] = result.data;
+        response._meta.cached[result.ticker] = result.cached;
         response._meta.successCount++;
       } else {
-        const errorMessage =
-          result.reason instanceof Error ? result.reason.message : 'Unknown error';
-        response.errors[ticker] = errorMessage;
+        const errorMessage = result.error instanceof Error ? result.error.message : 'Unknown error';
+        response.errors[result.ticker] = errorMessage;
         response._meta.errorCount++;
-        logError('BatchSentimentHandler', result.reason, { requestId, ticker });
+        logError('BatchSentimentHandler', result.error, { requestId, ticker: result.ticker });
       }
-    });
+    }
 
     // Log metrics
     const duration = Date.now() - startTime;
