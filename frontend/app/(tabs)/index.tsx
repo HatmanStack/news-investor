@@ -150,7 +150,14 @@ export default function SearchScreen() {
 
   const handleTrendingSelect = useCallback(
     (ticker: string) => {
-      handleSelectStock({ ticker, name: '', assetType: 'Stock', isActive: true });
+      handleSelectStock({
+        ticker,
+        name: '',
+        longDescription: '',
+        exchangeCode: '',
+        startDate: '',
+        endDate: '',
+      });
     },
     [handleSelectStock],
   );
