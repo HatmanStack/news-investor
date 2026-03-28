@@ -9,10 +9,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 os.environ["DYNAMODB_TABLE_NAME"] = "test-table"
 
-# Mock yfinance_service before importing the handler (avoids Python 3.12 syntax issue)
+# Mock yfinance_service before importing the handler so the module loads
+# without requiring yfinance as a runtime dependency. Save and restore
+# sys.modules to avoid polluting other test files (e.g., test_earnings_service).
+_saved = sys.modules.get("services.yfinance_service")
 sys.modules["services.yfinance_service"] = MagicMock()
 
 from handlers.analyst import handle_analyst_request  # noqa: E402
+
+# Restore original module state so later test files get the real module
+if _saved is not None:
+    sys.modules["services.yfinance_service"] = _saved
+else:
+    del sys.modules["services.yfinance_service"]
 
 
 def make_event(ticker=None):
