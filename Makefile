@@ -1,4 +1,4 @@
-.PHONY: setup test test-e2e lint check localstack localstack-stop dev build-admin deploy-admin
+.PHONY: setup test test-e2e lint check ministack ministack-stop dev build-admin deploy-admin
 
 setup:
 	npm install --legacy-peer-deps
@@ -12,16 +12,16 @@ test-e2e:
 lint:
 	npm run lint && npm run lint:backend && npm run lint:ml
 
-localstack:
+ministack:
 	docker compose up -d
-	@echo "Waiting for LocalStack..."
-	@timeout 60 bash -c 'until curl -s http://localhost:4566/_localstack/health | grep -qE "\"(running|available)\""; do sleep 1; done'
-	@echo "LocalStack ready at http://localhost:4566"
+	@echo "Waiting for MiniStack..."
+	@timeout 60 bash -c 'until curl -s http://localhost:4566/_ministack/health | grep -qE "\"(running|available)\""; do sleep 1; done'
+	@echo "MiniStack ready at http://localhost:4566"
 
-localstack-stop:
+ministack-stop:
 	docker compose down
 
-dev: setup localstack  ## One-step local development setup
+dev: setup ministack  ## One-step local development setup
 	@echo "Ready. Run 'npm start' to start the Expo dev server."
 
 build-admin:

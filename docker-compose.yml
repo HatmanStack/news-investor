@@ -1,7 +1,7 @@
 services:
-  localstack:
-    # Pinned to prevent breakage from upstream changes. Update deliberately.
-    image: localstack/localstack:4.4.0
+  ministack:
+    # High-performance drop-in replacement for LocalStack
+    image: ministack/ministack
     ports:
       - '4566:4566'
     environment:
@@ -9,6 +9,6 @@ services:
       - DEBUG=0
     volumes:
       - './backend/localstack-init:/etc/localstack/init/ready.d'
-      - localstack-data:/var/lib/localstack
+      - ministack-data:/var/lib/ministack
 volumes:
-  localstack-data:
+  ministack-data:
