@@ -6,3 +6,5 @@ coverage
 package-lock.json
 .mypy_cache
 .pytest_cache
+.sync
+.venv
