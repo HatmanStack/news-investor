@@ -3,9 +3,7 @@
  * Measures latency and throughput for different scenarios
  */
 
-import axios from 'axios';
 import fs from 'fs';
-import path from 'path';
 
 // CLI arguments
 const args = process.argv.slice(2);
@@ -98,15 +96,16 @@ async function main() {
     // But for repeated iterations, only the first might be cold.
     // So this scenario is tricky. We'll label it "Single Ticker" and assume mix.
     scenarios['Single Ticker'] = await runBenchmark('Single Ticker', async () => {
-      await axios.get(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
+      await fetch(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
     });
   }
 
   if (scenario === 'all' || scenario === 'batch') {
     scenarios['Batch (10 tickers)'] = await runBenchmark('Batch (10 tickers)', async () => {
-      await axios.post(`${API_URL}/batch/stocks`, {
-        tickers: TEST_TICKERS,
-        startDate: date,
+      await fetch(`${API_URL}/batch/stocks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: TEST_TICKERS, startDate: date }),
       });
     });
   }
@@ -114,10 +113,10 @@ async function main() {
   if (scenario === 'all' || scenario === 'single-ticker-warm') {
     // Warm cache test: Make request to warm cache, then measure cached response
     // First request warms cache (outside timing)
-    await axios.get(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
+    await fetch(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
     // Measure only the cached response
     scenarios['Single Ticker (Warm)'] = await runBenchmark('Single Ticker (Warm)', async () => {
-      await axios.get(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
+      await fetch(`${API_URL}/stocks?ticker=${TEST_TICKER}&startDate=${date}`);
     });
   }
 
@@ -126,10 +125,18 @@ async function main() {
     const PORTFOLIO_TICKERS = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN'];
     scenarios['Portfolio (5 tickers)'] = await runBenchmark('Portfolio (5 tickers)', async () => {
       // Parallel fetch all data types using batch endpoints
+      const postOpts = (body: unknown) => ({
+        method: 'POST' as const,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       await Promise.all([
-        axios.post(`${API_URL}/batch/stocks`, { tickers: PORTFOLIO_TICKERS, startDate: date }),
-        axios.post(`${API_URL}/batch/news`, { tickers: PORTFOLIO_TICKERS, limit: 10 }),
-        axios.post(`${API_URL}/batch/sentiment`, { tickers: PORTFOLIO_TICKERS, startDate: date }),
+        fetch(`${API_URL}/batch/stocks`, postOpts({ tickers: PORTFOLIO_TICKERS, startDate: date })),
+        fetch(`${API_URL}/batch/news`, postOpts({ tickers: PORTFOLIO_TICKERS, limit: 10 })),
+        fetch(
+          `${API_URL}/batch/sentiment`,
+          postOpts({ tickers: PORTFOLIO_TICKERS, startDate: date }),
+        ),
       ]);
     });
   }
@@ -145,7 +152,7 @@ async function main() {
     for (const ticker of uniqueTickers) {
       const start = Date.now();
       try {
-        const response = await axios.get(`${API_URL}/stocks?ticker=${ticker}&startDate=${date}`);
+        await fetch(`${API_URL}/stocks?ticker=${ticker}&startDate=${date}`);
         const duration = Date.now() - start;
         // Cold starts typically >1000ms, warm requests <500ms
         if (duration > 1000) {

@@ -1,7 +1,7 @@
 /**
  * E2E Tests: Handler Routing (Lambda index.ts)
  *
- * Tests the main router against real DynamoDB via LocalStack.
+ * Tests the main router against real DynamoDB via MiniStack.
  * Covers 404s, 405s, 413s, and sentiment job lifecycle.
  */
 

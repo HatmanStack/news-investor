@@ -3,16 +3,15 @@
  * Fetches stock prices and company metadata from Lambda backend
  */
 
-import { isAxiosError } from 'axios';
 import type { TiingoStockPrice, TiingoSymbolMetadata, TiingoSearchResult } from './tiingo.types';
 import type { StockDetails, SymbolDetails } from '@/types/database.types';
 import { logger } from '@/utils/logger';
-import { createBackendClient } from './backendClient';
+import { createBackendClient, isHttpError } from './backendClient';
 
 function handleApiError(error: unknown, context: string, ticker?: string): never {
-  if (isAxiosError(error)) {
-    const status = error.response?.status;
-    const errorData = error.response?.data as { error?: string };
+  if (isHttpError(error)) {
+    const status = error.response.status;
+    const errorData = error.response.data as { error?: string };
     if (status === 404) throw new Error(ticker ? `Ticker '${ticker}' not found` : 'Not found');
     if (status === 429) throw new Error('Rate limit exceeded. Please try again in a moment.');
     if (status === 400) throw new Error(errorData?.error || 'Invalid request');
@@ -33,9 +32,9 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      if (isAxiosError(error)) {
-        const status = error.response?.status;
-        if (status && status >= 400 && status < 500 && status !== 429) throw error;
+      if (isHttpError(error)) {
+        const status = error.response.status;
+        if (status >= 400 && status < 500 && status !== 429) throw error;
       }
       if (i === retries) break;
       const delay = Math.pow(2, i + 1) * 1000;
@@ -152,7 +151,7 @@ export async function searchTickers(query: string): Promise<TiingoSearchResult[]
       logger.error('TiingoService', 'Search error', error instanceof Error ? error : undefined, {
         query: trimmedQuery,
       });
-      if (isAxiosError(error) && error.response?.status === 404) {
+      if (isHttpError(error) && error.response.status === 404) {
         return []; // No results
       }
       handleApiError(error, 'Failed to search tickers');

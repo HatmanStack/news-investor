@@ -6,7 +6,7 @@
 
 - Node.js 24+ (via nvm)
 - Python 3.13 (via uv)
-- Docker (for E2E tests and LocalStack)
+- Docker (for E2E tests and MiniStack)
 
 ### Quick Setup
 
@@ -14,7 +14,7 @@
 make dev
 ```
 
-This installs dependencies and starts LocalStack for local DynamoDB.
+This installs dependencies and starts MiniStack for local DynamoDB.
 
 ### Running Tests
 

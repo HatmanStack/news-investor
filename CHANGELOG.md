@@ -336,7 +336,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - Replaced `console.error` with structured logger in `useSentimentData.ts`
 - Replaced `hasOwnProperty` with `Object.hasOwn` in web database
 - Moved `JSON.stringify` inside `requestIdleCallback` to prevent stale snapshot writes
-- Pinned LocalStack image to `4.4.0` in `docker-compose.yml` and CI
+- Pinned MiniStack image to `4.4.0` in `docker-compose.yml` and CI
 - Lazy-loaded yfinance in `etf_holdings_service.py` to match `yfinance_service.py` cold-start pattern
 - Added `@functools.wraps` to `retry_with_backoff` decorator
 - Updated retry docstring from "exponential backoff" to "fixed-interval backoff"

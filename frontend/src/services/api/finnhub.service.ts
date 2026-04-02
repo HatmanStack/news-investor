@@ -4,10 +4,9 @@
  * Backend proxies requests to Finnhub API (API keys secured in Lambda)
  */
 
-import { isAxiosError } from 'axios';
 import type { FinnhubNewsArticle } from './finnhub.types';
 import type { NewsDetails } from '@/types/database.types';
-import { createBackendClient } from './backendClient';
+import { createBackendClient, isHttpError } from './backendClient';
 import { logger } from '@/utils/logger';
 
 /**
@@ -59,9 +58,9 @@ export async function fetchNews(
     });
     return response.data.data;
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 429) {
         throw new Error('Rate limit exceeded. Please try again later.');

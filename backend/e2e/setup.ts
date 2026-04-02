@@ -1,8 +1,8 @@
 /**
  * E2E Test Global Setup
  *
- * Creates DynamoDB table in LocalStack before test run.
- * Requires LocalStack running on localhost:4566.
+ * Creates DynamoDB table in MiniStack before test run.
+ * Requires MiniStack running on localhost:4566.
  */
 
 import { DynamoDBClient, CreateTableCommand } from '@aws-sdk/client-dynamodb';

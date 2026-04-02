@@ -13,7 +13,7 @@ Cross-platform news-driven stock sentiment analysis and market predictions. Reac
 git clone https://github.com/HatmanStack/news-investor.git
 cd news-investor
 npm install --legacy-peer-deps
-make localstack            # Start LocalStack DynamoDB
+make ministack            # Start MiniStack DynamoDB
 make test-e2e              # Verify setup
 npm start                  # Expo dev server
 ```
@@ -24,7 +24,7 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 
 - Node.js v24 LTS (see `.nvmrc`)
 - Python 3.13 (backend Lambda + linting)
-- Docker (LocalStack for local DynamoDB)
+- Docker (MiniStack for local DynamoDB)
 - AWS CLI v2+ and SAM CLI v1.70.0+ (deployment only)
 
 ## Commands
@@ -44,7 +44,7 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 | ---------------------- | --------------------------------------------------------------- |
 | `npm test`             | Frontend tests                                                  |
 | `npm run test:backend` | Backend unit tests (Jest + ESM)                                 |
-| `npm run test:e2e`     | E2E tests (requires LocalStack)                                 |
+| `npm run test:e2e`     | E2E tests (requires MiniStack)                                 |
 | `npm run check`        | Full CI: all lint + type-check + all tests + console-call check |
 
 ### Code Quality
@@ -65,8 +65,8 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 | Target                 | Description                      |
 | ---------------------- | -------------------------------- |
 | `make setup`           | `npm install --legacy-peer-deps` |
-| `make localstack`      | Start LocalStack DynamoDB        |
-| `make localstack-stop` | Stop LocalStack                  |
+| `make ministack`      | Start MiniStack DynamoDB        |
+| `make ministack-stop` | Stop MiniStack                  |
 | `make test-e2e`        | Run E2E tests                    |
 | `make lint`            | Run all linters                  |
 | `make test`            | Full check (`npm run check`)     |

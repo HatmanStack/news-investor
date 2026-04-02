@@ -15,5 +15,5 @@ docs-data/
 backend/bin/sam
 **/__pycache__/
 .serena/
-localstack-data/
+ministack-data/
 dist-e2e/

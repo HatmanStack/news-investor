@@ -4,8 +4,7 @@
  * Handles job triggering, status polling, and result fetching
  */
 
-import { isAxiosError } from 'axios';
-import { createBackendClient } from './backendClient';
+import { createBackendClient, isHttpError } from './backendClient';
 import { logger } from '@/utils/logger';
 
 /**
@@ -148,9 +147,9 @@ export async function triggerSentimentAnalysis(
 
     return response.data.data;
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 400) {
         throw new Error(errorData?.error || 'Invalid request parameters');
@@ -162,13 +161,6 @@ export async function triggerSentimentAnalysis(
 
       if (status === 500) {
         throw new Error(errorData?.error || 'Backend service error');
-      }
-
-      // Network or CORS error
-      if (!status) {
-        throw new Error(
-          `Network error: ${error.message}. Check your internet connection and CORS configuration.`,
-        );
       }
     }
 
@@ -191,9 +183,9 @@ export async function getSentimentJobStatus(jobId: string): Promise<SentimentJob
 
     return response.data.data;
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 404) {
         throw new Error(errorData?.error || 'Job not found');
@@ -269,9 +261,9 @@ export async function getArticleSentiment(
 
     return response.data.data;
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 404) {
         throw new Error(errorData?.error || 'No article sentiment data found');
@@ -329,9 +321,9 @@ export async function fetchLambdaNews(
       cachedArticles: meta.cachedArticles,
     };
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 400) {
         throw new Error(errorData?.error || 'Invalid request parameters');
@@ -382,9 +374,9 @@ export async function getSentimentResults(
     }
     return result;
   } catch (error) {
-    if (isAxiosError(error)) {
-      const status = error.response?.status;
-      const errorData = error.response?.data as { error?: string };
+    if (isHttpError(error)) {
+      const status = error.response.status;
+      const errorData = error.response.data as { error?: string };
 
       if (status === 404) {
         throw new Error(errorData?.error || 'No sentiment data found');

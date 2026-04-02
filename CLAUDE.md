@@ -39,9 +39,9 @@ npm run logs                     # View Lambda logs
 npm run warm-cache               # Pre-populate DynamoDB cache
 
 # Local development (Docker required)
-make localstack                  # Start LocalStack DynamoDB
-make localstack-stop             # Stop LocalStack
-make test-e2e                    # Run E2E tests against LocalStack
+make ministack                  # Start MiniStack DynamoDB
+make ministack-stop             # Stop MiniStack
+make test-e2e                    # Run E2E tests against MiniStack
 make setup                       # npm install --legacy-peer-deps
 make test                        # Full check (lint + tests)
 ```
@@ -128,7 +128,7 @@ backend/
 
 - **Frontend tests**: Jest + React Native Testing Library, mocks in `frontend/__mocks__/`
 - **Backend tests**: Jest with ESM support (`--experimental-vm-modules`)
-- **Backend E2E tests**: Real DynamoDB via LocalStack (`make localstack && make test-e2e`)
+- **Backend E2E tests**: Real DynamoDB via MiniStack (`make ministack && make test-e2e`)
 - **Python tests**: pytest in `backend/python_tests/`
 - **Coverage thresholds**: Frontend 45% branches / 55% functions / 55% lines / 56% statements, Backend 63% branches / 75% functions / 71% lines / 70% statements
 - **Pre-commit hooks**: Husky runs Prettier (TS/JSON/MD) and ruff (Python) via lint-staged

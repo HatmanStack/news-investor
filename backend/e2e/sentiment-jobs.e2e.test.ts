@@ -1,7 +1,7 @@
 /**
  * E2E Tests: Sentiment Jobs Repository
  *
- * Tests real DynamoDB operations against LocalStack — no mocks.
+ * Tests real DynamoDB operations against MiniStack — no mocks.
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
