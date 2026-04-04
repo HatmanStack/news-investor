@@ -38,7 +38,9 @@ export function usePredictionTrackRecord(ticker: string, limit?: number) {
       const client = createBackendClient();
       const params: Record<string, string> = { ticker };
       if (limit) params.limit = String(limit);
-      const response = await client.get('/predictions/track-record', { params });
+      const response = await client.get<{ data: TrackRecordData }>('/predictions/track-record', {
+        params,
+      });
       return response.data.data;
     },
     enabled: !!ticker,

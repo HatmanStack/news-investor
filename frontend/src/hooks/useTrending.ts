@@ -24,8 +24,8 @@ export function useTrending() {
     queryKey: ['trending'],
     queryFn: async () => {
       const client = createBackendClient();
-      const response = await client.get('/sentiment/trending');
-      return response.data.data as TrendingResponse;
+      const response = await client.get<{ data: TrendingResponse }>('/sentiment/trending');
+      return response.data.data;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

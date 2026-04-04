@@ -22,10 +22,10 @@ export function useAnalystConsensus(ticker: string) {
     queryKey: ['analystConsensus', ticker],
     queryFn: async () => {
       const client = createBackendClient();
-      const response = await client.get('/analyst', {
+      const response = await client.get<{ data: AnalystConsensusData }>('/analyst', {
         params: { ticker },
       });
-      return response.data.data as AnalystConsensusData;
+      return response.data.data;
     },
     enabled: !!ticker,
     staleTime: 30 * 60 * 1000, // 30 minutes

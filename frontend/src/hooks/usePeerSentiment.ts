@@ -26,10 +26,10 @@ export function usePeerSentiment(ticker: string) {
     queryKey: ['peer-sentiment', ticker, sectorEtf],
     queryFn: async () => {
       const client = createBackendClient();
-      const response = await client.get('/sentiment/peers', {
+      const response = await client.get<{ data: PeerSentimentData }>('/sentiment/peers', {
         params: { ticker, sectorEtf, sectorName },
       });
-      return response.data.data as PeerSentimentData;
+      return response.data.data;
     },
     enabled: !!ticker && !!sectorEtf,
     staleTime: 30 * 60 * 1000, // 30 minutes
