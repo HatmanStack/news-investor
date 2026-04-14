@@ -9,6 +9,26 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-04-14
+
+### Added
+
+- Self-calibrating publisher reliability: weekly `SignalCalibrationFunction` Lambda computes Bayesian-blended reliability scores from T+3 price deltas. Daily aggregation accumulates per-publisher accuracy stats (`PUBLISHER_STATS#` entities). Dynamic `reliabilityIndex` stored in `PUBLISHER#` entities replaces static publisher authority weight in signal scores.
+- **[Pro]** Social sentiment integration: `GET /social` endpoint fetching Reddit/X mention counts and sentiment scores from Finnhub. `SOCIAL#` DynamoDB entities with 30-day TTL. `SocialSentimentCard` on sentiment tab displaying per-ticker social buzz.
+- **[Pro]** Insider trading overlay: SEC Form 4 filings fetched from Finnhub in sentiment worker, filtered (option exercises removed), role-weighted (CEO 1.0 to Other 0.5), and aggregated to `insiderNetSentiment` field on `DAILY#` entities with 10-trading-day half-life decay. Insider conviction column on `AggregateSentimentCard`. Buy/sell markers on price chart via `useInsiderOverlay`.
+- **[Pro]** Portfolio risk analytics: `GET /portfolio/risk` endpoint computing Portfolio Beta (vs SPY), parametric VaR, historical VaR, and Pearson correlation matrix from 90 days of `HIST#` price data. `RiskHeatmapCard` with color-coded correlation grid (blue for negative/hedge, green to red for increasing positive correlation). `RiskAlertsCard` highlighting high-correlation pairs and VaR divergence.
+- Adaptive ML feature selection gate: F-test (p < 0.10) dynamically includes/excludes features per prediction horizon, replacing the hardcoded 8-feature/4-feature split. `social_score` and `insider_net_sentiment` available as candidate features. Gate applies independently to NEXT, WEEK, and MONTH horizons.
+- `portfolio_risk`, `social_sentiment`, and `insider_data` feature flags in tier service
+
+### Changed
+
+- WEEK/MONTH prediction horizons no longer hardcoded to price-only model; features that pass the F-test gate on subsampled data are included
+- Signal score service accepts optional `reliabilityOverrides` map; sentiment processing pre-fetches `PUBLISHER#` entities in batch with graceful fallback to static tier scores
+- Sentiment worker runs social sentiment fetch and insider annotation as non-fatal post-processing steps after main sentiment analysis
+- Risk computation uses sample variance (Bessel's correction) instead of population variance
+- Prediction service reads `sentimentAvailability` from most recent data row instead of oldest
+- Community tier stub updated with three new feature flags
+
 ## [2.12.0] - 2026-03-28
 
 ### Fixed
