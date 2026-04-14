@@ -21,6 +21,7 @@ import {
 import { analyzeAspects } from './aspectAnalysis.service.js';
 import { getMlSentiment } from './mlSentiment.service.js';
 import { calculateSignalScoresBatch, type ArticleMetadata } from './signalScore.service.js';
+import { batchGetPublisherReliabilities } from '../repositories/publisherReliability.repository.js';
 import { isMaterialEvent } from '../types/event.types.js';
 import type { EventType } from '../types/event.types.js';
 import type { AspectBreakdown } from '../types/aspect.types.js';
@@ -279,13 +280,14 @@ async function classifyEvents(
 function calculateArticleSignalScores(
   ticker: string,
   articles: NewsCacheItem[],
+  reliabilityOverrides?: Map<string, number>,
 ): Map<string, number> {
   const articleMetadata: ArticleMetadata[] = articles.map((item) => ({
     publisher: item.article.publisher,
     title: item.article.title || '',
     body: item.article.description || '',
   }));
-  const signalScoreResults = calculateSignalScoresBatch(articleMetadata);
+  const signalScoreResults = calculateSignalScoresBatch(articleMetadata, reliabilityOverrides);
 
   const signalScoreMap = new Map<string, number>();
   articles.forEach((item, index) => {
@@ -608,7 +610,28 @@ async function analyzeArticles(
   }
 
   const eventTypeMap = await classifyEvents(ticker, articles);
-  const signalScoreMap = calculateArticleSignalScores(ticker, articles);
+
+  // Pre-fetch dynamic publisher reliability scores (graceful degradation on failure)
+  let reliabilityOverrides: Map<string, number> | undefined;
+  try {
+    const uniquePublishers = [
+      ...new Set(articles.map((a) => a.article.publisher).filter((p): p is string => Boolean(p))),
+    ];
+    if (uniquePublishers.length > 0) {
+      const reliabilityMap = await batchGetPublisherReliabilities(uniquePublishers);
+      reliabilityOverrides = new Map<string, number>();
+      for (const [name, item] of reliabilityMap) {
+        reliabilityOverrides.set(name, item.reliabilityIndex);
+      }
+    }
+  } catch (error) {
+    logger.warn('Failed to fetch publisher reliabilities, using static scores', {
+      ticker,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const signalScoreMap = calculateArticleSignalScores(ticker, articles, reliabilityOverrides);
   const [aspectMap, mlScoreMap] = await Promise.all([
     analyzeAspectsBatch(ticker, articles, eventTypeMap),
     analyzeMlSentimentBatch(ticker, articles, eventTypeMap),

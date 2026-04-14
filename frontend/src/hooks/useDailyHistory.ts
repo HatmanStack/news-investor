@@ -17,6 +17,7 @@ export interface DailyHistoryItem {
   materialEventCount: number;
   eventCounts?: Record<string, number>;
   avgSignalScore?: number;
+  insiderNetSentiment?: number;
 }
 
 const PAGE_SIZE_DAYS = 30;

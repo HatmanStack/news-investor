@@ -5,6 +5,7 @@
 import {
   buildFeatureMatrix,
   buildPriceOnlyFeatureMatrix,
+  buildCandidateFeatureMatrix,
   createLabels,
   validateFeatureMatrix,
   validateLabels,
@@ -451,6 +452,147 @@ describe('Preprocessing', () => {
 
     it('should have price-only names matching price-only count', () => {
       expect(PRICE_ONLY_FEATURE_NAMES.length).toBe(PRICE_ONLY_FEATURE_COUNT);
+    });
+  });
+
+  describe('buildCandidateFeatureMatrix', () => {
+    const baseInput: PredictionInput = {
+      ticker: 'TEST',
+      close: [150.0, 152.0, 151.0, 153.0, 154.0, 155.0, 156.0, 157.0, 158.0, 159.0, 160.0],
+      volume: [
+        100000000, 95000000, 98000000, 97000000, 96000000, 99000000, 100000000, 101000000,
+        102000000, 103000000, 104000000,
+      ],
+      eventType: [
+        'EARNINGS',
+        'M&A',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+        'GENERAL',
+      ],
+      aspectScore: [0.5, -0.3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      mlScore: [0.7, -0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    };
+
+    it('should produce 10 columns with all features present', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [0.5, 0.3, 0.2, null, 0.1, 0, -0.1, null, 0.4, 0.2, 0.1],
+        insiderNetSentiment: [0.3, null, 0.2, 0.1, null, 0, -0.1, 0.4, null, 0.2, 0.1],
+      };
+
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
+
+      expect(matrix).toHaveLength(11);
+      expect(matrix[0]).toHaveLength(10); // 8 base + social_score + insider_net_sentiment
+      expect(featureNames).toHaveLength(10);
+      expect(featureNames).toContain('social_score');
+      expect(featureNames).toContain('insider_net_sentiment');
+    });
+
+    it('should produce 9 columns with only social data', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [0.5, 0.3, null, null, 0.1, 0, -0.1, null, 0.4, 0.2, 0.1],
+      };
+
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
+
+      expect(matrix).toHaveLength(11);
+      expect(matrix[0]).toHaveLength(9); // 8 base + social_score
+      expect(featureNames).toHaveLength(9);
+      expect(featureNames).toContain('social_score');
+      expect(featureNames).not.toContain('insider_net_sentiment');
+    });
+
+    it('should produce 9 columns with only insider data', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        insiderNetSentiment: [0.3, null, 0.2, 0.1, null, 0, -0.1, 0.4, null, 0.2, 0.1],
+      };
+
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
+
+      expect(matrix).toHaveLength(11);
+      expect(matrix[0]).toHaveLength(9); // 8 base + insider_net_sentiment
+      expect(featureNames).toHaveLength(9);
+      expect(featureNames).toContain('insider_net_sentiment');
+      expect(featureNames).not.toContain('social_score');
+    });
+
+    it('should produce 8 columns with neither social nor insider data', () => {
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(baseInput);
+
+      expect(matrix).toHaveLength(11);
+      expect(matrix[0]).toHaveLength(8); // 8 base only
+      expect(featureNames).toHaveLength(8);
+      expect(featureNames).not.toContain('social_score');
+      expect(featureNames).not.toContain('insider_net_sentiment');
+    });
+
+    it('should handle null values in social/insider arrays by replacing with 0', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [null, null, null, null, null, null, null, null, null, null, 0.5],
+        insiderNetSentiment: [0.3, null, null, null, null, null, null, null, null, null, null],
+      };
+
+      const { matrix } = buildCandidateFeatureMatrix(input);
+
+      // socialScore has 1 non-null entry -> included
+      // insiderNetSentiment has 1 non-null entry -> included
+      expect(matrix[0]).toHaveLength(10);
+
+      // Null social scores should be 0 in the matrix
+      expect(matrix[0]![8]).toBe(0); // first social entry is null -> 0
+      expect(matrix[10]![8]).toBe(0.5); // last social entry is 0.5
+    });
+
+    it('should exclude social/insider when arrays are all null', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [null, null, null, null, null, null, null, null, null, null, null],
+        insiderNetSentiment: [null, null, null, null, null, null, null, null, null, null, null],
+      };
+
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
+
+      expect(matrix[0]).toHaveLength(8); // no social/insider included
+      expect(featureNames).not.toContain('social_score');
+      expect(featureNames).not.toContain('insider_net_sentiment');
+    });
+
+    it('should have feature names matching matrix column order', () => {
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [0.5, 0.3, 0.2, null, 0.1, 0, -0.1, null, 0.4, 0.2, 0.1],
+        insiderNetSentiment: [0.3, null, 0.2, 0.1, null, 0, -0.1, 0.4, null, 0.2, 0.1],
+      };
+
+      const { featureNames } = buildCandidateFeatureMatrix(input);
+
+      // First 8 should be the base features
+      expect(featureNames.slice(0, 8)).toEqual([...FEATURE_NAMES]);
+      expect(featureNames[8]).toBe('social_score');
+      expect(featureNames[9]).toBe('insider_net_sentiment');
+    });
+
+    it('should not modify existing buildFeatureMatrix output', () => {
+      // Verify backward compatibility
+      const fullMatrix = buildFeatureMatrix(baseInput);
+      const { matrix: candidateMatrix } = buildCandidateFeatureMatrix(baseInput);
+
+      // Without social/insider, candidate matrix should match full matrix
+      expect(candidateMatrix).toHaveLength(fullMatrix.length);
+      for (let i = 0; i < fullMatrix.length; i++) {
+        expect(candidateMatrix[i]).toEqual(fullMatrix[i]);
+      }
     });
   });
 });

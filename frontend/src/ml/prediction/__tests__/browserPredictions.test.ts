@@ -138,6 +138,64 @@ describe('browserPredictions', () => {
     expect(result).toBeNull();
   });
 
+  it('passes social and insider data to getStockPredictions', async () => {
+    const stockData = makeStockData(50);
+    StockRepo.findByTickerAndDateRange.mockResolvedValue(stockData);
+
+    getStockPredictions.mockResolvedValue({ next: '0.5', week: null, month: null, ticker: 'AAPL' });
+    parsePredictionResponse.mockReturnValue({
+      nextDay: 0.5,
+      twoWeeks: null,
+      oneMonth: null,
+      ticker: 'AAPL',
+    });
+
+    const sentimentData = makeSentimentData(50);
+    // Add social and insider data to some entries
+    sentimentData[0].socialScore = 0.6;
+    sentimentData[0].insiderNetSentiment = 0.3;
+    sentimentData[5].socialScore = -0.2;
+    sentimentData[10].insiderNetSentiment = -0.5;
+
+    await generateBrowserPredictions('AAPL', sentimentData, 60);
+
+    expect(getStockPredictions).toHaveBeenCalled();
+    const callArgs = getStockPredictions.mock.calls[0];
+    // socialScores is 7th arg (index 6), insiderScores is 8th arg (index 7)
+    const socialScores = callArgs[6];
+    const insiderScores = callArgs[7];
+    expect(socialScores).toBeDefined();
+    expect(insiderScores).toBeDefined();
+    // First entry should have the social score
+    expect(socialScores[0]).toBe(0.6);
+    // First entry should have the insider score
+    expect(insiderScores[0]).toBe(0.3);
+  });
+
+  it('passes null for social/insider when not available', async () => {
+    const stockData = makeStockData(50);
+    StockRepo.findByTickerAndDateRange.mockResolvedValue(stockData);
+
+    getStockPredictions.mockResolvedValue({ next: '0.5', week: null, month: null, ticker: 'AAPL' });
+    parsePredictionResponse.mockReturnValue({
+      nextDay: 0.5,
+      twoWeeks: null,
+      oneMonth: null,
+      ticker: 'AAPL',
+    });
+
+    // No social/insider data on any entries
+    const sentimentData = makeSentimentData(50);
+    await generateBrowserPredictions('AAPL', sentimentData, 60);
+
+    const callArgs = getStockPredictions.mock.calls[0];
+    const socialScores = callArgs[6];
+    const insiderScores = callArgs[7];
+    // All entries should be null (no data)
+    expect(socialScores.every((s: number | null) => s === null)).toBe(true);
+    expect(insiderScores.every((s: number | null) => s === null)).toBe(true);
+  });
+
   it('extracts dominant event type from eventCounts', async () => {
     const stockData = makeStockData(50);
     StockRepo.findByTickerAndDateRange.mockResolvedValue(stockData);

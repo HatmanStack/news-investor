@@ -211,6 +211,20 @@ export interface CombinedWordDetails {
    * Combines publisher authority, headline quality, volume context, and recency
    */
   avgSignalScore?: number | null;
+
+  /**
+   * Social sentiment composite score from Reddit/X for this day.
+   * Range: -1 to +1
+   * null if no social data available.
+   */
+  socialScore?: number | null;
+
+  /**
+   * Insider net sentiment from SEC Form 4 filings for this day.
+   * Range: -1 (net selling) to +1 (net buying)
+   * null if no insider data available.
+   */
+  insiderNetSentiment?: number | null;
 }
 
 /**

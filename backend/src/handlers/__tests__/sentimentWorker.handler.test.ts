@@ -23,6 +23,28 @@ jest.unstable_mockModule('../../repositories/sentimentJobs.repository.js', () =>
   markJobFailed: mockMarkJobFailed,
 }));
 
+jest.unstable_mockModule('../../services/earningsProximity.service.js', () => ({
+  annotateEarningsProximity: jest
+    .fn<(...args: unknown[]) => Promise<void>>()
+    .mockResolvedValue(undefined),
+}));
+
+jest.unstable_mockModule('../../services/trending.service.js', () => ({
+  recomputeTrending: jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(undefined),
+}));
+
+jest.unstable_mockModule('../../services/socialSentiment.service.js', () => ({
+  fetchAndStoreSocialSentiment: jest
+    .fn<(...args: unknown[]) => Promise<number>>()
+    .mockResolvedValue(0),
+}));
+
+jest.unstable_mockModule('../../services/insiderAnnotation.service.js', () => ({
+  annotateInsiderSentiment: jest
+    .fn<(...args: unknown[]) => Promise<void>>()
+    .mockResolvedValue(undefined),
+}));
+
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
   runWithContext: jest.fn((_ctx: unknown, fn: () => unknown) => fn()),

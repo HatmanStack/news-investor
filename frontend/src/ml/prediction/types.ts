@@ -40,6 +40,20 @@ export interface PredictionInput {
    * Defaults to 0 in the feature matrix.
    */
   mlScore?: (number | null)[];
+
+  /**
+   * Daily social sentiment composite score from Reddit/X.
+   * Range: -1 (very negative) to +1 (very positive)
+   * null entries indicate days with no social data.
+   */
+  socialScore?: (number | null)[];
+
+  /**
+   * Daily insider net sentiment from SEC Form 4 filings.
+   * Range: -1 (very negative) to +1 (very positive)
+   * null entries indicate days with no insider data.
+   */
+  insiderNetSentiment?: (number | null)[];
 }
 
 /**
@@ -52,6 +66,13 @@ export interface FeatureImportance {
   category: 'sentiment' | 'price'; // Grouping for simplified view
 }
 
+export interface GateDiagnosticEntry {
+  name: string;
+  fStat: number;
+  pValue: number;
+  selected: boolean;
+}
+
 export interface HorizonDiagnostics {
   featureImportance: FeatureImportance[]; // Sorted by percentage descending
   modelType: 'ensemble' | 'price_only'; // Which model was used
@@ -59,6 +80,7 @@ export interface HorizonDiagnostics {
   sampleCount: number; // Number of training samples
   cvScore?: number; // Walk-forward CV accuracy (0-1), if computed
   holdoutScore?: number; // Holdout validation accuracy (0-1), if computed
+  gateDiagnostics?: GateDiagnosticEntry[]; // Feature gate pass/fail per candidate
 }
 
 export interface DiagnosticsOutput {

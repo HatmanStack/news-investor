@@ -44,6 +44,17 @@ describe('computeAggregateSentiment', () => {
     expect(result.neutralCount).toBe(1);
   });
 
+  it('includes stocks with insiderNetSentiment of 0 (balanced buys/sells)', () => {
+    const stocks: PortfolioStockData[] = [
+      { ticker: 'AAPL', name: 'Apple', sentimentScore: 0.5, insiderNetSentiment: 0.4 },
+      { ticker: 'GOOG', name: 'Alphabet', sentimentScore: 0.3, insiderNetSentiment: 0 },
+      { ticker: 'MSFT', name: 'Microsoft', sentimentScore: 0.1, insiderNetSentiment: -0.2 },
+    ];
+    const result = computeAggregateSentiment(stocks)!;
+    expect(result.insiderDataCount).toBe(3);
+    expect(result.insiderSentiment).toBeCloseTo((0.4 + 0 + -0.2) / 3);
+  });
+
   it('includes only stocks with defined sentimentScore', () => {
     const stocks: PortfolioStockData[] = [
       { ticker: 'AAPL', name: 'Apple', sentimentScore: 0.5 },

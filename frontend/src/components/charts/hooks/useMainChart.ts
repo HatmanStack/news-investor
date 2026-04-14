@@ -19,6 +19,7 @@ import type {
 } from 'lightweight-charts';
 import { addPrimarySeries, addBollingerBands, addComparisonSeries } from './chartSeries';
 import { renderAnnotations, setupAnnotationInteraction } from './chartAnnotations';
+import { buildInsiderMarkers, type InsiderMarker } from './insiderMarkers';
 import type { ChartTheme, AnnotationData, ComparisonSeriesData } from './types';
 
 export interface UseMainChartOptions {
@@ -42,6 +43,7 @@ export interface UseMainChartOptions {
   onAnnotationDeleted?: (id: string) => void;
   isDeleteMode?: boolean;
   comparisonSeries?: ComparisonSeriesData[];
+  insiderMarkers?: InsiderMarker[];
 }
 
 export function useMainChart(options: UseMainChartOptions): React.RefObject<IChartApi | null> {
@@ -171,6 +173,22 @@ export function useMainChart(options: UseMainChartOptions): React.RefObject<ICha
       });
     }
   }, [options.annotations, options.activeTool, options.isDeleteMode]);
+
+  // Separate insider markers effect -- updates markers without rebuilding chart
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || !options.insiderMarkers) return;
+
+    if (options.insiderMarkers.length === 0) return;
+
+    try {
+      const markers = buildInsiderMarkers(options.insiderMarkers);
+      // lightweight-charts setMarkers expects SeriesMarker[]
+      (series as unknown as { setMarkers: (m: unknown[]) => void }).setMarkers(markers);
+    } catch {
+      // setMarkers may not be available on all series types
+    }
+  }, [options.insiderMarkers]);
 
   return chartRef;
 }

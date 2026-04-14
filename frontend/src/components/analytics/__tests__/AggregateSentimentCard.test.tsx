@@ -4,6 +4,10 @@ import { PaperProvider } from 'react-native-paper';
 import { AggregateSentimentCard } from '../AggregateSentimentCard';
 import type { AggregateSentiment } from '@/utils/portfolio/analyticsCalculator';
 
+jest.mock('@/features/tier', () => ({
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 function renderWithPaper(ui: React.ReactElement) {
   return render(<PaperProvider>{ui}</PaperProvider>);
 }
@@ -49,8 +53,51 @@ describe('AggregateSentimentCard', () => {
       bullishCount: 0,
       bearishCount: 0,
       neutralCount: 2,
+      insiderDataCount: 0,
     };
     renderWithPaper(<AggregateSentimentCard data={data} />);
     expect(screen.getByText('+0.02')).toBeTruthy();
+  });
+
+  it('renders insider conviction with positive data', () => {
+    const data: AggregateSentiment = {
+      averageScore: 0.35,
+      stockCount: 5,
+      bullishCount: 3,
+      bearishCount: 1,
+      neutralCount: 1,
+      insiderSentiment: 0.45,
+      insiderDataCount: 3,
+    };
+    renderWithPaper(<AggregateSentimentCard data={data} />);
+    expect(screen.getByText('Insider Conviction')).toBeTruthy();
+    expect(screen.getByText('+0.45')).toBeTruthy();
+  });
+
+  it('renders insider conviction N/A when no data', () => {
+    const data: AggregateSentiment = {
+      averageScore: 0.35,
+      stockCount: 5,
+      bullishCount: 3,
+      bearishCount: 1,
+      neutralCount: 1,
+      insiderDataCount: 0,
+    };
+    renderWithPaper(<AggregateSentimentCard data={data} />);
+    expect(screen.getByText('N/A')).toBeTruthy();
+  });
+
+  it('renders insider conviction with negative data', () => {
+    const data: AggregateSentiment = {
+      averageScore: -0.1,
+      stockCount: 3,
+      bullishCount: 0,
+      bearishCount: 2,
+      neutralCount: 1,
+      insiderSentiment: -0.3,
+      insiderDataCount: 2,
+    };
+    renderWithPaper(<AggregateSentimentCard data={data} />);
+    expect(screen.getByText('-0.30')).toBeTruthy();
   });
 });

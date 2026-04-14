@@ -543,6 +543,48 @@ Resources:
       AlarmActions:
         - !Ref CostAnomalySNSTopic
 
+  SignalCalibrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-calibration'
+      CodeUri: ./
+      Handler: dist/calibration.handler
+      MemorySize: 512
+      Timeout: 60
+      Description: Weekly signal calibration (publisher reliability scoring)
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref ReactStocksTable
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt ReactStocksTable.Arn
+                - !Sub '${ReactStocksTable.Arn}/index/EntityTypeIndex'
+
+  WeeklyCalibrationSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: 'Trigger weekly signal calibration on Sunday midnight UTC'
+      ScheduleExpression: 'cron(0 0 ? * SUN *)'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SignalCalibrationFunction.Arn
+          Id: WeeklyCalibrationTarget
+          Input: '{"source": "events.schedule", "action": "calibrate"}'
+
+  WeeklyCalibrationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SignalCalibrationFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt WeeklyCalibrationSchedule.Arn
+
 Outputs:
   ReactStocksApiUrl:
     Description: API Gateway endpoint URL

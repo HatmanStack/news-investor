@@ -91,6 +91,43 @@ describe('DailySentimentAggregateRepository', () => {
       });
     });
 
+    it('returns insiderNetSentiment when present', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'DAILY#AAPL',
+        sk: 'DATE#2025-01-15',
+        entityType: 'DAILY',
+        ticker: 'AAPL',
+        date: '2025-01-15',
+        eventCounts: {},
+        insiderNetSentiment: 0.75,
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getDailyAggregate('AAPL', '2025-01-15');
+
+      expect(result).not.toBeNull();
+      expect(result?.insiderNetSentiment).toBe(0.75);
+    });
+
+    it('handles undefined insiderNetSentiment (backward compatibility)', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'DAILY#AAPL',
+        sk: 'DATE#2025-01-15',
+        entityType: 'DAILY',
+        ticker: 'AAPL',
+        date: '2025-01-15',
+        eventCounts: {},
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getDailyAggregate('AAPL', '2025-01-15');
+
+      expect(result).not.toBeNull();
+      expect(result?.insiderNetSentiment).toBeUndefined();
+    });
+
     it('handles undefined earningsProximity (backward compatibility)', async () => {
       mockGetItem.mockResolvedValueOnce({
         pk: 'DAILY#AAPL',
@@ -131,6 +168,23 @@ describe('DailySentimentAggregateRepository', () => {
           ticker: 'AAPL',
           date: '2025-01-15',
           eventCounts: { EARNINGS: 2, GENERAL: 5 },
+        }),
+      );
+    });
+
+    it('includes insiderNetSentiment in put', async () => {
+      mockPutItem.mockResolvedValueOnce(undefined);
+
+      await putDailyAggregate({
+        ticker: 'AAPL',
+        date: '2025-01-15',
+        eventCounts: { EARNINGS: 1 },
+        insiderNetSentiment: 0.65,
+      });
+
+      expect(mockPutItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          insiderNetSentiment: 0.65,
         }),
       );
     });

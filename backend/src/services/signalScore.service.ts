@@ -113,29 +113,39 @@ export interface SignalBreakdown {
 }
 
 /**
- * Get publisher authority score
+ * Get the static publisher tier score for a given publisher name.
+ * Used by the signal calibration service for Bayesian prior.
  */
-function getPublisherScore(publisher?: string): number {
-  if (!publisher) return DEFAULT_PUBLISHER_SCORE;
-
-  // Try exact match first
+export function getStaticPublisherScore(publisher: string): number {
   if (PUBLISHER_SCORES[publisher] !== undefined) {
     return PUBLISHER_SCORES[publisher];
   }
-
-  // Try case-insensitive match
   const normalized = publisher.toLowerCase();
   for (const [key, score] of Object.entries(PUBLISHER_SCORES)) {
     if (key.toLowerCase() === normalized) {
       return score;
     }
-    // Partial match (e.g., "Reuters" in "Reuters News")
     if (normalized.includes(key.toLowerCase())) {
       return score;
     }
   }
-
   return DEFAULT_PUBLISHER_SCORE;
+}
+
+/**
+ * Get publisher authority score, checking dynamic overrides first.
+ */
+function getPublisherScore(publisher?: string, reliabilityOverrides?: Map<string, number>): number {
+  if (!publisher) return DEFAULT_PUBLISHER_SCORE;
+
+  // Check dynamic overrides first
+  if (reliabilityOverrides) {
+    const override = reliabilityOverrides.get(publisher);
+    if (override !== undefined) return override;
+  }
+
+  // Fall back to static scores
+  return getStaticPublisherScore(publisher);
 }
 
 /**
@@ -205,13 +215,17 @@ function getDepthScore(body?: string): number {
  * Calculate the overall signal score for an article
  *
  * @param article - Article metadata (publisher, title, body)
+ * @param reliabilityOverrides - Optional map of publisher name -> dynamic reliability score
  * @returns Signal score (0-1) and breakdown
  */
-function calculateSignalScore(article: ArticleMetadata): {
+function calculateSignalScore(
+  article: ArticleMetadata,
+  reliabilityOverrides?: Map<string, number>,
+): {
   score: number;
   breakdown: SignalBreakdown;
 } {
-  const publisherScore = getPublisherScore(article.publisher);
+  const publisherScore = getPublisherScore(article.publisher, reliabilityOverrides);
   const headlineScore = getHeadlineScore(article.title);
   const depthScore = getDepthScore(article.body);
 
@@ -236,15 +250,17 @@ function calculateSignalScore(article: ArticleMetadata): {
  * Batch calculate signal scores for multiple articles
  *
  * @param articles - Array of article metadata
+ * @param reliabilityOverrides - Optional map of publisher name -> dynamic reliability score
  * @returns Map of article index -> signal score
  */
 export function calculateSignalScoresBatch(
   articles: ArticleMetadata[],
+  reliabilityOverrides?: Map<string, number>,
 ): Map<number, { score: number; breakdown: SignalBreakdown }> {
   const results = new Map<number, { score: number; breakdown: SignalBreakdown }>();
 
   articles.forEach((article, index) => {
-    results.set(index, calculateSignalScore(article));
+    results.set(index, calculateSignalScore(article, reliabilityOverrides));
   });
 
   return results;

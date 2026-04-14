@@ -33,9 +33,12 @@ import { SectorExposureCard } from '@/components/analytics/SectorExposureCard';
 import { PredictionConfidenceCard } from '@/components/analytics/PredictionConfidenceCard';
 import { SectorSentimentCard } from '@/components/analytics/SectorSentimentCard';
 import { SectorSentimentDetailCard } from '@/components/analytics/SectorSentimentDetailCard';
+import { RiskHeatmapCard } from '@/components/analytics/RiskHeatmapCard';
+import { RiskAlertsCard } from '@/components/analytics/RiskAlertsCard';
 import { ExportButton } from '@/components/portfolio/ExportButton';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { usePortfolioAnalytics } from '@/hooks/usePortfolioAnalytics';
+import { usePortfolioRisk } from '@/hooks/usePortfolioRisk';
 import { useFreshness, getFreshnessLabel } from '@/hooks/useFreshness';
 import { useStock } from '@/contexts/StockContext';
 import { syncAllData } from '@/services/sync/syncOrchestrator';
@@ -55,6 +58,7 @@ export default function PortfolioScreen() {
   const { setSelectedTicker, startDate, endDate } = useStock();
 
   const portfolioTickers = useMemo(() => portfolio.map((p) => p.ticker), [portfolio]);
+  const { data: riskData, isLoading: riskLoading } = usePortfolioRisk(portfolioTickers);
   const { freshnessMap } = useFreshness(portfolioTickers);
 
   const topSectorEtf = useMemo(() => {
@@ -329,6 +333,8 @@ export default function PortfolioScreen() {
               <PredictionConfidenceCard data={analytics.predictions} />
               <SectorSentimentCard data={analytics.sectorSentiment} />
               {topSectorEtf && <SectorSentimentDetailCard sectorEtf={topSectorEtf} />}
+              <RiskHeatmapCard data={riskData} isLoading={riskLoading} />
+              <RiskAlertsCard data={riskData} isLoading={riskLoading} />
             </ScrollView>
           )
         ) : (

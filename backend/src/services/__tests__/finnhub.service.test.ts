@@ -53,7 +53,8 @@ jest.unstable_mockModule('../../utils/error.util', () => {
 });
 
 // Dynamic import after mocks are registered
-const { fetchCompanyNews } = await import('../finnhub.service.js');
+const { fetchCompanyNews, fetchSocialSentiment, fetchInsiderTransactions } =
+  await import('../finnhub.service.js');
 
 // --- Helpers ---
 
@@ -278,6 +279,153 @@ describe('FinnhubService', () => {
         expect(result).toEqual(sampleArticles);
         expect(mockRecordSuccess).toHaveBeenCalledWith('finnhub');
         expect(mockRecordFailure).not.toHaveBeenCalled();
+      } finally {
+        globalThis.setTimeout = origSetTimeout;
+      }
+    });
+  });
+
+  describe('fetchSocialSentiment', () => {
+    const sampleSocialData = {
+      reddit: [
+        {
+          atTime: '2025-01-15T12:00:00Z',
+          mention: 50,
+          positiveScore: 0.6,
+          negativeScore: 0.2,
+          positiveMention: 30,
+          negativeMention: 10,
+          score: 0.4,
+        },
+      ],
+      twitter: [
+        {
+          atTime: '2025-01-15T12:00:00Z',
+          mention: 100,
+          positiveScore: 0.7,
+          negativeScore: 0.1,
+          positiveMention: 70,
+          negativeMention: 10,
+          score: 0.6,
+        },
+      ],
+    };
+
+    it('returns parsed social sentiment data', async () => {
+      mockFetchResponse(200, sampleSocialData);
+
+      const result = await fetchSocialSentiment(TICKER, FROM, TO, API_KEY);
+
+      expect(result).toEqual(sampleSocialData);
+    });
+
+    it('passes correct URL parameters', async () => {
+      const fetchMock = mockFetchResponse(200, sampleSocialData);
+
+      await fetchSocialSentiment(TICKER, FROM, TO, API_KEY);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const calledUrl = (fetchMock.mock.calls[0] as any)[0] as string;
+      expect(calledUrl).toContain('stock/social-sentiment');
+      expect(calledUrl).toContain(`symbol=${TICKER}`);
+      expect(calledUrl).toContain(`from=${FROM}`);
+      expect(calledUrl).toContain(`to=${TO}`);
+      expect(calledUrl).toContain(`token=${API_KEY}`);
+    });
+
+    it('returns empty data on 404', async () => {
+      mockFetchResponse(404);
+
+      const result = await fetchSocialSentiment(TICKER, FROM, TO, API_KEY);
+
+      expect(result).toEqual({ reddit: [], twitter: [] });
+    });
+
+    it('returns empty data when circuit is open', async () => {
+      mockGetCircuitState.mockResolvedValue(openCircuit());
+
+      const result = await fetchSocialSentiment(TICKER, FROM, TO, API_KEY);
+
+      expect(result).toEqual({ reddit: [], twitter: [] });
+    });
+
+    it('retries on 429 rate limit', async () => {
+      jest.useRealTimers();
+      const fetchMock = mockFetchResponse(429);
+
+      const origSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = ((fn: () => void) => origSetTimeout(fn, 0)) as typeof setTimeout;
+
+      try {
+        await expect(fetchSocialSentiment(TICKER, FROM, TO, API_KEY)).rejects.toThrow(
+          expect.objectContaining({ name: 'APIError', statusCode: 429 }),
+        );
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        globalThis.setTimeout = origSetTimeout;
+      }
+    });
+  });
+
+  describe('fetchInsiderTransactions', () => {
+    const sampleInsiderData = {
+      data: [
+        {
+          name: 'John Doe CEO',
+          share: 1000,
+          change: 1000,
+          filingDate: '2025-01-15',
+          transactionDate: '2025-01-14',
+          transactionPrice: 150,
+          transactionType: 'P - Purchase',
+          symbol: TICKER,
+        },
+      ],
+      symbol: TICKER,
+    };
+
+    it('returns parsed insider transaction data', async () => {
+      mockFetchResponse(200, sampleInsiderData);
+
+      const result = await fetchInsiderTransactions(TICKER, API_KEY);
+
+      expect(result).toEqual(sampleInsiderData);
+    });
+
+    it('passes correct URL parameters', async () => {
+      const fetchMock = mockFetchResponse(200, sampleInsiderData);
+
+      await fetchInsiderTransactions(TICKER, API_KEY);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const calledUrl = (fetchMock.mock.calls[0] as any)[0] as string;
+      expect(calledUrl).toContain('stock/insider-transactions');
+      expect(calledUrl).toContain(`symbol=${TICKER}`);
+      expect(calledUrl).toContain(`token=${API_KEY}`);
+    });
+
+    it('returns empty data on 404', async () => {
+      mockFetchResponse(404);
+
+      const result = await fetchInsiderTransactions(TICKER, API_KEY);
+
+      expect(result).toEqual({ data: [], symbol: TICKER });
+    });
+
+    it('retries on 429 rate limit', async () => {
+      jest.useRealTimers();
+      const fetchMock = mockFetchResponse(429);
+
+      const origSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = ((fn: () => void) => origSetTimeout(fn, 0)) as typeof setTimeout;
+
+      try {
+        await expect(fetchInsiderTransactions(TICKER, API_KEY)).rejects.toThrow(
+          expect.objectContaining({ name: 'APIError', statusCode: 429 }),
+        );
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
       } finally {
         globalThis.setTimeout = origSetTimeout;
       }

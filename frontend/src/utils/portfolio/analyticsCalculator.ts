@@ -10,6 +10,8 @@ export interface AggregateSentiment {
   bullishCount: number; // stocks with positive sentiment
   bearishCount: number; // stocks with negative sentiment
   neutralCount: number; // stocks with near-zero sentiment
+  insiderSentiment?: number; // portfolio-level average insiderNetSentiment
+  insiderDataCount: number; // how many tickers have insider data
 }
 
 export interface SectorExposure {
@@ -32,6 +34,7 @@ export interface PortfolioStockData {
   name: string;
   sector?: string;
   sentimentScore?: number; // latest daily sentiment (-1 to +1)
+  insiderNetSentiment?: number; // insider net sentiment from DAILY# entity (-1 to +1)
   nextDayDirection?: 'up' | 'down';
   nextDayProbability?: number;
   twoWeekDirection?: 'up' | 'down';
@@ -68,12 +71,19 @@ export function computeAggregateSentiment(stocks: PortfolioStockData[]): Aggrega
     }
   }
 
+  // Compute insider sentiment average
+  const withInsider = stocks.filter((s) => s.insiderNetSentiment !== undefined);
+  const insiderSum = withInsider.reduce((acc, s) => acc + s.insiderNetSentiment!, 0);
+  const insiderSentiment = withInsider.length > 0 ? insiderSum / withInsider.length : undefined;
+
   return {
     averageScore,
     stockCount: withSentiment.length,
     bullishCount,
     bearishCount,
     neutralCount,
+    insiderSentiment,
+    insiderDataCount: withInsider.length,
   };
 }
 

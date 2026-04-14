@@ -3,7 +3,11 @@
  * Fetches news from Finnhub API
  */
 
-import type { FinnhubNewsArticle } from '../types/finnhub.types';
+import type {
+  FinnhubNewsArticle,
+  FinnhubSocialSentiment,
+  FinnhubInsiderTransaction,
+} from '../types/finnhub.types';
 import { APIError } from '../utils/error.util';
 import { fetchWithTimeout } from '../utils/http.util.js';
 import * as CircuitBreakerRepo from '../repositories/circuitBreaker.repository.js';
@@ -122,6 +126,160 @@ export async function fetchCompanyNews(
 
     const data = (await response.json()) as FinnhubNewsArticle[];
     logger.info(`Fetched ${data.length} news articles for ${ticker}`);
+    await CircuitBreakerRepo.recordSuccess(CIRCUIT_SERVICE_FINNHUB);
+    return data;
+  };
+
+  try {
+    return await retryWithBackoff(fetchFn);
+  } catch (error) {
+    await CircuitBreakerRepo.recordFailure(
+      cbState.consecutiveFailures,
+      FINNHUB_FAILURE_THRESHOLD,
+      FINNHUB_COOLDOWN_MS,
+      CIRCUIT_SERVICE_FINNHUB,
+    );
+    throw error;
+  }
+}
+
+/**
+ * Fetch social sentiment data from Finnhub API (Reddit/X mentions)
+ * @param ticker - Stock ticker symbol
+ * @param from - Start date in YYYY-MM-DD format
+ * @param to - End date in YYYY-MM-DD format
+ * @param apiKey - Finnhub API key
+ * @returns Social sentiment data with Reddit and Twitter entries
+ */
+export async function fetchSocialSentiment(
+  ticker: string,
+  from: string,
+  to: string,
+  apiKey: string,
+): Promise<FinnhubSocialSentiment> {
+  const emptyResult: FinnhubSocialSentiment = { reddit: [], twitter: [] };
+
+  // Circuit breaker: fail-fast if Finnhub is rate-limited or down
+  const cbState = await CircuitBreakerRepo.getCircuitState(CIRCUIT_SERVICE_FINNHUB);
+  if (
+    cbState.consecutiveFailures >= FINNHUB_FAILURE_THRESHOLD &&
+    Date.now() < cbState.circuitOpenUntil
+  ) {
+    logger.warn(`Circuit open for ${CIRCUIT_SERVICE_FINNHUB}, skipping social sentiment call`);
+    return emptyResult;
+  }
+
+  const fetchFn = async () => {
+    logger.info(`Fetching social sentiment for ${ticker} from ${from} to ${to}`);
+
+    const params = new URLSearchParams({
+      symbol: ticker,
+      from,
+      to,
+      token: apiKey,
+    });
+    const url = `${FINNHUB_BASE_URL}/stock/social-sentiment?${params}`;
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { 'Content-Type': 'application/json' } },
+      FINNHUB_TIMEOUT,
+    );
+
+    if (!response.ok) {
+      const status = response.status;
+
+      if (status === 404) {
+        logger.info(`No social sentiment data found for ${ticker}`);
+        return emptyResult;
+      }
+
+      if (status === 429) {
+        throw new APIError('Rate limit exceeded. Please try again in a moment.', 429);
+      }
+
+      if (status === 401 || status === 403) {
+        throw new APIError('Invalid API key. Please check your Finnhub API key.', 401);
+      }
+
+      throw new APIError(`Failed to fetch social sentiment for ${ticker}`, status);
+    }
+
+    const data = (await response.json()) as FinnhubSocialSentiment;
+    logger.info(`Fetched social sentiment for ${ticker}`);
+    await CircuitBreakerRepo.recordSuccess(CIRCUIT_SERVICE_FINNHUB);
+    return data;
+  };
+
+  try {
+    return await retryWithBackoff(fetchFn);
+  } catch (error) {
+    await CircuitBreakerRepo.recordFailure(
+      cbState.consecutiveFailures,
+      FINNHUB_FAILURE_THRESHOLD,
+      FINNHUB_COOLDOWN_MS,
+      CIRCUIT_SERVICE_FINNHUB,
+    );
+    throw error;
+  }
+}
+
+/**
+ * Fetch insider transactions from Finnhub API (SEC Form 4 filings)
+ * @param ticker - Stock ticker symbol
+ * @param apiKey - Finnhub API key
+ * @returns Insider transaction data
+ */
+export async function fetchInsiderTransactions(
+  ticker: string,
+  apiKey: string,
+): Promise<FinnhubInsiderTransaction> {
+  const emptyResult: FinnhubInsiderTransaction = { data: [], symbol: ticker };
+
+  // Circuit breaker: fail-fast if Finnhub is rate-limited or down
+  const cbState = await CircuitBreakerRepo.getCircuitState(CIRCUIT_SERVICE_FINNHUB);
+  if (
+    cbState.consecutiveFailures >= FINNHUB_FAILURE_THRESHOLD &&
+    Date.now() < cbState.circuitOpenUntil
+  ) {
+    logger.warn(`Circuit open for ${CIRCUIT_SERVICE_FINNHUB}, skipping insider transactions call`);
+    return emptyResult;
+  }
+
+  const fetchFn = async () => {
+    logger.info(`Fetching insider transactions for ${ticker}`);
+
+    const params = new URLSearchParams({
+      symbol: ticker,
+      token: apiKey,
+    });
+    const url = `${FINNHUB_BASE_URL}/stock/insider-transactions?${params}`;
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { 'Content-Type': 'application/json' } },
+      FINNHUB_TIMEOUT,
+    );
+
+    if (!response.ok) {
+      const status = response.status;
+
+      if (status === 404) {
+        logger.info(`No insider transactions found for ${ticker}`);
+        return emptyResult;
+      }
+
+      if (status === 429) {
+        throw new APIError('Rate limit exceeded. Please try again in a moment.', 429);
+      }
+
+      if (status === 401 || status === 403) {
+        throw new APIError('Invalid API key. Please check your Finnhub API key.', 401);
+      }
+
+      throw new APIError(`Failed to fetch insider transactions for ${ticker}`, status);
+    }
+
+    const data = (await response.json()) as FinnhubInsiderTransaction;
+    logger.info(`Fetched insider transactions for ${ticker}`);
     await CircuitBreakerRepo.recordSuccess(CIRCUIT_SERVICE_FINNHUB);
     return data;
   };

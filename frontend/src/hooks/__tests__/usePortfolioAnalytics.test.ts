@@ -6,6 +6,11 @@ import { usePortfolio } from '../usePortfolio';
 import * as SymbolRepository from '@/database/repositories/symbol.repository';
 import * as CombinedWordRepository from '@/database/repositories/combinedWord.repository';
 
+const mockGet = jest.fn();
+
+jest.mock('@/services/api/backendClient', () => ({
+  createBackendClient: () => ({ get: mockGet }),
+}));
 jest.mock('../usePortfolio');
 jest.mock('@/features/tier', () => ({
   useTier: () => ({
@@ -39,6 +44,8 @@ function createWrapper() {
 describe('usePortfolioAnalytics', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default: daily-history returns empty data (no insider sentiment)
+    mockGet.mockResolvedValue({ data: { data: [] } });
   });
 
   it('returns null analytics when portfolio has 0 items', () => {
@@ -248,5 +255,78 @@ describe('usePortfolioAnalytics', () => {
     const sectorNames = result.current.analytics!.sectors.map((s) => s.sector);
     expect(sectorNames).toContain('Technology');
     expect(sectorNames).toContain('Financial Services');
+  });
+
+  it('populates insiderNetSentiment from daily-history endpoint', async () => {
+    mockUsePortfolio.mockReturnValue({
+      portfolio: [
+        { ticker: 'AAPL', name: 'Apple', next: '', wks: '', mnth: '' },
+        { ticker: 'GOOG', name: 'Alphabet', next: '', wks: '', mnth: '' },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isInPortfolio: jest.fn(),
+      addToPortfolio: jest.fn(),
+      removeFromPortfolio: jest.fn(),
+      updatePortfolio: {} as any,
+    });
+
+    mockGet.mockImplementation(async (_url: string, options?: { params?: { ticker?: string } }) => {
+      const ticker = options?.params?.ticker;
+      if (ticker === 'AAPL') {
+        return {
+          data: {
+            data: [
+              { date: '2026-04-12', sentimentScore: 0.5, insiderNetSentiment: 0.35 },
+              { date: '2026-04-11', sentimentScore: 0.4, insiderNetSentiment: 0.2 },
+            ],
+          },
+        };
+      }
+      if (ticker === 'GOOG') {
+        return {
+          data: {
+            data: [{ date: '2026-04-12', sentimentScore: -0.1, insiderNetSentiment: -0.15 }],
+          },
+        };
+      }
+      return { data: { data: [] } };
+    });
+
+    mockSymbolFindByTicker.mockResolvedValue({
+      ticker: 'X',
+      name: 'X',
+      sector: 'Technology',
+      longDescription: '',
+      exchangeCode: '',
+      startDate: '',
+      endDate: '',
+    });
+
+    mockCombinedWordFindLatest.mockResolvedValue({
+      ticker: 'X',
+      date: '2026-04-12',
+      positive: 5,
+      negative: 3,
+      sentimentNumber: 0.3,
+      sentiment: 'POS',
+      nextDay: 0,
+      twoWks: 0,
+      oneMnth: 0,
+      updateDate: '2026-04-12',
+    });
+
+    const { result } = renderHook(() => usePortfolioAnalytics(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.analytics).not.toBeNull();
+    });
+
+    // Insider sentiment should be the average of 0.35 (AAPL) and -0.15 (GOOG) = 0.1
+    expect(result.current.analytics!.sentiment!.insiderDataCount).toBe(2);
+    expect(result.current.analytics!.sentiment!.insiderSentiment).toBeCloseTo(0.1, 2);
   });
 });

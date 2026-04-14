@@ -25,6 +25,9 @@ const EntityPrefix = {
   WATCHLIST: 'WATCHLIST', // User watchlist item
   ALERT: 'ALERT', // Alert history
   TRENDING: 'TRENDING', // Trending sentiment feed
+  PUBLISHER_STATS: 'PUBLISHER_STATS', // Publisher accuracy statistics
+  PUBLISHER: 'PUBLISHER', // Publisher reliability scores
+  SOCIAL: 'SOCIAL', // Social sentiment data (Reddit/X)
 } as const;
 
 /**
@@ -36,6 +39,7 @@ export const SortKeyPrefix = {
   META: 'META',
   STATE: 'STATE',
   SNAP: 'SNAP',
+  RELIABILITY: 'RELIABILITY',
 } as const;
 
 // ============================================================
@@ -201,6 +205,8 @@ export interface DailySentimentItem extends BaseTableItem {
     earningsDate: string; // YYYY-MM-DD
     isPreEarnings: boolean;
   };
+  // Insider net sentiment (intelligence upgrade Phase 2)
+  insiderNetSentiment?: number; // -1 to +1, role-weighted and decay-adjusted
 }
 
 /**
@@ -365,6 +371,58 @@ export interface TrendingItem extends BaseTableItem {
 }
 
 // ============================================================
+// Publisher Entity Types
+// ============================================================
+
+/**
+ * Publisher stats item (running accuracy tallies)
+ * PK: PUBLISHER_STATS#{publisherName}, SK: META
+ */
+export interface PublisherStatsItem extends BaseTableItem {
+  entityType: 'PUBLISHER_STATS';
+  publisherName: string;
+  totalArticles: number;
+  correctPredictions: number;
+  weightedHits: number;
+  weightedTotal: number;
+  lastUpdated: string;
+}
+
+/**
+ * Publisher reliability item (computed dynamic scores)
+ * PK: PUBLISHER#{publisherName}, SK: RELIABILITY
+ */
+export interface PublisherReliabilityItem extends BaseTableItem {
+  entityType: 'PUBLISHER';
+  publisherName: string;
+  reliabilityIndex: number;
+  staticTierScore: number;
+  observationCount: number;
+  computedAt: string;
+}
+
+// ============================================================
+// Social Sentiment Entity Type
+// ============================================================
+
+/**
+ * Social sentiment item (Reddit/X mentions)
+ * PK: SOCIAL#AAPL, SK: DATE#2026-04-10
+ */
+export interface SocialSentimentItem extends BaseTableItem {
+  entityType: 'SOCIAL';
+  ticker: string;
+  date: string;
+  redditMentions: number;
+  redditScore: number; // normalized -1 to +1
+  twitterMentions: number;
+  twitterScore: number; // normalized -1 to +1
+  compositeScore: number; // weighted average of reddit + twitter
+  totalMentions: number; // sum of mentions (volume indicator)
+  ttl: number; // 30-day TTL
+}
+
+// ============================================================
 // Prediction Snapshot Entity Type
 // ============================================================
 
@@ -478,4 +536,20 @@ export function makeAlertHistorySK(timestamp: string, ticker: string): string {
 
 export function makeTrendingPK(): string {
   return `${EntityPrefix.TRENDING}#daily`;
+}
+
+export function makePublisherStatsPK(publisherName: string): string {
+  return `${EntityPrefix.PUBLISHER_STATS}#${publisherName}`;
+}
+
+export function makePublisherPK(publisherName: string): string {
+  return `${EntityPrefix.PUBLISHER}#${publisherName}`;
+}
+
+export function makeReliabilitySK(): string {
+  return SortKeyPrefix.RELIABILITY;
+}
+
+export function makeSocialPK(ticker: string): string {
+  return `${EntityPrefix.SOCIAL}#${ticker.toUpperCase()}`;
 }

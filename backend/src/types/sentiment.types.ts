@@ -258,4 +258,13 @@ export interface DailySentiment {
    * May be undefined if no articles have signal scores.
    */
   avgSignalScore?: number;
+
+  /**
+   * Insider net sentiment for this day.
+   * Aggregated from SEC Form 4 filings with role weighting and decay.
+   *
+   * Range: -1 (net selling) to +1 (net buying)
+   * May be undefined if no insider transaction data is available.
+   */
+  insiderNetSentiment?: number;
 }

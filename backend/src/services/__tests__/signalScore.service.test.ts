@@ -416,4 +416,44 @@ describe('SignalScoreService', () => {
       expect(result.score).toBeLessThanOrEqual(1);
     });
   });
+
+  describe('reliability overrides', () => {
+    it('uses dynamic override when provided', () => {
+      const articles: ArticleMetadata[] = [
+        { title: 'Test headline here for length', publisher: 'Reuters' },
+      ];
+      const overrides = new Map<string, number>([['Reuters', 0.9]]);
+
+      const results = calculateSignalScoresBatch(articles, overrides);
+
+      // With override, publisher score should be 0.9 instead of static 1.0
+      expect(results.get(0)!.breakdown.publisher).toBe(0.9);
+    });
+
+    it('falls back to static score when publisher not in overrides', () => {
+      const articles: ArticleMetadata[] = [
+        { title: 'Test headline here for length', publisher: 'Reuters' },
+      ];
+      const overrides = new Map<string, number>([['Bloomberg', 0.9]]);
+
+      const results = calculateSignalScoresBatch(articles, overrides);
+
+      // Reuters not in overrides, should use static score (1.0)
+      expect(results.get(0)!.breakdown.publisher).toBe(1.0);
+    });
+
+    it('uses all static scores when overrides map is empty', () => {
+      const articles: ArticleMetadata[] = [
+        { title: 'Test headline here for length', publisher: 'Reuters' },
+        { title: 'Test headline here for length', publisher: 'CNBC' },
+      ];
+      const overrides = new Map<string, number>();
+
+      const results = calculateSignalScoresBatch(articles, overrides);
+
+      // Backward compatible: empty overrides = static scores
+      expect(results.get(0)!.breakdown.publisher).toBe(1.0);
+      expect(results.get(1)!.breakdown.publisher).toBe(0.85);
+    });
+  });
 });

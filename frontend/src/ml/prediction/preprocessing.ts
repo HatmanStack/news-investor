@@ -302,6 +302,60 @@ export const FEATURE_NAMES = [
 ] as const;
 
 /**
+ * Build candidate feature matrix with dynamic feature count.
+ *
+ * Starts with the base 8 features and optionally adds social_score and
+ * insider_net_sentiment when data is available (at least one non-null entry).
+ *
+ * @param input - Raw prediction input data
+ * @returns Object with the feature matrix and corresponding feature names array
+ */
+export function buildCandidateFeatureMatrix(input: PredictionInput): {
+  matrix: FeatureMatrix;
+  featureNames: string[];
+} {
+  // Build the base 8-feature matrix
+  const baseMatrix = buildFeatureMatrix(input);
+  if (baseMatrix.length === 0) {
+    return { matrix: [], featureNames: [...FEATURE_NAMES] };
+  }
+
+  const n = input.close.length;
+  const featureNames: string[] = [...FEATURE_NAMES];
+
+  // Check if social data has any non-null entries
+  const hasSocial =
+    input.socialScore != null && input.socialScore.some((s) => s !== null && s !== undefined);
+
+  // Check if insider data has any non-null entries
+  const hasInsider =
+    input.insiderNetSentiment != null &&
+    input.insiderNetSentiment.some((s) => s !== null && s !== undefined);
+
+  if (!hasSocial && !hasInsider) {
+    return { matrix: baseMatrix, featureNames };
+  }
+
+  // Extend each row with additional features
+  const matrix: FeatureMatrix = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const row = [...baseMatrix[i]!];
+    if (hasSocial) {
+      row.push(input.socialScore![i] ?? 0);
+    }
+    if (hasInsider) {
+      row.push(input.insiderNetSentiment![i] ?? 0);
+    }
+    matrix[i] = row;
+  }
+
+  if (hasSocial) featureNames.push('social_score');
+  if (hasInsider) featureNames.push('insider_net_sentiment');
+
+  return { matrix, featureNames };
+}
+
+/**
  * Price-only feature count (used by ensemble price model)
  */
 export const PRICE_ONLY_FEATURE_COUNT = 4;
@@ -319,17 +373,22 @@ export const PRICE_ONLY_FEATURE_NAMES = [
 /**
  * Validate feature matrix shape
  *
+ * Validates that the matrix is non-empty, all rows have the same width,
+ * and all values are finite. Accepts any feature count (dynamic gate).
+ *
  * @param X - Feature matrix
+ * @param expectedFeatures - Optional expected feature count (defaults to FEATURE_COUNT for backward compat)
  * @throws Error if shape is invalid
  */
-export function validateFeatureMatrix(X: FeatureMatrix): void {
+export function validateFeatureMatrix(X: FeatureMatrix, expectedFeatures?: number): void {
   if (!X || X.length === 0) {
     throw new Error('Preprocessing: Feature matrix cannot be empty');
   }
 
   const nFeatures = X[0]!.length;
-  if (nFeatures !== FEATURE_COUNT) {
-    throw new Error(`Preprocessing: Expected ${FEATURE_COUNT} features, got ${nFeatures}`);
+  const expected = expectedFeatures ?? FEATURE_COUNT;
+  if (nFeatures !== expected) {
+    throw new Error(`Preprocessing: Expected ${expected} features, got ${nFeatures}`);
   }
 
   // Check all rows have same number of features

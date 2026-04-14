@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 import { useAppTheme, type AppTheme } from '@/hooks/useAppTheme';
+import { FeatureGate } from '@/features/tier';
 import type { AggregateSentiment } from '@/utils/portfolio/analyticsCalculator';
 
 interface AggregateSentimentCardProps {
@@ -11,6 +12,13 @@ interface AggregateSentimentCardProps {
 function getScoreColor(score: number, theme: AppTheme): string {
   if (score > 0.05) return theme.colors.primary;
   if (score < -0.05) return theme.colors.error;
+  return theme.colors.onSurfaceVariant;
+}
+
+function getInsiderColor(score: number | undefined, theme: AppTheme): string {
+  if (score === undefined) return theme.colors.onSurfaceVariant;
+  if (score > 0.1) return theme.colors.primary;
+  if (score < -0.1) return theme.colors.error;
   return theme.colors.onSurfaceVariant;
 }
 
@@ -55,6 +63,22 @@ export function AggregateSentimentCard({ data }: AggregateSentimentCardProps) {
                 {data.neutralCount} Neutral
               </Text>
             </View>
+            <FeatureGate feature="insider_data">
+              <View style={styles.insiderRow}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                  Insider Conviction
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    color: getInsiderColor(data.insiderSentiment, theme),
+                    fontWeight: '600',
+                  }}
+                >
+                  {data.insiderDataCount === 0 ? 'N/A' : formatScore(data.insiderSentiment ?? 0)}
+                </Text>
+              </View>
+            </FeatureGate>
           </View>
         )}
       </Card.Content>
@@ -81,5 +105,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginTop: 12,
+  },
+  insiderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e0e0e0',
   },
 });

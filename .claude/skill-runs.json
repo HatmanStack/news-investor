@@ -79,5 +79,16 @@
     "date": "2026-03-27",
     "plan": "2026-03-27-audit-news-investor-pro",
     "verdict": "GO"
+  },
+  {
+    "skill": "brainstorm",
+    "date": "2026-04-13",
+    "plan": "2026-04-13-intelligence-upgrade"
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-04-14",
+    "plan": "2026-04-13-intelligence-upgrade",
+    "verdict": "GO"
   }
 ]

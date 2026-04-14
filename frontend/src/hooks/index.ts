@@ -48,6 +48,17 @@ export type { EarningsImpactEvent } from './useEarningsImpact';
 export { useFreshness, getFreshnessLabel } from './useFreshness';
 export type { FreshnessData } from './useFreshness';
 
+// Portfolio risk hook
+export { usePortfolioRisk } from './usePortfolioRisk';
+export type { RiskAnalytics } from './usePortfolioRisk';
+
+// Insider overlay hook
+export { useInsiderOverlay } from './useInsiderOverlay';
+
+// Social sentiment hook
+export { useSocialSentiment } from './useSocialSentiment';
+export type { SocialSentimentData } from './useSocialSentiment';
+
 // Theme hook with extended types
 export { useAppTheme } from './useAppTheme';
 export type { AppTheme, AppColors } from './useAppTheme';

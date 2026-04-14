@@ -121,6 +121,9 @@ export async function generateBrowserPredictions(
     const aspectScores: number[] = [];
     const mlScores: (number | null)[] = [];
 
+    const socialScores: (number | null)[] = [];
+    const insiderScores: (number | null)[] = [];
+
     for (const day of trimmedSentiment) {
       let dominantEvent: EventType = 'GENERAL';
       if (day.eventCounts) {
@@ -145,9 +148,11 @@ export async function generateBrowserPredictions(
       eventTypes.push(dominantEvent);
       aspectScores.push(day.avgAspectScore ?? 0);
       mlScores.push(day.avgMlScore ?? null);
+      socialScores.push(day.socialScore ?? null);
+      insiderScores.push(day.insiderNetSentiment ?? null);
     }
 
-    // Run logistic regression ensemble
+    // Run logistic regression with feature selection gate
     const response = await getStockPredictions(
       ticker,
       closePrices,
@@ -155,6 +160,8 @@ export async function generateBrowserPredictions(
       eventTypes,
       aspectScores,
       mlScores,
+      socialScores,
+      insiderScores,
     );
 
     const parsed = parsePredictionResponse(response);

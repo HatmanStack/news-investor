@@ -13,6 +13,8 @@ import * as SentimentJobsRepository from './repositories/sentimentJobs.repositor
 import { logger, runWithContext, createRequestContext } from './utils/logger.util.js';
 import { annotateEarningsProximity } from './services/earningsProximity.service.js';
 import { recomputeTrending } from './services/trending.service.js';
+import { fetchAndStoreSocialSentiment } from './services/socialSentiment.service.js';
+import { annotateInsiderSentiment } from './services/insiderAnnotation.service.js';
 
 const sqsMessageSchema = z.object({
   jobId: z.string().min(1),
@@ -57,6 +59,23 @@ async function processRecord(record: SQSRecord): Promise<void> {
       await recomputeTrending();
     } catch (trendingError) {
       logger.warn('Trending recomputation failed (non-fatal)', { error: trendingError });
+    }
+
+    // Fetch and store social sentiment (non-fatal)
+    try {
+      const apiKey = process.env.FINNHUB_API_KEY;
+      if (apiKey) {
+        await fetchAndStoreSocialSentiment(ticker, startDate, endDate, apiKey);
+      }
+    } catch (socialError) {
+      logger.warn('Social sentiment fetch failed (non-fatal)', { error: socialError });
+    }
+
+    // Annotate DAILY# entities with insider sentiment (non-fatal)
+    try {
+      await annotateInsiderSentiment(ticker);
+    } catch (insiderError) {
+      logger.warn('Insider annotation failed (non-fatal)', { error: insiderError });
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

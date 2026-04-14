@@ -159,6 +159,7 @@ function transformToInternal(item: DailySentimentData): DailySentimentItem {
     oneMonthDirection: item.oneMonthDirection,
     oneMonthProbability: item.oneMonthProbability,
     earningsProximity: item.earningsProximity,
+    insiderNetSentiment: item.insiderNetSentiment,
     // No TTL - persistent data
     createdAt: now,
     updatedAt: now,
@@ -184,5 +185,6 @@ function transformToExternal(item: DailySentimentItem): DailySentimentData {
     oneMonthDirection: item.oneMonthDirection,
     oneMonthProbability: item.oneMonthProbability,
     earningsProximity: item.earningsProximity,
+    insiderNetSentiment: item.insiderNetSentiment,
   };
 }
