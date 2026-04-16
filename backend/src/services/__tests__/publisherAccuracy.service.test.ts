@@ -43,16 +43,16 @@ const { accumulatePublisherStats } = await import('../publisherAccuracy.service.
 function makeArticle(overrides: Partial<ArticleAnalysisItem>): ArticleAnalysisItem {
   return {
     pk: `ARTICLE#AAPL`,
-    sk: `HASH#abc#DATE#2026-04-07`,
+    sk: `HASH#abc#DATE#${ARTICLE_DATE}`,
     entityType: 'ARTICLE',
     ticker: 'AAPL',
     articleHash: 'abc',
-    date: '2026-04-07',
+    date: ARTICLE_DATE,
     publisher: 'Reuters',
     aspectScore: 0.6,
     signalScore: 0.8,
-    createdAt: '2026-04-07T12:00:00.000Z',
-    updatedAt: '2026-04-07T12:00:00.000Z',
+    createdAt: `${ARTICLE_DATE}T12:00:00.000Z`,
+    updatedAt: `${ARTICLE_DATE}T12:00:00.000Z`,
     ...overrides,
   };
 }
@@ -87,6 +87,21 @@ function makeHistItem(date: string, close: number): StockHistoricalItem {
   };
 }
 
+/** Compute a date string N days ago in YYYY-MM-DD format */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().split('T')[0]!;
+}
+
+// Article dates must fall within lookback (7d) and before cutoff (today - 5).
+// Using 6 days ago puts it safely in the window.
+const ARTICLE_DATE = daysAgo(6);
+const HIST_DATE_0 = ARTICLE_DATE;
+const HIST_DATE_1 = daysAgo(5);
+const HIST_DATE_2 = daysAgo(4);
+const HIST_DATE_3 = daysAgo(3);
+
 describe('PublisherAccuracyService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -99,7 +114,7 @@ describe('PublisherAccuracyService', () => {
     // T+3 price goes up: correct prediction
     const articles = [
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         aspectScore: 0.6,
         signalScore: 0.8,
         publisher: 'Reuters',
@@ -109,17 +124,17 @@ describe('PublisherAccuracyService', () => {
     ];
 
     // Step 1: queryByEntityType('DAILY') returns daily entities for ticker discovery
-    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', '2026-04-07')]);
+    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', ARTICLE_DATE)]);
 
     // Step 2: queryItems for articles per ticker, then for price data
     mockQueryItems
       .mockResolvedValueOnce(articles) // ARTICLE#AAPL query
       .mockResolvedValueOnce([
-        // HIST#AAPL query
-        makeHistItem('2026-04-07', 100),
-        makeHistItem('2026-04-08', 102),
-        makeHistItem('2026-04-09', 103),
-        makeHistItem('2026-04-10', 105),
+        // HIST#AAPL query (price goes up = correct for positive sentiment)
+        makeHistItem(HIST_DATE_0, 100),
+        makeHistItem(HIST_DATE_1, 102),
+        makeHistItem(HIST_DATE_2, 103),
+        makeHistItem(HIST_DATE_3, 105),
       ]);
 
     await accumulatePublisherStats();
@@ -131,7 +146,7 @@ describe('PublisherAccuracyService', () => {
     // Article with positive sentiment but price goes down
     const articles = [
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         aspectScore: 0.6,
         signalScore: 0.85,
         publisher: 'Bloomberg',
@@ -140,16 +155,16 @@ describe('PublisherAccuracyService', () => {
       }),
     ];
 
-    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', '2026-04-07')]);
+    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', ARTICLE_DATE)]);
 
     mockQueryItems
       .mockResolvedValueOnce(articles) // ARTICLE#AAPL query
       .mockResolvedValueOnce([
         // HIST#AAPL query (price went down)
-        makeHistItem('2026-04-07', 100),
-        makeHistItem('2026-04-08', 99),
-        makeHistItem('2026-04-09', 98),
-        makeHistItem('2026-04-10', 95),
+        makeHistItem(HIST_DATE_0, 100),
+        makeHistItem(HIST_DATE_1, 99),
+        makeHistItem(HIST_DATE_2, 98),
+        makeHistItem(HIST_DATE_3, 95),
       ]);
 
     await accumulatePublisherStats();
@@ -160,25 +175,25 @@ describe('PublisherAccuracyService', () => {
   it('skips articles before lastUpdated timestamp', async () => {
     const articles = [
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         publisher: 'Reuters',
-        createdAt: '2026-04-01T12:00:00.000Z',
+        createdAt: `${ARTICLE_DATE}T12:00:00.000Z`,
       }),
     ];
 
-    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', '2026-04-07')]);
+    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', ARTICLE_DATE)]);
 
     mockQueryItems
       .mockResolvedValueOnce(articles) // ARTICLE#AAPL query
       .mockResolvedValueOnce([
         // HIST#AAPL query
-        makeHistItem('2026-04-07', 100),
-        makeHistItem('2026-04-08', 102),
-        makeHistItem('2026-04-09', 103),
-        makeHistItem('2026-04-10', 105),
+        makeHistItem(HIST_DATE_0, 100),
+        makeHistItem(HIST_DATE_1, 102),
+        makeHistItem(HIST_DATE_2, 103),
+        makeHistItem(HIST_DATE_3, 105),
       ]);
 
-    // Publisher stats with lastUpdated after the article's date
+    // Publisher stats with lastUpdated after the article's date (today is always after ARTICLE_DATE)
     mockGetPublisherStats.mockResolvedValue({
       pk: 'PUBLISHER_STATS#Reuters',
       sk: 'META',
@@ -188,9 +203,9 @@ describe('PublisherAccuracyService', () => {
       correctPredictions: 7,
       weightedHits: 5.6,
       weightedTotal: 8.0,
-      lastUpdated: '2026-04-10',
-      createdAt: '2026-04-01T00:00:00.000Z',
-      updatedAt: '2026-04-10T00:00:00.000Z',
+      lastUpdated: daysAgo(0), // today — after the article date
+      createdAt: `${ARTICLE_DATE}T00:00:00.000Z`,
+      updatedAt: `${daysAgo(0)}T00:00:00.000Z`,
     });
 
     await accumulatePublisherStats();
@@ -201,12 +216,12 @@ describe('PublisherAccuracyService', () => {
   it('skips articles without publisher field', async () => {
     const articles = [
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         publisher: undefined,
       }),
     ];
 
-    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', '2026-04-07')]);
+    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', ARTICLE_DATE)]);
     mockQueryItems.mockResolvedValueOnce(articles); // ARTICLE#AAPL query
 
     await accumulatePublisherStats();
@@ -225,21 +240,21 @@ describe('PublisherAccuracyService', () => {
   it('groups by publisher and calls increment for each', async () => {
     const articles = [
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         publisher: 'Reuters',
         aspectScore: 0.5,
         signalScore: 0.8,
         articleHash: 'a1',
       }),
       makeArticle({
-        date: '2026-04-07',
+        date: ARTICLE_DATE,
         publisher: 'Reuters',
         aspectScore: -0.3,
         signalScore: 0.7,
         articleHash: 'a2',
       }),
       makeArticle({
-        date: '2026-04-08',
+        date: ARTICLE_DATE,
         publisher: 'Bloomberg',
         aspectScore: 0.4,
         signalScore: 0.9,
@@ -248,19 +263,13 @@ describe('PublisherAccuracyService', () => {
     ];
 
     const priceData = [
-      makeHistItem('2026-04-07', 100),
-      makeHistItem('2026-04-08', 102),
-      makeHistItem('2026-04-09', 103),
-      makeHistItem('2026-04-10', 105),
-      makeHistItem('2026-04-11', 107),
-      makeHistItem('2026-04-12', 108),
-      makeHistItem('2026-04-13', 110),
+      makeHistItem(HIST_DATE_0, 100),
+      makeHistItem(HIST_DATE_1, 102),
+      makeHistItem(HIST_DATE_2, 103),
+      makeHistItem(HIST_DATE_3, 105),
     ];
 
-    mockQueryByEntityType.mockResolvedValueOnce([
-      makeDailyItem('AAPL', '2026-04-07'),
-      makeDailyItem('AAPL', '2026-04-08'),
-    ]);
+    mockQueryByEntityType.mockResolvedValueOnce([makeDailyItem('AAPL', ARTICLE_DATE)]);
 
     // queryItems: first call for ARTICLE#AAPL, then HIST#AAPL per publisher
     mockQueryItems

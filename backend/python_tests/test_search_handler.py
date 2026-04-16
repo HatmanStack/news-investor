@@ -45,21 +45,21 @@ class TestSearchHandlerValidation:
 class TestSearchHandlerResults:
     """Tests for search result handling."""
 
-    @patch("handlers.search.search_tickers")
+    @patch("handlers.search.search_tickers_finnhub")
     def test_returns_transformed_results(self, mock_search):
         """Returns results in Tiingo format."""
         mock_search.return_value = [
             {
+                "description": "Apple Inc.",
+                "displaySymbol": "AAPL",
                 "symbol": "AAPL",
-                "shortname": "Apple Inc.",
-                "quoteType": "EQUITY",
-                "exchange": "NMS",
+                "type": "Common Stock",
             },
             {
+                "description": "Direxion Daily AAPL Bear 1X",
+                "displaySymbol": "AAPD",
                 "symbol": "AAPD",
-                "shortname": "Direxion Daily AAPL Bear 1X",
-                "quoteType": "ETF",
-                "exchange": "PCX",
+                "type": "ETP",
             },
         ]
 
@@ -75,7 +75,7 @@ class TestSearchHandlerResults:
         assert body["data"][0]["assetType"] == "Stock"
         assert body["data"][0]["isActive"] is True
 
-    @patch("handlers.search.search_tickers")
+    @patch("handlers.search.search_tickers_finnhub")
     def test_returns_empty_array_for_no_results(self, mock_search):
         """No results returns empty array, not error."""
         mock_search.return_value = []
@@ -88,7 +88,7 @@ class TestSearchHandlerResults:
         body = json.loads(result["body"])
         assert body["data"] == []
 
-    @patch("handlers.search.search_tickers")
+    @patch("handlers.search.search_tickers_finnhub")
     def test_handles_api_error(self, mock_search):
         """API errors are returned correctly."""
         mock_search.side_effect = APIError("Search failed", 500)

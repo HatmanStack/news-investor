@@ -3,12 +3,12 @@ Search endpoint handler.
 Handles GET /search requests for ticker search.
 """
 
-from services.yfinance_service import search_tickers
+from services.finnhub_service import search_tickers_finnhub
 from typedefs import ApiGatewayEvent, ApiGatewayResponse
 from utils.error import APIError
 from utils.logger import get_structured_logger
 from utils.response import error_response, success_response
-from utils.transform import transform_search_to_tiingo
+from utils.transform import transform_finnhub_search_to_tiingo
 from utils.validation import MAX_QUERY_LENGTH
 
 logger = get_structured_logger(__name__)
@@ -45,10 +45,10 @@ def handle_search_request(event: ApiGatewayEvent) -> ApiGatewayResponse:
         logger.info(f"[SearchHandler] Searching for: {query}")
 
         # Search for tickers
-        results = search_tickers(query)
+        results = search_tickers_finnhub(query)
 
         # Transform to Tiingo format
-        transformed = transform_search_to_tiingo(results)
+        transformed = transform_finnhub_search_to_tiingo(results)
 
         logger.info(f"[SearchHandler] Found {len(transformed)} results for: {query}")
 

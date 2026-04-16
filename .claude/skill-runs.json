@@ -90,5 +90,16 @@
     "date": "2026-04-14",
     "plan": "2026-04-13-intelligence-upgrade",
     "verdict": "GO"
+  },
+  {
+    "skill": "brainstorm",
+    "date": "2026-04-15",
+    "plan": "2026-04-15-reddit-sentiment-finnhub-migration"
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-04-16",
+    "plan": "2026-04-15-reddit-sentiment-finnhub-migration",
+    "verdict": "GO"
   }
 ]

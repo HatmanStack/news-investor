@@ -70,8 +70,8 @@ def _get_earnings_for_ticker(ticker: str) -> list[EarningsEvent]:
         logger.info("Earnings cache hit", ticker=ticker, count=len(cached))
         return _clean_cache_items(cast(list[EarningsCacheItem], cached)) if cached else []
 
-    # Cache miss - fetch from yfinance
-    logger.info("Earnings cache miss, fetching from yfinance", ticker=ticker)
+    # Cache miss - fetch from Finnhub
+    logger.info("Earnings cache miss, fetching from Finnhub", ticker=ticker)
     earnings = fetch_earnings_calendar(ticker)
 
     # Cache results (even if empty, to prevent repeated fetches for ETFs/index funds)

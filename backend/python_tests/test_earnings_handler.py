@@ -84,7 +84,7 @@ class TestHandleEarningsRequest:
     @patch("handlers.earnings.fetch_earnings_calendar")
     @patch("handlers.earnings.get_cached_earnings")
     def test_fetches_and_caches_on_cache_miss(self, mock_cache, mock_fetch, mock_store):
-        """Fetches from yfinance and caches on cache miss."""
+        """Fetches from Finnhub and caches on cache miss."""
         mock_cache.return_value = None  # None = cache miss (not [])
         mock_fetch.return_value = [
             {"earningsDate": "2026-04-25", "earningsHour": "AMC"}

@@ -8,6 +8,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from utils.transform import (
+    transform_finnhub_earnings,
+    transform_finnhub_search_to_tiingo,
     transform_history_to_tiingo,
     transform_info_to_metadata,
     transform_search_to_tiingo,
@@ -235,3 +237,132 @@ class TestTransformSearchToTiingo:
         result = transform_search_to_tiingo(results)
 
         assert result[0]["isActive"] is True
+
+
+class TestTransformFinnhubSearchToTiingo:
+    """Tests for transform_finnhub_search_to_tiingo function."""
+
+    def test_maps_finnhub_fields_to_search_result(self):
+        """Finnhub fields are mapped to SearchResult format."""
+        results = [
+            {
+                "description": "Apple Inc.",
+                "displaySymbol": "AAPL",
+                "symbol": "AAPL",
+                "type": "Common Stock",
+            },
+        ]
+
+        result = transform_finnhub_search_to_tiingo(results)
+
+        assert len(result) == 1
+        assert result[0]["ticker"] == "AAPL"
+        assert result[0]["name"] == "Apple Inc."
+        assert result[0]["assetType"] == "Stock"
+        assert result[0]["isActive"] is True
+
+    def test_maps_common_stock_to_stock(self):
+        """'Common Stock' maps to 'Stock'."""
+        results = [{"symbol": "A", "description": "A", "type": "Common Stock"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "Stock"
+
+    def test_maps_adr_to_stock(self):
+        """'ADR' maps to 'Stock'."""
+        results = [{"symbol": "A", "description": "A", "type": "ADR"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "Stock"
+
+    def test_maps_etp_to_etf(self):
+        """'ETP' maps to 'ETF'."""
+        results = [{"symbol": "A", "description": "A", "type": "ETP"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "ETF"
+
+    def test_maps_reit_to_stock(self):
+        """'REIT' maps to 'Stock'."""
+        results = [{"symbol": "A", "description": "A", "type": "REIT"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "Stock"
+
+    def test_maps_unit_to_stock(self):
+        """'Unit' maps to 'Stock'."""
+        results = [{"symbol": "A", "description": "A", "type": "Unit"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "Stock"
+
+    def test_unknown_type_uses_raw_value(self):
+        """Unknown type falls back to raw Finnhub value."""
+        results = [{"symbol": "A", "description": "A", "type": "Warrant"}]
+        result = transform_finnhub_search_to_tiingo(results)
+        assert result[0]["assetType"] == "Warrant"
+
+    def test_returns_empty_list_for_empty_results(self):
+        """Empty results return empty list."""
+        result = transform_finnhub_search_to_tiingo([])
+        assert result == []
+
+
+class TestTransformFinnhubEarnings:
+    """Tests for transform_finnhub_earnings function."""
+
+    def test_maps_finnhub_fields_to_earnings_event(self):
+        """Finnhub fields are mapped to EarningsEvent format."""
+        items = [
+            {
+                "date": "2026-04-25",
+                "epsActual": None,
+                "epsEstimate": 2.35,
+                "hour": "amc",
+                "quarter": 2,
+                "revenueActual": None,
+                "revenueEstimate": 94500000000,
+                "symbol": "AAPL",
+                "year": 2026,
+            }
+        ]
+
+        result = transform_finnhub_earnings(items)
+
+        assert len(result) == 1
+        assert result[0]["earningsDate"] == "2026-04-25"
+        assert result[0]["earningsHour"] == "AMC"
+        assert result[0]["epsEstimate"] == 2.35
+        assert result[0]["revenueEstimate"] == 94500000000
+
+    def test_maps_bmo_to_uppercase(self):
+        """'bmo' maps to 'BMO'."""
+        items = [{"date": "2026-04-25", "hour": "bmo"}]
+        result = transform_finnhub_earnings(items)
+        assert result[0]["earningsHour"] == "BMO"
+
+    def test_maps_amc_to_uppercase(self):
+        """'amc' maps to 'AMC'."""
+        items = [{"date": "2026-04-25", "hour": "amc"}]
+        result = transform_finnhub_earnings(items)
+        assert result[0]["earningsHour"] == "AMC"
+
+    def test_maps_empty_hour_to_tns(self):
+        """Empty string hour maps to 'TNS'."""
+        items = [{"date": "2026-04-25", "hour": ""}]
+        result = transform_finnhub_earnings(items)
+        assert result[0]["earningsHour"] == "TNS"
+
+    def test_null_estimates_pass_through(self):
+        """Null epsEstimate and revenueEstimate are excluded."""
+        items = [
+            {
+                "date": "2026-04-25",
+                "hour": "amc",
+                "epsEstimate": None,
+                "revenueEstimate": None,
+            }
+        ]
+        result = transform_finnhub_earnings(items)
+        assert "epsEstimate" not in result[0]
+        assert "revenueEstimate" not in result[0]
+
+    def test_returns_empty_list_for_empty_input(self):
+        """Empty input returns empty list."""
+        result = transform_finnhub_earnings([])
+        assert result == []

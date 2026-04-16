@@ -6,7 +6,14 @@ Converts yfinance data format to Tiingo API format for response compatibility.
 from typing import Any
 
 from constants.sector_etf_map import SECTOR_TO_ETF
-from typedefs import PriceRecord, SearchResult, StockMetadata, YahooInfo, YahooSearchQuote
+from typedefs import (
+    EarningsEvent,
+    PriceRecord,
+    SearchResult,
+    StockMetadata,
+    YahooInfo,
+    YahooSearchQuote,
+)
 
 
 def transform_history_to_tiingo(df: Any, ticker: str) -> list[PriceRecord]:
@@ -92,6 +99,84 @@ def transform_info_to_metadata(info: YahooInfo, ticker: str) -> StockMetadata:
         "industry": info.get("industry", ""),
         "sectorEtf": SECTOR_TO_ETF.get(info.get("sector", ""), None),
     }
+
+
+def transform_finnhub_search_to_tiingo(
+    results: list[dict],
+) -> list[SearchResult]:
+    """
+    Transform Finnhub search results to Tiingo search format.
+
+    Args:
+        results: List of Finnhub search results with:
+            symbol, description, displaySymbol, type
+
+    Returns:
+        List of results in Tiingo search format:
+        [{"ticker": "AAPL", "name": "Apple Inc.", ...}, ...]
+    """
+    finnhub_type_map = {
+        "Common Stock": "Stock",
+        "ADR": "Stock",
+        "ETP": "ETF",
+        "REIT": "Stock",
+        "Unit": "Stock",
+    }
+
+    transformed: list[SearchResult] = []
+    for item in results:
+        raw_type = item.get("type", "")
+        asset_type = finnhub_type_map.get(raw_type, raw_type)
+
+        entry: SearchResult = {
+            "ticker": item.get("symbol", ""),
+            "name": item.get("description", ""),
+            "assetType": asset_type,
+            "isActive": True,
+        }
+        transformed.append(entry)
+
+    return transformed
+
+
+def transform_finnhub_earnings(items: list[dict]) -> list[EarningsEvent]:
+    """
+    Transform Finnhub earnings calendar items to EarningsEvent format.
+
+    Args:
+        items: List of Finnhub earnings calendar items with:
+            date, epsEstimate, revenueEstimate, hour, quarter, symbol, year
+
+    Returns:
+        List of EarningsEvent dicts
+    """
+    hour_map = {
+        "bmo": "BMO",
+        "amc": "AMC",
+        "": "TNS",
+    }
+
+    transformed: list[EarningsEvent] = []
+    for item in items:
+        raw_hour = item.get("hour", "")
+        earnings_hour = hour_map.get(raw_hour, raw_hour.upper() if raw_hour else "TNS")
+
+        event: EarningsEvent = {
+            "earningsDate": item.get("date", ""),
+            "earningsHour": earnings_hour,
+        }
+
+        eps_estimate = item.get("epsEstimate")
+        if eps_estimate is not None:
+            event["epsEstimate"] = eps_estimate
+
+        revenue_estimate = item.get("revenueEstimate")
+        if revenue_estimate is not None:
+            event["revenueEstimate"] = revenue_estimate
+
+        transformed.append(event)
+
+    return transformed
 
 
 def transform_search_to_tiingo(results: list[YahooSearchQuote]) -> list[SearchResult]:

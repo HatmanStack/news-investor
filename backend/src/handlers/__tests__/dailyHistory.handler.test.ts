@@ -23,6 +23,12 @@ jest.unstable_mockModule('../../utils/error.util.js', () => ({
   logError: jest.fn(),
 }));
 
+// Mock truncation to pass data through (avoids date-relative filtering in tests)
+jest.unstable_mockModule('../../utils/truncation.util.js', () => ({
+  truncateByDateRange: jest.fn(<T>(items: T[]) => ({ data: items, meta: null })),
+  buildTruncationResponseMeta: jest.fn(() => undefined),
+}));
+
 const { handleDailyHistoryRequest } = await import('../sentiment.handler.js');
 
 function createAPIGatewayEvent(

@@ -16,6 +16,8 @@ const FEATURE_LABEL_MAP: Record<string, { label: string; category: 'sentiment' |
   ml_score: { label: 'ML Sentiment', category: 'sentiment' },
   sentiment_availability: { label: 'Sentiment Coverage', category: 'sentiment' },
   volatility: { label: 'Price Volatility', category: 'price' },
+  social_score: { label: 'Social Buzz', category: 'sentiment' },
+  insider_net_sentiment: { label: 'Insider Activity', category: 'sentiment' },
 };
 
 /**

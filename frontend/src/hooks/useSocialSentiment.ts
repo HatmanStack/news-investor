@@ -9,11 +9,11 @@ import { createBackendClient } from '@/services/api/backendClient';
 export interface SocialSentimentData {
   ticker: string;
   date: string;
-  redditMentions: number;
-  redditScore: number;
-  twitterMentions: number;
-  twitterScore: number;
-  compositeScore: number;
+  redditMentions: number | null;
+  redditScore: number | null;
+  twitterMentions: number | null;
+  twitterScore: number | null;
+  compositeScore: number | null;
   totalMentions: number;
 }
 

@@ -135,6 +135,72 @@ export const ALPHAVANTAGE_COOLDOWN_MS = 1_800_000;
 /** Service identifiers for circuit breaker DynamoDB keys */
 export const CIRCUIT_SERVICE_FINNHUB = 'finnhub';
 export const CIRCUIT_SERVICE_ALPHAVANTAGE = 'alphavantage';
+export const CIRCUIT_SERVICE_REDDIT = 'reddit';
+
+// ============================================================
+// Reddit API Configuration
+// ============================================================
+
+/**
+ * Circuit breaker failure threshold for Reddit API.
+ *
+ * DERIVATION: Same as Finnhub (5) — external API with rate limits.
+ * 5 consecutive failures indicates likely quota exhaustion or outage.
+ */
+export const REDDIT_FAILURE_THRESHOLD = 5;
+
+/**
+ * Cooldown period for Reddit API circuit breaker.
+ *
+ * DERIVATION: Same as Finnhub (60s) — balances quick recovery
+ * against protecting rate-limited quotas.
+ */
+export const REDDIT_COOLDOWN_MS = 60_000;
+
+/**
+ * Subreddits to search for stock mentions.
+ *
+ * DERIVATION: The three largest finance-focused subreddits by activity.
+ * wallstreetbets: high retail sentiment signal, noisy
+ * stocks: moderate activity, more balanced
+ * investing: lower activity, higher quality signal
+ */
+export const REDDIT_SUBREDDITS = ['wallstreetbets', 'stocks', 'investing'];
+
+/**
+ * Timeout for Reddit API calls in milliseconds.
+ *
+ * DERIVATION: Same as Finnhub (10s) — external API over HTTPS.
+ */
+export const REDDIT_TIMEOUT = 10_000;
+
+/**
+ * Maximum posts to fetch per subreddit search.
+ *
+ * DERIVATION: 25 posts per subreddit × 3 subreddits = 75 max posts.
+ * Balances coverage against ML API call volume (1 call per post title).
+ */
+export const REDDIT_MAX_POSTS_PER_SUBREDDIT = 25;
+
+/**
+ * Maximum comments to fetch per post for sentiment scoring.
+ *
+ * DERIVATION: Top 5 comments capture the dominant sentiment signal.
+ * Comment fetching is gated by REDDIT_COMMENT_SCORE_THRESHOLD — only
+ * posts above the threshold get a comment API call.
+ */
+export const REDDIT_MAX_COMMENTS_PER_POST = 5;
+
+/**
+ * Minimum post score to fetch comments for.
+ *
+ * DERIVATION: Posts with score < 2 are low-engagement or downvoted noise.
+ * Skipping comment fetching for them reduces API calls significantly
+ * (75 max posts × 1 call each → only high-engagement posts get calls),
+ * keeping within Reddit's 100 req/min free-tier limit even with
+ * concurrent worker invocations.
+ */
+export const REDDIT_COMMENT_SCORE_THRESHOLD = 2;
 
 /**
  * Maximum concurrent tasks in the sentiment analysis pipeline.

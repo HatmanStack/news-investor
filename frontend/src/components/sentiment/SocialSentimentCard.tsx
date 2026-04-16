@@ -16,13 +16,15 @@ interface SocialSentimentCardProps {
   ticker: string;
 }
 
-function getScoreColor(score: number, theme: AppTheme): string {
+function getScoreColor(score: number | null, theme: AppTheme): string {
+  if (score === null) return theme.colors.onSurfaceVariant;
   if (score > 0.05) return theme.colors.primary;
   if (score < -0.05) return theme.colors.error;
   return theme.colors.onSurfaceVariant;
 }
 
-function formatScore(score: number): string {
+function formatScore(score: number | null): string {
+  if (score === null) return '--';
   const prefix = score >= 0 ? '+' : '';
   return `${prefix}${score.toFixed(2)}`;
 }
@@ -39,7 +41,7 @@ function SocialSentimentCardInner({ ticker }: SocialSentimentCardProps) {
           <Text variant="headlineMedium" style={styles.placeholder}>
             --
           </Text>
-        ) : !data ? (
+        ) : !data || (data.redditMentions === null && data.twitterMentions === null) ? (
           <Text
             variant="bodyMedium"
             style={[styles.empty, { color: theme.colors.onSurfaceVariant }]}
@@ -61,22 +63,26 @@ function SocialSentimentCardInner({ ticker }: SocialSentimentCardProps) {
               {data.totalMentions} total mentions
             </Text>
             <View style={styles.platformRow}>
-              <View style={styles.platformItem}>
-                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
-                  Reddit
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {data.redditMentions} mentions
-                </Text>
-              </View>
-              <View style={styles.platformItem}>
-                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
-                  X / Twitter
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {data.twitterMentions} mentions
-                </Text>
-              </View>
+              {data.redditMentions !== null && (
+                <View style={styles.platformItem}>
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                    Reddit
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {data.redditMentions} mentions
+                  </Text>
+                </View>
+              )}
+              {data.twitterMentions !== null && (
+                <View style={styles.platformItem}>
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                    X / Twitter
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {data.twitterMentions} mentions
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )}

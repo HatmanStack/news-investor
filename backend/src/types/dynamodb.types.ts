@@ -28,6 +28,7 @@ const EntityPrefix = {
   PUBLISHER_STATS: 'PUBLISHER_STATS', // Publisher accuracy statistics
   PUBLISHER: 'PUBLISHER', // Publisher reliability scores
   SOCIAL: 'SOCIAL', // Social sentiment data (Reddit/X)
+  TOKEN: 'TOKEN', // OAuth token cache
 } as const;
 
 /**
@@ -40,6 +41,7 @@ export const SortKeyPrefix = {
   STATE: 'STATE',
   SNAP: 'SNAP',
   RELIABILITY: 'RELIABILITY',
+  OAUTH: 'OAUTH',
 } as const;
 
 // ============================================================
@@ -413,12 +415,12 @@ export interface SocialSentimentItem extends BaseTableItem {
   entityType: 'SOCIAL';
   ticker: string;
   date: string;
-  redditMentions: number;
-  redditScore: number; // normalized -1 to +1
-  twitterMentions: number;
-  twitterScore: number; // normalized -1 to +1
-  compositeScore: number; // weighted average of reddit + twitter
-  totalMentions: number; // sum of mentions (volume indicator)
+  redditMentions: number | null;
+  redditScore: number | null; // normalized -1 to +1
+  twitterMentions: number | null;
+  twitterScore: number | null; // normalized -1 to +1
+  compositeScore: number | null; // weighted average of reddit + twitter
+  totalMentions: number; // sum of non-null platform mentions (always present)
   ttl: number; // 30-day TTL
 }
 
@@ -552,4 +554,28 @@ export function makeReliabilitySK(): string {
 
 export function makeSocialPK(ticker: string): string {
   return `${EntityPrefix.SOCIAL}#${ticker.toUpperCase()}`;
+}
+
+export function makeTokenPK(serviceName: string): string {
+  return `${EntityPrefix.TOKEN}#${serviceName}`;
+}
+
+export function makeOAuthSK(): string {
+  return SortKeyPrefix.OAUTH;
+}
+
+// ============================================================
+// Token Cache Entity Type
+// ============================================================
+
+/**
+ * OAuth token cache item
+ * PK: TOKEN#reddit, SK: OAUTH
+ */
+export interface TokenCacheItem extends BaseTableItem {
+  entityType: 'TOKEN';
+  serviceName: string;
+  accessToken: string;
+  expiresAt: number; // Unix timestamp (ms)
+  ttl: number;
 }

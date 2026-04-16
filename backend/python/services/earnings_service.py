@@ -1,22 +1,24 @@
 """
 Earnings calendar service.
-Fetches upcoming earnings dates from yfinance.
+Fetches upcoming earnings dates from Finnhub.
 """
 
 import logging
-from typing import Any
+from datetime import date, timedelta
 
-from services.yfinance_service import _get_yfinance, retry_with_backoff
-from typedefs import EarningsCalendar, EarningsEvent
-from utils.error import APIError
+from services.finnhub_service import fetch_earnings_finnhub
+from typedefs import EarningsEvent
+from utils.transform import transform_finnhub_earnings
 
 logger = logging.getLogger(__name__)
 
+# Forward window for earnings calendar queries
+EARNINGS_FORWARD_DAYS = 90
 
-@retry_with_backoff
+
 def fetch_earnings_calendar(ticker: str) -> list[EarningsEvent]:
     """
-    Fetch upcoming earnings dates for a ticker from yfinance.
+    Fetch upcoming earnings dates for a ticker from Finnhub.
 
     Returns list of earnings events:
     [
@@ -31,75 +33,16 @@ def fetch_earnings_calendar(ticker: str) -> list[EarningsEvent]:
     logger.info(f"[EarningsService] Fetching earnings for {ticker}")
 
     try:
-        yf = _get_yfinance()
-        stock = yf.Ticker(ticker)
-        calendar = stock.calendar
+        today = date.today()
+        from_date = today.isoformat()
+        to_date = (today + timedelta(days=EARNINGS_FORWARD_DAYS)).isoformat()
 
-        if not calendar:
-            logger.info(f"[EarningsService] No calendar data for {ticker}")
-            return []
-
-        # calendar is a dict with keys like 'Earnings Date', 'Earnings Average', etc.
-        earnings_date = calendar.get("Earnings Date")
-        if not earnings_date:
-            logger.info(f"[EarningsService] No earnings date for {ticker}")
-            return []
-
-        # earnings_date can be a list of dates or a single date
-        dates = earnings_date if isinstance(earnings_date, list) else [earnings_date]
-
-        results = []
-        for date_val in dates:
-            event = _parse_earnings_event(date_val, calendar)
-            if event:
-                results.append(event)
+        raw_results = fetch_earnings_finnhub(ticker, from_date, to_date)
+        results = transform_finnhub_earnings(raw_results)
 
         logger.info(f"[EarningsService] Found {len(results)} earnings events for {ticker}")
         return results
 
-    except APIError:
-        raise
     except Exception as e:
         logger.error(f"[EarningsService] Error fetching earnings for {ticker}: {e}")
         return []
-
-
-def _parse_earnings_event(date_val: Any, calendar: EarningsCalendar) -> EarningsEvent | None:
-    """Parse a single earnings event from calendar data."""
-    try:
-        # Handle datetime or Timestamp objects
-        if hasattr(date_val, "strftime"):
-            date_str = date_val.strftime("%Y-%m-%d")
-            # Determine BMO/AMC from hour (hour=0 is date-only timestamp, not a real time)
-            hour = getattr(date_val, "hour", 0)
-            if hour == 0:
-                earnings_hour = "TNS"  # Time not specified — yfinance often returns midnight
-            elif hour < 12:
-                earnings_hour = "BMO"
-            else:
-                earnings_hour = "AMC"
-        elif isinstance(date_val, str):
-            date_str = date_val[:10]  # Take YYYY-MM-DD portion
-            earnings_hour = "TNS"  # Time not specified
-        else:
-            return None
-
-        event: EarningsEvent = {
-            "earningsDate": date_str,
-            "earningsHour": earnings_hour,
-        }
-
-        # Extract estimates if available
-        eps_estimate = calendar.get("Earnings Average") or calendar.get("Earnings Low")
-        if eps_estimate is not None:
-            event["epsEstimate"] = float(eps_estimate)
-
-        revenue_estimate = calendar.get("Revenue Average") or calendar.get("Revenue Low")
-        if revenue_estimate is not None:
-            event["revenueEstimate"] = float(revenue_estimate)
-
-        return event
-
-    except Exception as e:
-        logger.warning(f"[EarningsService] Error parsing earnings event: {e}")
-        return None
