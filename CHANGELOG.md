@@ -9,6 +9,30 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-04-16
+
+### Added
+
+- **[Pro]** Self-hosted Reddit social sentiment pipeline: Reddit Official API (OAuth2) scrapes r/wallstreetbets, r/stocks, r/investing for cashtag mentions. Posts scored via DistilFinBERT (title + selftext + top 5 comments). Mention-weighted daily aggregation with upvote-based weighting (clamped to minimum 1). DynamoDB-backed OAuth token cache (`TOKEN#reddit`) shared across concurrent Lambda invocations. Circuit breaker (`CIRCUIT#reddit`) following Finnhub pattern. Replaces Finnhub Premium social sentiment endpoint ($3,500/mo).
+- `REDDIT_COMMENT_SCORE_THRESHOLD` constant — skip comment fetching for posts with score < 2 to reduce API calls
+- `FEATURE_LABEL_MAP` entries for `social_score` ("Social Buzz") and `insider_net_sentiment` ("Insider Activity") in `ModelDiagnosticsCard`
+- `TOKEN#` DynamoDB entity type for OAuth token caching with TTL
+- `FINNHUB_API_KEY` environment variable on `PythonStocksFunction` Lambda
+- Provider Architecture table in `PRO_FEATURES_ROADMAP.md` documenting all data sources
+
+### Changed
+
+- **[Pro]** `SOCIAL#` entity fields (`redditMentions`, `redditScore`, `twitterMentions`, `twitterScore`, `compositeScore`) are now nullable (`number | null`). `SocialSentimentCard` hides platform rows when null, shows "--" for null composite score. Twitter fields null until future X provider (Adanos) integration.
+- Sentiment worker calls `fetchAndStoreRedditSentiment` (Reddit API) instead of `fetchAndStoreSocialSentiment` (Finnhub Premium)
+- Search handler (`/search`) migrated from yfinance to Finnhub free-tier `/search` endpoint with `transform_finnhub_search_to_tiingo` type mapping (Common Stock, ADR, ETP, REIT, Unit)
+- Earnings service (`/earnings`, `/batch/earnings`) migrated from yfinance to Finnhub free-tier `/calendar/earnings` endpoint with 90-day forward window and `transform_finnhub_earnings` hour mapping (bmo/amc/empty to BMO/AMC/TNS)
+- Reddit credentials (`RedditClientId`, `RedditClientSecret`) added to `SentimentWorkerFunction` via SAM template parameters
+
+### Fixed
+
+- Pre-existing test failures in `publisherAccuracy.service.test.ts` and `dailyHistory.handler.test.ts` caused by hardcoded dates drifting outside lookback/retention windows. Tests now use relative dates via `daysAgo()` helper.
+- `dailyHistory.handler.test.ts` missing mock for `truncateByDateRange` causing data to be filtered by tier-aware date retention
+
 ## [2.13.0] - 2026-04-14
 
 ### Added
