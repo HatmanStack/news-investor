@@ -9,6 +9,10 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+### Added
+
+- **[Pro]** Stripe billing integration: web-only Checkout + Customer Portal + signature-verified webhook sync subscription state to DynamoDB. Upgrade button on Settings screen for authenticated free users, Manage-billing button for Pro users. Supports monthly plan via `STRIPE_PRICE_ID_MONTHLY`. See `docs/plans/2026-04-21-stripe-billing/RUNBOOK.md` for setup.
+
 ## [2.14.0] - 2026-04-16
 
 ### Added

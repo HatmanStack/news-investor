@@ -105,3 +105,7 @@ export function QuotaUsage(): null {
 export function useCheckout() {
   return { checkout: () => {}, loading: false, error: null };
 }
+
+export function useBillingPortal() {
+  return { openPortal: () => {}, loading: false, error: null };
+}

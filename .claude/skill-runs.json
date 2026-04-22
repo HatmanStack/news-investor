@@ -101,5 +101,16 @@
     "date": "2026-04-16",
     "plan": "2026-04-15-reddit-sentiment-finnhub-migration",
     "verdict": "GO"
+  },
+  {
+    "skill": "brainstorm",
+    "date": "2026-04-21",
+    "plan": "2026-04-21-stripe-billing"
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-04-21",
+    "plan": "2026-04-21-stripe-billing",
+    "verdict": "GO"
   }
 ]
