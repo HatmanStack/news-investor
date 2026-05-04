@@ -266,5 +266,26 @@ describe('Error Utilities', () => {
 
       expect(getStatusCodeFromError(error)).toBe(500);
     });
+
+    it('returns 500 for out-of-range statusCode (999)', () => {
+      const error = { statusCode: 999, message: 'invalid' };
+      expect(getStatusCodeFromError(error)).toBe(500);
+    });
+
+    it('returns 500 for statusCode 0 (below HTTP range)', () => {
+      const error = { statusCode: 0, message: 'invalid' };
+      expect(getStatusCodeFromError(error)).toBe(500);
+    });
+
+    it('returns 500 for non-integer statusCode (1.5)', () => {
+      const error = { statusCode: 1.5, message: 'invalid' };
+      expect(getStatusCodeFromError(error)).toBe(500);
+    });
+
+    it("returns 500 for string statusCode ('200')", () => {
+      // hasStatusCode requires a number; this falls into the unknown-error branch.
+      const error = { statusCode: '200', message: 'invalid' };
+      expect(getStatusCodeFromError(error)).toBe(500);
+    });
   });
 });

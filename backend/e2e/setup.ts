@@ -31,12 +31,30 @@ export default async function setup() {
         AttributeDefinitions: [
           { AttributeName: 'pk', AttributeType: 'S' },
           { AttributeName: 'sk', AttributeType: 'S' },
+          { AttributeName: 'entityType', AttributeType: 'S' },
+          { AttributeName: 'stripeCustomerId', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'pk', KeyType: 'HASH' },
           { AttributeName: 'sk', KeyType: 'RANGE' },
         ],
         BillingMode: 'PAY_PER_REQUEST',
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: 'EntityTypeIndex',
+            KeySchema: [
+              { AttributeName: 'entityType', KeyType: 'HASH' },
+              { AttributeName: 'pk', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            // Sparse GSI: only items with stripeCustomerId set are indexed.
+            IndexName: 'StripeCustomerIdIndex',
+            KeySchema: [{ AttributeName: 'stripeCustomerId', KeyType: 'HASH' }],
+            Projection: { ProjectionType: 'ALL' },
+          },
+        ],
       }),
     );
     console.log(`Created table ${TABLE_NAME}`);

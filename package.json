@@ -1,6 +1,6 @@
 {
   "name": "news-investor-pro",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "private": true,
   "license": "Apache-2.0",
   "workspaces": [
@@ -17,8 +17,8 @@
     "lint:ml": "uvx ruff check backend/services/ml backend/python backend/python_tests",
     "lint:python-types": "cd backend/python && uvx mypy .",
     "test:e2e": "cd backend && npm run test:e2e",
-    "lint:docs": "markdownlint-cli2 '*.md' 'docs/*.md' '.github/**/*.md'",
-    "lint:docs:links": "command -v lychee > /dev/null 2>&1 && lychee --no-progress '*.md' 'docs/*.md' || echo 'Install lychee (https://github.com/lycheeverse/lychee) for local link checking'",
+    "lint:docs": "markdownlint-cli2 '*.md' 'docs/**/*.md' '.github/**/*.md'",
+    "lint:docs:links": "command -v lychee > /dev/null 2>&1 && lychee --no-progress '*.md' 'docs/**/*.md' || echo 'Install lychee (https://github.com/lycheeverse/lychee) for local link checking'",
     "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:docs && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
     "test:admin": "cd admin && npm test",
     "lint:admin": "cd admin && npm run type-check",

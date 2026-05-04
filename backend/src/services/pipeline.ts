@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.util.js';
+import { logMetric, MetricUnit } from '../utils/metrics.util.js';
 import { fetchHistoricalData } from './dataFetcher';
 import { aggregate_daily_features } from './featureEngineering';
 import { prepare_training_data, create_scaler, normalize_features, Scaler } from './preprocessing';
@@ -55,6 +56,7 @@ async function getCachedModel(ticker: string): Promise<{
     logger.warn(`Failed to read model cache for ${ticker}`, {
       error: error instanceof Error ? error.message : String(error),
     });
+    logMetric('ModelCacheError', 1, MetricUnit.Count, { Ticker: ticker, Operation: 'read' });
     return null;
   }
 }
@@ -96,6 +98,7 @@ async function cacheModel(
     logger.warn(`Failed to cache model for ${ticker}`, {
       error: error instanceof Error ? error.message : String(error),
     });
+    logMetric('ModelCacheError', 1, MetricUnit.Count, { Ticker: ticker, Operation: 'write' });
   }
 }
 

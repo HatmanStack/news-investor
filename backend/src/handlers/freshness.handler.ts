@@ -7,7 +7,7 @@
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { successResponse, errorResponse, type APIGatewayResponse } from '../utils/response.util.js';
-import { logError, hasStatusCode, sanitizeErrorMessage } from '../utils/error.util.js';
+import { withErrorHandling } from '../utils/handler.util.js';
 import { validateTicker } from '../utils/validation.util.js';
 import { getLatestDailyAggregatesForTickers } from '../repositories/dailySentimentAggregate.repository.js';
 
@@ -19,10 +19,9 @@ interface FreshnessEntry {
   articleCount: number;
 }
 
-export async function handleFreshnessRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleFreshnessRequest = withErrorHandling(
+  'FreshnessHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     const tickersParam = event.queryStringParameters?.tickers;
 
     if (!tickersParam || tickersParam.trim().length === 0) {
@@ -68,12 +67,5 @@ export async function handleFreshnessRequest(
     });
 
     return successResponse({ freshness });
-  } catch (error) {
-    logError('FreshnessHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);

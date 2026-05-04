@@ -5,10 +5,11 @@
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text } from 'react-native-paper';
+import { useAppTheme, type AppTheme } from '@/hooks/useAppTheme';
 
 export const PriceListHeader: React.FC = () => {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const styles = createStyles(theme);
 
   return (
@@ -54,7 +55,7 @@ export const PriceListHeader: React.FC = () => {
   );
 };
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       paddingVertical: 10,

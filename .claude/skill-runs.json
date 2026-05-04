@@ -112,5 +112,17 @@
     "date": "2026-04-21",
     "plan": "2026-04-21-stripe-billing",
     "verdict": "GO"
+  },
+  {
+    "skill": "audit",
+    "date": "2026-05-03",
+    "plan": "2026-05-03-audit-news-investor-pro",
+    "audits": ["health", "eval", "docs"]
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-05-03",
+    "plan": "2026-05-03-audit-news-investor-pro",
+    "verdict": "VERIFIED"
   }
 ]

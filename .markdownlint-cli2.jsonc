@@ -1,0 +1,18 @@
+{
+  "config": {
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    "MD033": false,
+    "MD041": false,
+  },
+  "ignores": [
+    "node_modules/**",
+    "docs/plans/**/health-audit.md",
+    "docs/plans/**/eval.md",
+    "docs/plans/**/doc-audit.md",
+    "**/health-audit.md",
+    "**/eval.md",
+    "**/doc-audit.md",
+    "docs/plans/**",
+  ],
+}

@@ -6,7 +6,7 @@
  * service, and updates job status in DynamoDB.
  */
 
-import type { SQSEvent, SQSRecord } from 'aws-lambda';
+import type { SQSEvent, SQSRecord, SQSBatchResponse } from 'aws-lambda';
 import { z } from 'zod';
 import { processSentimentForTicker } from './services/sentimentProcessing.service.js';
 import * as SentimentJobsRepository from './repositories/sentimentJobs.repository.js';
@@ -22,7 +22,20 @@ const sqsMessageSchema = z.object({
 });
 
 async function processRecord(record: SQSRecord): Promise<void> {
-  const parsed = sqsMessageSchema.safeParse(JSON.parse(record.body));
+  // JSON.parse must run inside the try — a malformed message body throws
+  // synchronously, which would otherwise cycle through SQS retry+DLQ for a
+  // payload that will never succeed. Drop the message instead.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(record.body);
+  } catch (parseError) {
+    logger.error('Malformed JSON in SQS message body — dropping', parseError, {
+      messageId: record.messageId,
+    });
+    return;
+  }
+
+  const parsed = sqsMessageSchema.safeParse(raw);
   if (!parsed.success) {
     logger.error('Invalid SQS message body', parsed.error, { messageId: record.messageId });
     return; // Don't retry malformed messages — they'll never succeed
@@ -66,10 +79,19 @@ async function processRecord(record: SQSRecord): Promise<void> {
   }
 }
 
-export async function handler(event: SQSEvent): Promise<void> {
+export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
+  const batchItemFailures: { itemIdentifier: string }[] = [];
   for (const record of event.Records) {
-    await runWithContext(createRequestContext(record.messageId, 'sentiment-worker'), () =>
-      processRecord(record),
-    );
+    try {
+      await runWithContext(createRequestContext(record.messageId, 'sentiment-worker'), () =>
+        processRecord(record),
+      );
+    } catch (err) {
+      logger.error('Worker record failed; reporting batch item failure', err, {
+        messageId: record.messageId,
+      });
+      batchItemFailures.push({ itemIdentifier: record.messageId });
+    }
   }
+  return { batchItemFailures };
 }

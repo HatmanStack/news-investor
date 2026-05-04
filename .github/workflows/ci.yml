@@ -4,14 +4,10 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'docs/**'
-      - '*.md'
       - '.sync/**'
   pull_request:
     branches: [main]
     paths-ignore:
-      - 'docs/**'
-      - '*.md'
       - '.sync/**'
 
 permissions:
@@ -25,12 +21,12 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       FINNHUB_API_KEY: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.13'
 
@@ -41,17 +37,48 @@ jobs:
         run: npx tsc --noEmit
         working-directory: frontend
 
-      - name: Frontend tests
-        run: npm test
+      - name: Frontend tests with coverage enforcement
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=json-summary
+      - name: Frontend coverage summary
+        if: always()
+        run: |
+          if [ -f frontend/coverage/coverage-summary.json ]; then
+            node -e "const c=require('./frontend/coverage/coverage-summary.json').total; \
+              console.log('Frontend coverage (threshold 45/55/55/56 br/fn/ln/st):'); \
+              console.log('  Branches:   '+c.branches.pct+'%'); \
+              console.log('  Functions:  '+c.functions.pct+'%'); \
+              console.log('  Lines:      '+c.lines.pct+'%'); \
+              console.log('  Statements: '+c.statements.pct+'%');"
+          fi
 
       - name: Backend type check
         run: cd backend && npx tsc --noEmit
 
-      - name: Backend tests
-        run: cd backend && npm test -- --ci
+      - name: Backend tests with coverage enforcement
+        run: cd backend && npm test -- --ci --coverage --coverageReporters=text --coverageReporters=json-summary
+      - name: Backend coverage summary
+        if: always()
+        run: |
+          if [ -f backend/coverage/coverage-summary.json ]; then
+            node -e "const c=require('./backend/coverage/coverage-summary.json').total; \
+              console.log('Backend coverage (threshold 63/75/71/70 br/fn/ln/st):'); \
+              console.log('  Branches:   '+c.branches.pct+'%'); \
+              console.log('  Functions:  '+c.functions.pct+'%'); \
+              console.log('  Lines:      '+c.lines.pct+'%'); \
+              console.log('  Statements: '+c.statements.pct+'%');"
+          fi
 
       - name: Python tests
         run: |
           pip install -r backend/python/requirements.txt
           pip install -r backend/python/requirements-dev.txt
           PYTHONPATH=backend/python pytest backend/python_tests --maxfail=1 -v
+
+      - name: Markdownlint
+        run: npm run lint:docs
+
+      - name: Lychee link check
+        uses: lycheeverse/lychee-action@f81112d0d2814ded911bd23e3beaa9dda9093915 # v2.0.2
+        with:
+          args: '--no-progress --max-concurrency 8 *.md docs/**/*.md'
+          fail: true

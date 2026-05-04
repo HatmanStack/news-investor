@@ -11,6 +11,7 @@ import type { NewsArticle } from '../repositories/newsCache.repository.js';
 import type { EventClassificationResult } from '../types/event.types.js';
 import { successResponse, errorResponse, type APIGatewayResponse } from '../utils/response.util.js';
 import { eventClassificationRequestSchema, parseBody } from '../utils/schemas.util.js';
+import { withErrorHandling } from '../utils/handler.util.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -30,12 +31,11 @@ interface EventClassificationResponse {
  * @param event - API Gateway event
  * @returns API Gateway response
  */
-export async function handleEventClassification(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  const startTime = Date.now();
+export const handleEventClassification = withErrorHandling(
+  'EventClassificationHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
+    const startTime = Date.now();
 
-  try {
     // Parse and validate request body with Zod schema
     const parsed = parseBody(event.body, eventClassificationRequestSchema);
     if (!parsed.success) {
@@ -93,8 +93,5 @@ export async function handleEventClassification(
     };
 
     return successResponse(response);
-  } catch (error) {
-    logger.error('Unexpected error', error);
-    return errorResponse('Internal server error', 500);
-  }
-}
+  },
+);

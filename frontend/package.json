@@ -1,6 +1,6 @@
 {
   "name": "news-investor-frontend",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

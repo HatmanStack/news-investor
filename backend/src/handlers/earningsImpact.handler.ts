@@ -7,7 +7,7 @@
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { successResponse, errorResponse, type APIGatewayResponse } from '../utils/response.util.js';
-import { logError, hasStatusCode, sanitizeErrorMessage } from '../utils/error.util.js';
+import { withErrorHandling } from '../utils/handler.util.js';
 import { validateTicker } from '../utils/validation.util.js';
 import { queryByTickerAndDateRange } from '../repositories/dailySentimentAggregate.repository.js';
 import type { DailySentimentData } from '../types/dynamodb.types.js';
@@ -20,10 +20,9 @@ interface EarningsImpactEvent {
   dataPoints: number;
 }
 
-export async function handleEarningsImpactRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleEarningsImpactRequest = withErrorHandling(
+  'EarningsImpactHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     const ticker = validateTicker(event.queryStringParameters?.ticker);
     if (!ticker) {
       return errorResponse('Missing or invalid ticker parameter', 400);
@@ -91,12 +90,5 @@ export async function handleEarningsImpactRequest(
     events.sort((a, b) => b.earningsDate.localeCompare(a.earningsDate));
 
     return successResponse({ events });
-  } catch (error) {
-    logError('EarningsImpactHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);

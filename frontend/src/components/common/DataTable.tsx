@@ -268,11 +268,10 @@ function DataTableRow<T>({
       onPress={onPress ? () => onPress(item, index) : undefined}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      // @ts-ignore - Web-only props
+      // @ts-expect-error Web-only mouse handlers; React Native Pressable types omit them
       onMouseEnter={Platform.OS === 'web' ? () => onHover(rowKey) : undefined}
       onMouseLeave={Platform.OS === 'web' ? () => onHover(null) : undefined}
     >
-      {/* @ts-ignore - animation types */}
       <AnimatedWrapper
         style={[styles.row, rowStyle, { borderBottomColor: theme.colors.outline }]}
         {...animationProps}

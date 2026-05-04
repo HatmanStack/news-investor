@@ -139,7 +139,7 @@ export function AuraButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled }}
       accessibilityLabel={label}
-      // @ts-ignore - Web-only props
+      // @ts-expect-error Web-only mouse handlers; React Native Pressable types omit them
       onMouseEnter={Platform.OS === 'web' ? handleHoverIn : undefined}
       onMouseLeave={Platform.OS === 'web' ? handleHoverOut : undefined}
       style={fullWidth ? styles.fullWidth : undefined}

@@ -140,6 +140,10 @@ Frontend `.env` (auto-updated by backend deploy):
 
 ```dotenv
 EXPO_PUBLIC_BACKEND_URL=https://xxx.execute-api.region.amazonaws.com
+EXPO_PUBLIC_BROWSER_SENTIMENT=true
+EXPO_PUBLIC_BROWSER_PREDICTION=false
+EXPO_PUBLIC_USE_LAMBDA_SENTIMENT=true
+EXPO_PUBLIC_LOG_LEVEL=warn
 ```
 
 Backend `.env.deploy`:
@@ -180,7 +184,7 @@ The default `AllowedOrigins: '*'` in `template.yaml` is intentional:
 
 ### Development Instrumentation
 
-The prediction service includes ANOVA F-test diagnostics (`computeFeatureFStats` in `frontend/src/ml/prediction/prediction.service.ts`):
+The prediction service includes ANOVA F-test diagnostics (`computeFeatureFStats` in `frontend/src/ml/prediction/ftest.ts`; consumed by `prediction.service.ts`):
 
 - **Purpose**: Feature importance analysis during model development
 - **Output**: Console logging for developer inspection, NOT shown to end users

@@ -496,3 +496,86 @@ export async function queryByEntityType<T>(
 export function getDynamoDbClient(): DynamoDBDocumentClient {
   return dynamoDb;
 }
+
+/** A page of results plus an opaque cursor for resumption. */
+export interface PagedQueryResult<T> {
+  items: T[];
+  /** Opaque cursor (base64 JSON of LastEvaluatedKey) or undefined when at end. */
+  nextCursor?: string;
+}
+
+function encodeCursor(key: Record<string, unknown> | undefined): string | undefined {
+  if (!key) return undefined;
+  return Buffer.from(JSON.stringify(key), 'utf8').toString('base64');
+}
+
+/**
+ * Thrown by `decodeCursor` when the supplied cursor is not valid base64-of-JSON.
+ *
+ * Has `statusCode: 400` so handlers using the central error utilities
+ * (`getStatusCodeFromError` / `withErrorHandling`) automatically surface it
+ * as a 400 instead of a 500.
+ */
+export class InvalidCursorError extends Error {
+  statusCode: number;
+  constructor(message = 'Invalid cursor') {
+    super(message);
+    this.name = 'InvalidCursorError';
+    this.statusCode = 400;
+  }
+}
+
+function decodeCursor(cursor: string | undefined): Record<string, unknown> | undefined {
+  if (!cursor) return undefined;
+  try {
+    return JSON.parse(Buffer.from(cursor, 'base64').toString('utf8')) as Record<string, unknown>;
+  } catch {
+    throw new InvalidCursorError();
+  }
+}
+
+/**
+ * Paginated variant of queryByEntityType: returns one page of items plus an
+ * opaque `nextCursor` that callers pass back to fetch the next page. Use this
+ * when streaming through TIER/QUOTA/etc. records to keep memory O(page size)
+ * instead of O(total user count).
+ *
+ * Cursor encoding is base64-of-JSON of the underlying `LastEvaluatedKey`; it
+ * is not stable across schema changes (callers should treat it as opaque and
+ * disposable). When `nextCursor` is `undefined`, traversal is complete.
+ */
+export async function queryByEntityTypePaged<T>(
+  entityType: string,
+  options?: {
+    cursor?: string;
+    limit?: number;
+    filterExpression?: string;
+    expressionAttributeValues?: Record<string, unknown>;
+    expressionAttributeNames?: Record<string, string>;
+  },
+): Promise<PagedQueryResult<T>> {
+  const expressionAttributeValues: Record<string, unknown> = {
+    ':entityType': entityType,
+    ...options?.expressionAttributeValues,
+  };
+
+  const params: QueryCommandInput = {
+    TableName: getTableName(),
+    IndexName: ENTITY_TYPE_INDEX,
+    KeyConditionExpression: 'entityType = :entityType',
+    ExpressionAttributeValues: expressionAttributeValues,
+    ...(options?.filterExpression && { FilterExpression: options.filterExpression }),
+    ...(options?.expressionAttributeNames && {
+      ExpressionAttributeNames: options.expressionAttributeNames,
+    }),
+    ...(options?.limit && { Limit: options.limit }),
+    ExclusiveStartKey: decodeCursor(options?.cursor),
+  };
+
+  const result = await dynamoDb.send(new QueryCommand(params));
+  const items = (result.Items as T[]) ?? [];
+  return {
+    items,
+    nextCursor: encodeCursor(result.LastEvaluatedKey as Record<string, unknown> | undefined),
+  };
+}

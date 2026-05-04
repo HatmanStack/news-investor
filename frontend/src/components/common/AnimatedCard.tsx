@@ -119,15 +119,15 @@ export function AnimatedCard({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityRole={accessibilityRole}
-      // @ts-ignore - Web-only props
+      // @ts-expect-error Web-only mouse handlers; React Native Pressable types omit them
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
     >
-      {/* @ts-ignore - Reanimated style types conflict with RN style types */}
+      {/* @ts-expect-error Reanimated AnimatedStyle vs RN ViewStyle mismatch */}
       <Animated.View style={[animatedStyle, hoverStyle, focusStyle, style]}>
-        {/* @ts-ignore - react-native-paper Card mode types are overly restrictive */}
+        {/* @ts-expect-error react-native-paper Card mode prop types are too restrictive for our pass-through */}
         <Card {...cardProps}>{children}</Card>
       </Animated.View>
     </Pressable>

@@ -20,7 +20,15 @@ jest.unstable_mockModule('../../utils/error.util.js', () => ({
   sanitizeErrorMessage: jest
     .fn<(...args: unknown[]) => string>()
     .mockReturnValue('Internal server error'),
+  getStatusCodeFromError: jest.fn<(...args: unknown[]) => number>().mockReturnValue(500),
   logError: jest.fn(),
+  APIError: class APIError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode = 500) {
+      super(message);
+      this.statusCode = statusCode;
+    }
+  },
 }));
 
 // Mock truncation to pass data through (avoids date-relative filtering in tests)

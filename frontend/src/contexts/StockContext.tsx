@@ -4,7 +4,7 @@
  * Syncs timeframe between Price and Sentiment tabs
  */
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { formatDateForDB } from '../utils/date/dateUtils';
 import type { TimeRange } from '@/components/common/TimeRangeSelector';
 import { getTimeRangeStartDate } from '@/components/common/TimeRangeSelector';
@@ -57,17 +57,28 @@ export function StockProvider({ children }: StockProviderProps) {
     setEndDate(newEndDate);
   }, []);
 
-  const value: StockContextType = {
-    selectedTicker,
-    selectedDate,
-    startDate,
-    endDate,
-    selectedTimeRange,
-    setSelectedTicker,
-    setSelectedDate,
-    setDateRange,
-    setTimeRange,
-  };
+  const value = useMemo<StockContextType>(
+    () => ({
+      selectedTicker,
+      selectedDate,
+      startDate,
+      endDate,
+      selectedTimeRange,
+      setSelectedTicker,
+      setSelectedDate,
+      setDateRange,
+      setTimeRange,
+    }),
+    [
+      selectedTicker,
+      selectedDate,
+      startDate,
+      endDate,
+      selectedTimeRange,
+      setDateRange,
+      setTimeRange,
+    ],
+  );
 
   return <StockContext.Provider value={value}>{children}</StockContext.Provider>;
 }

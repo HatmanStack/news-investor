@@ -25,6 +25,8 @@ jest.unstable_mockModule('../logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
+import type { InvalidCursorError as InvalidCursorErrorType } from '../dynamodb.util.js';
+
 const {
   getTableName,
   getItem,
@@ -36,6 +38,8 @@ const {
   updateItem,
   deleteItem,
   getDynamoDbClient,
+  queryByEntityTypePaged,
+  InvalidCursorError,
 } = await import('../dynamodb.util.js');
 
 describe('DynamoDB Utility Functions', () => {
@@ -575,6 +579,27 @@ describe('DynamoDB Utility Functions', () => {
       const client = getDynamoDbClient();
       expect(client).toBeDefined();
       expect(client.send).toBeDefined();
+    });
+  });
+
+  describe('InvalidCursorError', () => {
+    it('throws InvalidCursorError (statusCode 400) for malformed cursor', async () => {
+      mockSend.mockResolvedValue({ Items: [] });
+      await expect(
+        queryByEntityTypePaged('TIER', { cursor: 'not-base64-json' }),
+      ).rejects.toBeInstanceOf(InvalidCursorError);
+    });
+
+    it('attaches statusCode 400 so the error utility maps it to 400', async () => {
+      mockSend.mockResolvedValue({ Items: [] });
+      try {
+        await queryByEntityTypePaged('TIER', { cursor: 'invalid-cursor' });
+        throw new Error('expected throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InvalidCursorError);
+        expect((error as InvalidCursorErrorType).statusCode).toBe(400);
+        expect((error as InvalidCursorErrorType).name).toBe('InvalidCursorError');
+      }
     });
   });
 });

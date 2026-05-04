@@ -43,22 +43,11 @@ export function logError(
 }
 
 /**
- * Extract status code from error
- * @param error - Error object
- * @returns HTTP status code
- */
-export function getStatusCodeFromError(error: unknown): number {
-  if (error instanceof APIError) {
-    return error.statusCode;
-  }
-
-  // Default to 500 for unknown errors
-  return 500;
-}
-
-/**
  * Type guard for errors with a statusCode property.
  * Replaces unsafe `(error as any).statusCode` casts.
+ *
+ * Do not reintroduce the cast; use `hasStatusCode(error)` to narrow first,
+ * after which `error.statusCode` is typed and safe.
  */
 export function hasStatusCode(e: unknown): e is { statusCode: number } {
   return (
@@ -67,6 +56,25 @@ export function hasStatusCode(e: unknown): e is { statusCode: number } {
     'statusCode' in e &&
     typeof (e as Record<string, unknown>).statusCode === 'number'
   );
+}
+
+/**
+ * Extract status code from error.
+ *
+ * Recognizes any error with a numeric `statusCode` property — including
+ * `APIError`, `AuthError`, and other custom error classes used across the
+ * codebase. Defaults to 500 for unknown errors and for malformed
+ * `statusCode` values (non-integer, out of HTTP range, or wrong type).
+ */
+export function getStatusCodeFromError(error: unknown): number {
+  if (hasStatusCode(error)) {
+    const code = error.statusCode;
+    if (Number.isInteger(code) && code >= 100 && code <= 599) {
+      return code;
+    }
+    return 500;
+  }
+  return 500;
 }
 
 /**

@@ -2,7 +2,7 @@
  * SqliteAdapter unit tests
  */
 
-import { SqliteAdapter } from '../sqliteAdapter';
+import { SqliteAdapter, toSqlParams } from '../sqliteAdapter';
 import { initializeDatabase, getDatabase, closeDatabase, resetDatabase } from '../database';
 
 jest.mock('../database', () => ({
@@ -312,6 +312,49 @@ describe('SqliteAdapter', () => {
         [],
       );
       expect(result).toBe(5);
+    });
+  });
+
+  describe('toSqlParams shim', () => {
+    it('passes strings through unchanged', () => {
+      expect(toSqlParams(['hello', 'world'])).toEqual(['hello', 'world']);
+    });
+
+    it('passes numbers through unchanged', () => {
+      expect(toSqlParams([1, 2.5, -3])).toEqual([1, 2.5, -3]);
+    });
+
+    it('coerces booleans to 0/1 (SQLite has no native boolean)', () => {
+      expect(toSqlParams([true, false])).toEqual([1, 0]);
+    });
+
+    it('maps null and undefined to null', () => {
+      expect(toSqlParams([null, undefined])).toEqual([null, null]);
+    });
+
+    it('passes Uint8Array (blob) through unchanged', () => {
+      const blob = new Uint8Array([1, 2, 3]);
+      expect(toSqlParams([blob])).toEqual([blob]);
+    });
+
+    it('throws TypeError for unsupported parameter types (object)', () => {
+      // Object/function would otherwise silently bind as `[object Object]`-style garbage
+      expect(() => toSqlParams([{ foo: 'bar' }])).toThrow(TypeError);
+      expect(() => toSqlParams([{ foo: 'bar' }])).toThrow(/Unsupported SQL parameter type/);
+    });
+
+    it('throws TypeError for unsupported parameter types (function)', () => {
+      expect(() => toSqlParams([() => 'noop'])).toThrow(TypeError);
+    });
+
+    it('handles a mixed-type bind list', () => {
+      expect(toSqlParams(['ticker', 42, true, null, undefined])).toEqual([
+        'ticker',
+        42,
+        1,
+        null,
+        null,
+      ]);
     });
   });
 

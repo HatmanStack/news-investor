@@ -19,9 +19,24 @@ import { aggregateDailySentiment } from '../utils/sentiment.util.js';
 import { logMlSentimentCacheHitRate } from '../utils/metrics.util.js';
 import { validateDateFormat, validateTicker } from '../utils/validation.util.js';
 import { sentimentRequestSchema, parseBody } from '../utils/schemas.util.js';
-import { hasStatusCode, sanitizeErrorMessage, logError } from '../utils/error.util.js';
+import { withErrorHandling } from '../utils/handler.util.js';
 import { logger } from '../utils/logger.util.js';
 import type { DailySentiment } from '../types/sentiment.types.js';
+
+/**
+ * Reset the cached SQS client. Test-only helper.
+ *
+ * The community overlay processes sentiment synchronously and does not
+ * instantiate an SQS client, so this is a no-op stub. It exists solely to
+ * preserve the exported-symbol surface area of the pro-edition source per
+ * ADR-007 (sync overlay discipline) so `./scripts/overlay-staleness.sh`
+ * passes its structural-drift check.
+ *
+ * @internal
+ */
+export function resetSqsClientForTests(): void {
+  /* no-op: community overlay processes sentiment synchronously */
+}
 
 /**
  * POST /sentiment - Trigger sentiment analysis for a ticker
@@ -32,10 +47,9 @@ import type { DailySentiment } from '../types/sentiment.types.js';
  * @param event - API Gateway event
  * @returns API Gateway response
  */
-export async function handleSentimentRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleSentimentRequest = withErrorHandling(
+  'SentimentHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     // Parse and validate request body using Zod
     const parsed = parseBody(event.body, sentimentRequestSchema);
     if (!parsed.success) {
@@ -98,7 +112,7 @@ export async function handleSentimentRequest(
       });
     } catch (processingError) {
       // Persist failure state in DynamoDB before re-throwing to the outer
-      // catch, which converts the error into an HTTP response.
+      // wrapper, which converts the error into an HTTP response.
       const errorMessage =
         processingError instanceof Error
           ? processingError.message
@@ -107,15 +121,8 @@ export async function handleSentimentRequest(
 
       throw processingError;
     }
-  } catch (error) {
-    logError('SentimentHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);
 
 /**
  * GET /sentiment/job/:jobId - Get sentiment job status
@@ -126,10 +133,9 @@ export async function handleSentimentRequest(
  * @param event - API Gateway event
  * @returns API Gateway response
  */
-export async function handleSentimentJobStatusRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleSentimentJobStatusRequest = withErrorHandling(
+  'SentimentHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     // Extract job ID from path parameters, with rawPath fallback
     const jobId =
       event.pathParameters?.jobId || event.rawPath.match(/\/sentiment\/job\/([^/]+)/)?.[1];
@@ -158,15 +164,8 @@ export async function handleSentimentJobStatusRequest(
       durationMs: job.startedAt && job.completedAt ? job.completedAt - job.startedAt : undefined,
       error: job.error,
     });
-  } catch (error) {
-    logError('SentimentHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);
 
 /**
  * Core logic to fetch sentiment results
@@ -189,7 +188,10 @@ export async function getSentimentResults(
 }> {
   logger.info('getSentimentResults called', { ticker, startDate, endDate });
 
-  // Fetch sentiments and articles in parallel (independent queries)
+  // Fetch sentiments and articles in parallel for THIS single ticker. Both
+  // queries are required to render the response (sentiment scores joined with
+  // article metadata), so Promise.all is correct here — failure of either
+  // query should fail the request rather than degrade silently.
   const [allSentiments, allArticles] = await Promise.all([
     SentimentCacheRepository.querySentimentsByTicker(ticker),
     NewsCacheRepository.queryArticlesByTicker(ticker),
@@ -310,10 +312,9 @@ interface ArticleSentimentItem {
  * @param event - API Gateway event
  * @returns API Gateway response
  */
-export async function handleArticleSentimentRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleArticleSentimentRequest = withErrorHandling(
+  'SentimentHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     // Parse query parameters
     const params = event.queryStringParameters || {};
     const rawTicker = params.ticker;
@@ -344,7 +345,9 @@ export async function handleArticleSentimentRequest(
 
     logger.info('handleArticleSentimentRequest', { ticker, startDate, endDate });
 
-    // Fetch all sentiments and articles for ticker
+    // Fetch sentiments and articles for THIS single ticker. Both queries are
+    // required to join sentiment scores with article metadata; Promise.all is
+    // correct here.
     const [allSentiments, allArticles] = await Promise.all([
       SentimentCacheRepository.querySentimentsByTicker(ticker),
       NewsCacheRepository.queryArticlesByTicker(ticker),
@@ -404,15 +407,8 @@ export async function handleArticleSentimentRequest(
       endDate: endDate || null,
       articles,
     });
-  } catch (error) {
-    logError('SentimentHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);
 
 /**
  * GET /sentiment - Get cached sentiment results
@@ -423,10 +419,9 @@ export async function handleArticleSentimentRequest(
  * @param event - API Gateway event
  * @returns API Gateway response
  */
-export async function handleSentimentResultsRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleSentimentResultsRequest = withErrorHandling(
+  'SentimentHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     // Parse query parameters
     const params = event.queryStringParameters || {};
     const rawTicker = params.ticker;
@@ -463,15 +458,8 @@ export async function handleSentimentResultsRequest(
     const result = await getSentimentResults(ticker, startDate, endDate);
 
     return successResponse(result);
-  } catch (error) {
-    logError('SentimentHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);
 
 /**
  * GET /sentiment/daily-history - Get pre-aggregated daily sentiment for heatmap
@@ -479,10 +467,9 @@ export async function handleSentimentResultsRequest(
  * Query parameters: ticker (required), startDate (required), endDate (required)
  * Response: { data: [{ date, sentimentScore, materialEventCount, eventCounts, avgSignalScore }] }
  */
-export async function handleDailyHistoryRequest(
-  event: APIGatewayProxyEventV2,
-): Promise<APIGatewayResponse> {
-  try {
+export const handleDailyHistoryRequest = withErrorHandling(
+  'SentimentHandler',
+  async (event: APIGatewayProxyEventV2): Promise<APIGatewayResponse> => {
     const ticker = validateTicker(event.queryStringParameters?.ticker);
     const startDate = event.queryStringParameters?.startDate;
     const endDate = event.queryStringParameters?.endDate;
@@ -506,12 +493,5 @@ export async function handleDailyHistoryRequest(
     }));
 
     return successResponse(result);
-  } catch (error) {
-    logError('SentimentHandler', error, {
-      requestId: event.requestContext.requestId,
-    });
-
-    const statusCode = hasStatusCode(error) ? error.statusCode : 500;
-    return errorResponse(sanitizeErrorMessage(error, statusCode), statusCode);
-  }
-}
+  },
+);

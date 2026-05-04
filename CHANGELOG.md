@@ -9,9 +9,78 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-05-03
+
 ### Added
 
 - **[Pro]** Stripe billing integration: web-only Checkout + Customer Portal + signature-verified webhook sync subscription state to DynamoDB. Upgrade button on Settings screen for authenticated free users, Manage-billing button for Pro users. Supports monthly plan via `STRIPE_PRICE_ID_MONTHLY`. See `docs/plans/2026-04-21-stripe-billing/RUNBOOK.md` for setup.
+- **[Pro]** Sparse `StripeCustomerIdIndex` GSI on the DynamoDB table for O(1) `getUserByStripeCustomerId` lookup from `customer.subscription.*` webhooks (replaces full TIER GSI scan).
+- **[Pro]** `STRIPE_EVENT#{eventId}` DynamoDB entity (7-day TTL) for webhook idempotency via `putStripeEventIfNew` conditional write.
+- Markdown lint (markdownlint) and link checking (lychee) wired into the PR pipeline (`.github/workflows/ci.yml` `lint-docs` job, gated by paths-filter on doc changes).
+- Per-job Jest coverage summary printed on every CI run (frontend and backend).
+- `ModelCacheError` EMF metric emitted on ML model cache read/write failures.
+- Console-call baseline ratchet documentation in `CONTRIBUTING.md` ("Logging Discipline" section) and in the `scripts/check-console-calls.sh` header.
+
+### Changed
+
+- **[Pro]** Alert sweep now fans out subscriber processing through `mapWithConcurrency` (concurrency 5) over a flat work list with a `MAX_WORK_PER_INVOCATION = 500` cap and per-item failure isolation. Replaces the prior nested sequential `await` loops that risked Lambda timeout as user count grew.
+- **[Pro]** Admin aggregation and user-list services paginate DynamoDB scans instead of materializing the full `TIER`/`QUOTA`/`REPORT_PREFS`/`ALERT_PREFS` partitions in memory. Admin SPA accepts opaque `nextCursor` continuation.
+- **[Pro]** SQS sentiment worker reports `batchItemFailures` so partial-batch retry semantics are preserved (poison-pill messages are dropped, transient failures retried).
+- Knip configuration tuned for path aliases and Expo Router entry points; baseline reduced from 154 unresolved-imports to 0 unused files / 0 unused deps / 1 unused export / 2 unused types.
+- React context value objects (`AuthContext`, `StockContext`, `StockDetailContext`, `TierContext`) wrapped in `useMemo` to avoid re-renders on parent updates.
+- `lazyHandler` indirection in `backend/src/index.ts` removed in favor of direct named imports; the `ROUTES` table and 405-vs-404 distinction preserved. Esbuild already inlines all `await import()` call sites, so the indirection produced no cold-start benefit (per ADR-003 of the audit plan).
+- `sentimentProcessing.service.ts` decomposed into `pipeline.ts` (orchestration), `articleAnalysis.ts` (per-article work), and `cache.ts` (DynamoDB writes). Public interface and tests preserved.
+- Reddit OAuth token refresh promise-deduped: concurrent `getAccessToken` callers share a single in-flight refresh.
+- SQLite adapter `as any` casts replaced with a single typed `toSqlParams(params: SqlParams): SQLiteBindValue[]` shim at the library boundary.
+- `PriceListHeader.theme` typed as the project-augmented `AppTheme` (was `any`).
+- Coverage thresholds documented and enforced in CI (frontend 45/55/55/56, backend 63/75/71/70).
+- Stripe checkout/portal handlers and the portfolio-risk handler wrapped in `withErrorHandling` so they share the standard catch-log-sanitize-respond pipeline; `predictionHandler` keeps its inline catch with a comment because its event union is wider than the `Handler` type the wrapper expects.
+- `lint:docs` markdownlint glob widened to `docs/**/*.md` (recursive). Historical plan archives (`docs/plans/**`) added to the markdownlint ignore list — they are write-once implementation records, not living docs.
+- `.env.example` Stripe and Reddit blocks rephrased for disabled-state behavior (Stripe routes return 500 "Billing not configured"; social-sentiment falls back to Finnhub-only signals).
+
+### Fixed
+
+- **[Pro]** Stripe SDK requests now have an 8s timeout and `maxNetworkRetries: 1` so a slow upstream cannot silently expire the 30s Lambda.
+- **[Pro]** Stripe customer-attach race resolved via conditional `attribute_not_exists(stripeCustomerId)` write with orphan-customer cleanup on `ConditionalCheckFailedException`.
+- **[Pro]** Stripe checkout fails fast with a 500 if the TIER record is still absent after auto-provision (eventually-consistent read miss / concurrent delete) instead of upserting a partial record without `tier`/`createdAt`/`entityType`. `setStripeCustomerIdIfAbsent` repository condition tightened to require `attribute_exists(pk) AND attribute_not_exists(stripeCustomerId)` as a second-line defense.
+- **[Pro]** `getUserByStripeCustomerId` no longer hides a duplicate-row data-corruption case behind `Limit: 1`. The query runs without a limit, throws on `> 1` matching TIER rows (fails closed → webhook 500 → Stripe retries → operator triage), and logs the conflicting `pk` values.
+- Portfolio-risk endpoint deduplicates query-string tickers (`AAPL,AAPL,MSFT`) before validation so duplicates can never double-weight a position in the correlation matrix or per-ticker beta/VaR. The "at least 2" error message now reads "at least 2 unique tickers".
+- **[Pro]** Email addresses redacted in operational logs (PII).
+- Multi-ticker handler batches now use `Promise.allSettled` with structured per-ticker error logging instead of a single rejected promise short-circuiting the whole batch.
+- Malformed SQS messages are dropped (logged, not retried) so a single poison-pill cannot block the queue.
+- Sentiment Worker SQS client lazy-initialized so module load is decoupled from env vars (matches `getStripe()` pattern).
+- `prediction.handler.ts` snapshot loop now uses `Promise.allSettled` per-ticker.
+- TIER context returns `isFeatureEnabled: () => false` while loading so pro UI is not flashed during the pre-fetch window.
+- `Math.random()` use in ML model weight initialization annotated as non-security-sensitive.
+- `@ts-ignore` directives upgraded to `@ts-expect-error` so removed casts surface as type errors.
+- Vulture whitelist trimmed of stale entries.
+- Cold-start utilities consolidated.
+- Various small redundant casts removed.
+
+### Security
+
+- **[Pro]** `dynamodb:Scan` IAM permissions tightened to least-privilege per Lambda role (Aggregation only) — most functions now have `dynamodb:Query` / `dynamodb:GetItem` / `dynamodb:PutItem` / `dynamodb:UpdateItem` / `dynamodb:BatchWriteItem` / `dynamodb:BatchGetItem` only.
+- npm vulnerabilities triaged: 0 high, 0 critical (post-`@xmldom/xmldom` bump in c1a3af8).
+
+### Documentation
+
+- Documentation drift remediated across `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/API.md`: Lambda count corrected to 8, calibration entry added to file tree, tier feature count updated to 26, hooks-barrel claim clarified, `/alerts/preferences` schema corrected to match Zod, ML horizon paragraph rewritten to describe adaptive feature selection, F-test location pointed at `ftest.ts`, sentiment grouping updated to include `social_score` and `insider_net_sentiment`, social-sentiment section rewritten for the self-hosted Reddit pipeline (replaces stale Finnhub paragraph).
+- Stripe routes (`POST /stripe/checkout`, `POST /stripe/portal`, `POST /stripe/webhook`), `STRIPE_EVENT#{eventId}` entity, `TOKEN#reddit` OAuth entity, and `STRIPE_*` / `PUBLIC_WEB_URL` / `REDDIT_CLIENT_*` env vars documented.
+- File map in `docs/ARCHITECTURE.md` extended to cover `calibration.entry.ts`, Stripe handler/service/repo, Reddit/insider services, portfolio risk service, missing hooks/components.
+- `PRO_FEATURES_ROADMAP.md` "Future Strategic Vision (v3.0)" content relocated to `docs/plans/2026-05-03-pro-strategic-vision.md`; roadmap now links rather than embedding brainstorming.
+- `admin/package.json` version bumped to `2.15.0` to align with root/frontend/backend.
+- Audit Phase-0 through Phase-5 plan docs neutralized to verify-current-branch wording (was hardcoded `main`); Phase-3 carries a post-pipeline supersession note pointing to the shipped duplicate-detection implementation.
+
+### Tests
+
+- Added boundary-inclusivity coverage for `filterArticlesByDateRange` (start/end-equal articles).
+- Portfolio-risk failed-ticker case now also asserts `logger.warn` was emitted with the failing ticker (observability contract).
+- Stripe checkout persistence-failure case now also asserts no Checkout Session was created (prevents redirecting users to a Stripe URL the backend has no record of).
+- Aggregation service unit test pins the clock with Jest fake timers so `today`/`yesterday` derivation is deterministic across UTC midnight.
+
+### Removed
+
+- Unused `readDailySnapshot` wrapper in `backend/src/services/admin/aggregation.service.ts` (one-line passthrough to `getDailySnapshot`, no callers anywhere).
 
 ## [2.14.0] - 2026-04-16
 

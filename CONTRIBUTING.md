@@ -78,3 +78,16 @@ PYTHONPATH=backend/python pytest backend/python_tests/ -k "test_name"
 - **Dead code detection**: `npm run hygiene` (runs knip + vulture)
 - **Formatting**: Automatic via Prettier (TS/JSON/MD) and ruff (Python) on commit
 - **Linting**: `npm run lint` (frontend), `npm run lint:backend` (backend TS), `npm run lint:ml` (Python)
+
+## Logging Discipline
+
+Frontend code routes through `frontend/src/utils/logger.ts`. Backend uses
+`backend/src/utils/logger.util.ts`. Raw `console.*` calls are budget-capped
+per `scripts/check-console-calls.sh` -- new calls fail CI.
+
+To lower the baseline:
+
+1. Replace some `console.*` with the logger utility and verify locally.
+1. Run `./scripts/check-console-calls.sh`; capture the new count.
+1. Update the `BASELINE` constant in the script header.
+1. Commit with `chore(hygiene): lower console-call baseline to N`.

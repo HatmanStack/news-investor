@@ -108,6 +108,7 @@ export async function trainModel(
   }
 
   // Initialize weights to small random values
+  // not security-sensitive: ML weight initialization, deterministic seed not required
   const weights: number[] = Array(numFeatures)
     .fill(0)
     .map(() => (Math.random() - 0.5) * 0.1);

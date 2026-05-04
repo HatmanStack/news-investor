@@ -10,20 +10,22 @@
         "src/ml/version.ts",
         "src/features/tier/index.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"],
+      "paths": { "@/*": ["src/*"] }
     },
     "backend": {
       "entry": [
         "scripts/*.ts",
         "src/handlers/*.ts",
         "src/handlers/**/*.ts",
-        "src/utils/dynamodb.util.ts"
+        "src/utils/dynamodb.util.ts",
+        "src/*.entry.ts"
       ],
       "project": ["src/**/*.ts"]
     }
   },
   "ignore": [".sync/**"],
   "ignoreDependencies": ["babel-preset-expo"],
-  "ignoreBinaries": [],
+  "ignoreBinaries": ["jest", "lychee", "uvx", "eslint", "expo", "tsc"],
   "ignoreExportsUsedInFile": true
 }

@@ -9,11 +9,32 @@
  * API and never receives user input for identifiers.
  */
 
+import type { SQLiteBindValue } from 'expo-sqlite';
 import type { StorageAdapter, QueryOptions, PutOptions, PutResult } from './storageAdapter';
 import { initializeDatabase, getDatabase, closeDatabase, resetDatabase } from './database';
 
-// expo-sqlite expects SQLiteBindParams; we cast unknown[] since repositories pass valid SQL values
+// expo-sqlite expects SQLiteBindParams; repositories pass typed SQL values
 type SqlParams = unknown[];
+
+/**
+ * Convert project-typed SqlParams (unknown[]) into expo-sqlite's bind value array.
+ * Single boundary for the SqlParams ↔ expo-sqlite SQLiteBindValue type gap;
+ * replaces the previous five `as any` casts at runAsync/getAllAsync call sites.
+ *
+ * Booleans are coerced to 0/1 (SQLite has no native boolean), undefined is mapped
+ * to null, and other primitives pass through. Anything else (object, function)
+ * throws a TypeError instead of silently coercing to `[object Object]`-style
+ * garbage that would otherwise bind successfully and corrupt rows.
+ */
+export function toSqlParams(params: SqlParams): SQLiteBindValue[] {
+  return params.map((p): SQLiteBindValue => {
+    if (p === null || p === undefined) return null;
+    if (typeof p === 'boolean') return p ? 1 : 0;
+    if (typeof p === 'string' || typeof p === 'number') return p;
+    if (p instanceof Uint8Array) return p;
+    throw new TypeError(`Unsupported SQL parameter type: ${typeof p} (${String(p)})`);
+  });
+}
 
 export class SqliteAdapter implements StorageAdapter {
   async initialize(): Promise<void> {
@@ -32,8 +53,7 @@ export class SqliteAdapter implements StorageAdapter {
   async query(table: string, options?: QueryOptions): Promise<Record<string, unknown>[]> {
     const db = await getDatabase();
     const { sql, params } = this.buildSelectQuery(table, options);
-    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
-    return db.getAllAsync<Record<string, unknown>>(sql, params as SqlParams as any);
+    return db.getAllAsync<Record<string, unknown>>(sql, toSqlParams(params));
   }
 
   async queryOne(table: string, options?: QueryOptions): Promise<Record<string, unknown> | null> {
@@ -60,8 +80,7 @@ export class SqliteAdapter implements StorageAdapter {
     }
 
     const sql = `${prefix} ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
-    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
-    const result = await db.runAsync(sql, values as any);
+    const result = await db.runAsync(sql, toSqlParams(values));
     return { changes: result.changes, lastInsertRowId: result.lastInsertRowId };
   }
 
@@ -80,8 +99,7 @@ export class SqliteAdapter implements StorageAdapter {
     const values = [...Object.values(data), ...Object.values(filter)];
 
     const sql = `UPDATE ${table} SET ${setClause} WHERE ${whereClause}`;
-    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
-    const result = await db.runAsync(sql, values as any);
+    const result = await db.runAsync(sql, toSqlParams(values));
     return result.changes;
   }
 
@@ -98,8 +116,7 @@ export class SqliteAdapter implements StorageAdapter {
       sql = `DELETE FROM ${table} WHERE ${whereClause}`;
     }
 
-    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
-    const result = await db.runAsync(sql, values as any);
+    const result = await db.runAsync(sql, toSqlParams(values));
     return result.changes;
   }
 
@@ -116,8 +133,7 @@ export class SqliteAdapter implements StorageAdapter {
       params.push(...Object.values(filter));
     }
 
-    // Intentional cast: expo-sqlite expects SQLiteBindParams; adapter converts from generic unknown[]
-    const results = await db.getAllAsync<{ count: number }>(sql, params as any);
+    const results = await db.getAllAsync<{ count: number }>(sql, toSqlParams(params));
     return results[0]?.count ?? 0;
   }
 

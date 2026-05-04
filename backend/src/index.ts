@@ -1,6 +1,13 @@
 /**
  * AWS Lambda entry point for React Stocks backend
  * Routes requests to appropriate handlers via declarative route table
+ *
+ * Architecture note: Handlers are imported directly because esbuild bundles
+ * all routes into a single file at build time. The previous `lazyHandler`
+ * factory pattern with `await import()` was a no-op for cold-start because
+ * esbuild statically resolves and inlines every literal `import()` call site.
+ * The `ROUTES` table preserves the declarative routing pattern (path/method
+ * dispatch + 405-vs-404 distinction) without the misleading indirection.
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
@@ -8,12 +15,28 @@ import { errorResponse, type APIGatewayResponse } from './utils/response.util';
 import { logError, getStatusCodeFromError, sanitizeErrorMessage } from './utils/error.util';
 import { logLambdaStartStatus, logRequestMetrics } from './utils/metrics.util';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util';
+import { isColdStart } from './utils/coldStart.util';
+
+// ── Direct handler imports ──
+import { handleNewsRequest } from './handlers/news.handler';
+import {
+  handleSentimentRequest,
+  handleSentimentResultsRequest,
+  handleArticleSentimentRequest,
+  handleDailyHistoryRequest,
+  handleSentimentJobStatusRequest,
+} from './handlers/sentiment.handler';
+import { handleTrendingRequest } from './handlers/trending.handler';
+import { handleFreshnessRequest } from './handlers/freshness.handler';
+import { handleEarningsImpactRequest } from './handlers/earningsImpact.handler';
+import { predictionHandler } from './handlers/prediction.handler';
+import {
+  handleBatchNewsRequest,
+  handleBatchSentimentRequest,
+} from './handlers/batch.handler';
 
 /** Maximum request body size (10KB) */
 const MAX_BODY_SIZE = 10 * 1024;
-
-// Track cold start - only the first invocation is a cold start
-let isFirstInvocation = true;
 
 /** Direct Lambda invocation payload (for prediction trigger from sentiment handler) */
 interface DirectInvocationEvent {
@@ -21,127 +44,41 @@ interface DirectInvocationEvent {
   days?: number;
 }
 
-/** Route definition with lazy handler import for cold start optimization */
+/** Route definition mapping a path + method to a handler function. */
 export interface RouteDefinition {
   path: string;
   method: string;
   prefix?: boolean;
-  importHandler: () => Promise<(event: APIGatewayProxyEventV2) => Promise<APIGatewayResponse>>;
+  handler: (event: APIGatewayProxyEventV2) => Promise<APIGatewayResponse>;
 }
 
 /**
- * Declarative route table. Each entry maps a path + method to a lazy-loaded handler.
- * Prefix routes go at the end so exact matches take priority.
+ * Declarative route table. Each entry maps a path + method to a directly
+ * imported handler. Prefix routes go at the end so exact matches take priority.
  * Note: /stocks, /search, /batch/stocks are handled by Python Lambda.
  */
 export const ROUTES: RouteDefinition[] = [
   // ── News ──
-  {
-    path: '/news',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleNewsRequest } = await import('./handlers/news.handler');
-      return handleNewsRequest;
-    },
-  },
+  { path: '/news', method: 'GET', handler: handleNewsRequest },
 
   // ── Sentiment ──
-  {
-    path: '/sentiment',
-    method: 'POST',
-    importHandler: async () => {
-      const { handleSentimentRequest } = await import('./handlers/sentiment.handler');
-      return handleSentimentRequest;
-    },
-  },
-  {
-    path: '/sentiment',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleSentimentResultsRequest } = await import('./handlers/sentiment.handler');
-      return handleSentimentResultsRequest;
-    },
-  },
-  {
-    path: '/sentiment/articles',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleArticleSentimentRequest } = await import('./handlers/sentiment.handler');
-      return handleArticleSentimentRequest;
-    },
-  },
-  {
-    path: '/sentiment/daily-history',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleDailyHistoryRequest } = await import('./handlers/sentiment.handler');
-      return handleDailyHistoryRequest;
-    },
-  },
-  {
-    path: '/sentiment/trending',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleTrendingRequest } = await import('./handlers/trending.handler');
-      return handleTrendingRequest;
-    },
-  },
-
-  {
-    path: '/sentiment/freshness',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleFreshnessRequest } = await import('./handlers/freshness.handler');
-      return handleFreshnessRequest;
-    },
-  },
-  {
-    path: '/sentiment/earnings-impact',
-    method: 'GET',
-    importHandler: async () => {
-      const { handleEarningsImpactRequest } = await import('./handlers/earningsImpact.handler');
-      return handleEarningsImpactRequest;
-    },
-  },
+  { path: '/sentiment', method: 'POST', handler: handleSentimentRequest },
+  { path: '/sentiment', method: 'GET', handler: handleSentimentResultsRequest },
+  { path: '/sentiment/articles', method: 'GET', handler: handleArticleSentimentRequest },
+  { path: '/sentiment/daily-history', method: 'GET', handler: handleDailyHistoryRequest },
+  { path: '/sentiment/trending', method: 'GET', handler: handleTrendingRequest },
+  { path: '/sentiment/freshness', method: 'GET', handler: handleFreshnessRequest },
+  { path: '/sentiment/earnings-impact', method: 'GET', handler: handleEarningsImpactRequest },
 
   // ── Prediction ──
-  {
-    path: '/predict',
-    method: 'POST',
-    importHandler: async () => {
-      const { predictionHandler } = await import('./handlers/prediction.handler');
-      return predictionHandler;
-    },
-  },
+  { path: '/predict', method: 'POST', handler: predictionHandler },
 
   // ── Batch ──
-  {
-    path: '/batch/news',
-    method: 'POST',
-    importHandler: async () => {
-      const { handleBatchNewsRequest } = await import('./handlers/batch.handler');
-      return handleBatchNewsRequest;
-    },
-  },
-  {
-    path: '/batch/sentiment',
-    method: 'POST',
-    importHandler: async () => {
-      const { handleBatchSentimentRequest } = await import('./handlers/batch.handler');
-      return handleBatchSentimentRequest;
-    },
-  },
+  { path: '/batch/news', method: 'POST', handler: handleBatchNewsRequest },
+  { path: '/batch/sentiment', method: 'POST', handler: handleBatchSentimentRequest },
 
   // ── Prefix routes (parameterized) — must come after exact matches ──
-  {
-    path: '/sentiment/job/',
-    method: 'GET',
-    prefix: true,
-    importHandler: async () => {
-      const { handleSentimentJobStatusRequest } = await import('./handlers/sentiment.handler');
-      return handleSentimentJobStatusRequest;
-    },
-  },
+  { path: '/sentiment/job/', method: 'GET', prefix: true, handler: handleSentimentJobStatusRequest },
 ];
 
 /**
@@ -175,7 +112,6 @@ export async function handler(
     logger.info('Direct invocation detected, routing to prediction handler', {
       ticker: event.ticker,
     });
-    const { predictionHandler } = await import('./handlers/prediction.handler');
     return predictionHandler(event);
   }
 
@@ -185,13 +121,12 @@ export async function handler(
   const startTime = Date.now();
 
   // Cold Start Detection - only first invocation per container is cold
-  const isColdStart = isFirstInvocation;
-  isFirstInvocation = false;
-  logLambdaStartStatus(isColdStart, path);
+  const coldStart = isColdStart();
+  logLambdaStartStatus(coldStart, path);
 
   // Run handler within request context for correlation ID propagation
   return runWithContext(createRequestContext(requestId, path, method), async () => {
-    logger.info('Incoming request', { isColdStart });
+    logger.info('Incoming request', { isColdStart: coldStart });
 
     // Request body size limit check
     if (event.body && event.body.length > MAX_BODY_SIZE) {
@@ -205,8 +140,7 @@ export async function handler(
 
       const route = findRoute(path, method);
       if (route) {
-        const routeHandler = await route.importHandler();
-        response = await routeHandler(event);
+        response = await route.handler(event);
       } else {
         // Distinguish 405 (path exists, wrong method) from 404 (unknown path)
         const pathExists = ROUTES.some((r) =>
