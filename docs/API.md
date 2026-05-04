@@ -112,7 +112,7 @@ Table name: `${StackName}-Table`
 | ML_SENTIMENT_API_URL  | No       | Primary ML sentiment API endpoint (falls back to `DISTILFINBERT_API_URL`) |
 | LOG_LEVEL             | No       | Logging verbosity: debug, info, warn, error (default: info)               |
 | DYNAMODB_TABLE_NAME   | Yes\*    | DynamoDB table name (\*set automatically by SAM template)                 |
-| DYNAMODB_ENDPOINT     | No       | DynamoDB endpoint override (e.g., `http://localhost:4566` for MiniStack) |
+| DYNAMODB_ENDPOINT     | No       | DynamoDB endpoint override (e.g., `http://localhost:4566` for MiniStack)  |
 | AWS_REGION            | No       | AWS region for DynamoDB client (default: us-east-1)                       |
 
 ### Frontend

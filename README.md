@@ -3,7 +3,7 @@
 Cross-platform news-driven stock sentiment analysis and market predictions. React Native + Expo frontend, AWS Lambda backend.
 
 > **Active Development** — This repo changes frequently. Expect breaking changes. **Note: No stable builds are currently available.**
-
+>
 > **Community Edition** — All core features are free and open-source.
 > [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro) adds premium content access, higher usage quotas, and advanced features.
 
@@ -44,7 +44,7 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 | ---------------------- | --------------------------------------------------------------- |
 | `npm test`             | Frontend tests                                                  |
 | `npm run test:backend` | Backend unit tests (Jest + ESM)                                 |
-| `npm run test:e2e`     | E2E tests (requires MiniStack)                                 |
+| `npm run test:e2e`     | E2E tests (requires MiniStack)                                  |
 | `npm run check`        | Full CI: all lint + type-check + all tests + console-call check |
 
 ### Code Quality
@@ -65,8 +65,8 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 | Target                 | Description                      |
 | ---------------------- | -------------------------------- |
 | `make setup`           | `npm install --legacy-peer-deps` |
-| `make ministack`      | Start MiniStack DynamoDB        |
-| `make ministack-stop` | Stop MiniStack                  |
+| `make ministack`       | Start MiniStack DynamoDB         |
+| `make ministack-stop`  | Stop MiniStack                   |
 | `make test-e2e`        | Run E2E tests                    |
 | `make lint`            | Run all linters                  |
 | `make test`            | Full check (`npm run check`)     |
