@@ -39,6 +39,7 @@ const mockSanitizeErrorMessage = jest
   .fn<(...args: unknown[]) => string>()
   .mockReturnValue('Internal server error');
 const mockLogError = jest.fn();
+const mockGetStatusCodeFromError = jest.fn<(...args: unknown[]) => number>().mockReturnValue(500);
 
 // Mock all repository and service dependencies
 jest.unstable_mockModule('../../repositories/sentimentJobs.repository.js', () => ({
@@ -66,6 +67,7 @@ jest.unstable_mockModule('../../utils/error.util.js', () => ({
   hasStatusCode: mockHasStatusCode,
   sanitizeErrorMessage: mockSanitizeErrorMessage,
   logError: mockLogError,
+  getStatusCodeFromError: mockGetStatusCodeFromError,
 }));
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
