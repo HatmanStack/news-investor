@@ -15,16 +15,15 @@ jobs:
       - uses: dependabot/fetch-metadata@ffa630c65fa7e0ecfa0625b5ceda64399aea1b36 # v3.0.0
         id: meta
 
-      - name: Wait for CI to pass
+      - name: Enable auto-merge for non-major updates
         if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr checks "$PR_URL" --watch
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Auto-merge
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        # GitHub native auto-merge waits for the required "All Checks Passed"
+        # status itself, so we don't poll with `gh pr checks --watch`. That poll
+        # reads statusCheckRollup, which needs checks:read + statuses:read — perms
+        # the Dependabot-scoped GITHUB_TOKEN isn't granted here, so it 403'd and
+        # failed this job on every PR. Repo allows merge-commits only (squash and
+        # rebase are disabled), so merge with --merge, not --squash.
+        run: gh pr merge --auto --merge "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
