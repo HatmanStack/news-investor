@@ -1,7 +1,7 @@
 """Tests for earnings cache repository."""
 
-import sys
 import os
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 # Must set env var before importing the module
 # DYNAMODB_TABLE_NAME already set to "StocksCache" by conftest.py
 
-from repositories.earnings_cache import get_cached_earnings, cache_earnings
+from repositories.earnings_cache import cache_earnings, get_cached_earnings
 
 
 class TestGetCachedEarnings:

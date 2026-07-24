@@ -324,10 +324,11 @@ class TestCalculateTtl:
 
     def test_historical_data_gets_90_day_ttl(self):
         """Data older than 7 days gets 90-day TTL."""
-        from repositories.stocks_cache import calculate_ttl
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
-        old_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        from repositories.stocks_cache import calculate_ttl
+
+        old_date = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
         ttl = calculate_ttl(old_date)
 
         # TTL should be approximately 90 days from now
@@ -337,10 +338,11 @@ class TestCalculateTtl:
 
     def test_current_data_gets_1_day_ttl(self):
         """Data less than 7 days old gets 1-day TTL."""
-        from repositories.stocks_cache import calculate_ttl
-        from datetime import datetime, timedelta
+        from datetime import UTC, datetime, timedelta
 
-        recent_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        from repositories.stocks_cache import calculate_ttl
+
+        recent_date = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d")
         ttl = calculate_ttl(recent_date)
 
         # TTL should be approximately 1 day from now

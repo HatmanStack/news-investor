@@ -1,9 +1,9 @@
 """Tests for yfinance service layer."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-import pandas as pd
+from unittest.mock import MagicMock, patch
 
+import pandas as pd
+import pytest
 from services.yfinance_service import (
     fetch_stock_prices,
     fetch_symbol_metadata,

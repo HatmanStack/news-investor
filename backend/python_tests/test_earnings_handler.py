@@ -1,15 +1,15 @@
 """Tests for earnings handler."""
 
 import json
-import sys
 import os
+import sys
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 # DYNAMODB_TABLE_NAME already set to "StocksCache" by conftest.py
 
-from handlers.earnings import handle_earnings_request, handle_batch_earnings_request
+from handlers.earnings import handle_batch_earnings_request, handle_earnings_request
 
 
 def make_event(ticker=None, method="GET"):

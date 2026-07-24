@@ -1,7 +1,7 @@
 """Tests for validation utility functions."""
 
-import sys
 import os
+import sys
 
 import pytest
 
@@ -9,11 +9,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from utils.validation import (
-    TICKER_PATTERN,
     DATE_PATTERN,
     MAX_QUERY_LENGTH,
-    validate_ticker,
+    TICKER_PATTERN,
     validate_date,
+    validate_ticker,
 )
 
 

@@ -2,6 +2,7 @@
 
 import os
 import sys
+
 import pytest
 
 # Add python source to path
@@ -48,8 +49,8 @@ def api_event():
     def _make_event(
         method: str = "GET",
         path: str = "/stocks",
-        query_params: dict = None,
-        body: str = None,
+        query_params: dict | None = None,
+        body: str | None = None,
     ) -> dict:
         return {
             "rawPath": path,
