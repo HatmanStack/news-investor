@@ -4,10 +4,11 @@ AWS Lambda Handler
 Adapts FastAPI application to handle Lambda/API Gateway events using Mangum.
 """
 
-import os
 import logging
-from mangum import Mangum
+import os
+
 from app import app
+from mangum import Mangum
 
 # Configure logging for Lambda
 logging.basicConfig(

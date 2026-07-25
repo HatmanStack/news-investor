@@ -6,6 +6,7 @@ Parameters:
   FinnhubApiKey:
     Type: String
     Description: Finnhub API key for news data
+    NoEcho: true
 
   AlphaVantageApiKey:
     Type: String
@@ -416,6 +417,35 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-api'
+
+  # ============================================================
+  # CloudWatch Log Groups
+  # ============================================================
+  # Declared explicitly so retention is bounded. Without these, Lambda
+  # auto-creates its log groups with retention "Never Expire" and they accrue
+  # storage charges forever. 14 days matches ml-template-onnx.yaml.
+  #
+  # NOTE: CloudFormation cannot adopt a log group that already exists, so these
+  # only apply cleanly to a fresh stack. Deploying them over a stack whose
+  # Lambdas have already run requires deleting the auto-created groups first.
+
+  PythonStocksLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-python-stocks'
+      RetentionInDays: 14
+
+  ReactStocksLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 14
+
+  CalibrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-calibration'
+      RetentionInDays: 14
 
   # ============================================================
   # CloudWatch Alarms & Monitoring

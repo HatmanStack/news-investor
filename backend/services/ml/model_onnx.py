@@ -5,10 +5,9 @@ Loads DistilRoBERTa financial sentiment model from S3 and runs inference
 using ONNX Runtime. Designed for AWS Lambda with minimal cold start.
 """
 
-import os
 import logging
+import os
 import tempfile
-from typing import Dict, Optional
 from pathlib import Path
 
 import boto3
@@ -20,8 +19,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Global cache (survives Lambda warm starts)
-_session: Optional[ort.InferenceSession] = None
-_tokenizer: Optional[Tokenizer] = None
+_session: ort.InferenceSession | None = None
+_tokenizer: Tokenizer | None = None
 
 # Configuration
 S3_BUCKET = os.getenv("ML_MODEL_BUCKET", "react-stocks-ml-models")
@@ -72,7 +71,9 @@ def load_model() -> tuple[ort.InferenceSession, Tokenizer]:
         # Load ONNX session
         logger.info("Loading ONNX Runtime session...")
         sess_options = ort.SessionOptions()
-        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.graph_optimization_level = (
+            ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        )
         sess_options.intra_op_num_threads = 2  # Lambda has limited CPUs
         _session = ort.InferenceSession(str(onnx_path), sess_options)
 
@@ -85,12 +86,15 @@ def load_model() -> tuple[ort.InferenceSession, Tokenizer]:
         logger.info("Model loaded successfully")
         return _session, _tokenizer
 
-    except Exception as e:
+    # Model loading spans S3 download, ONNX session creation and tokenizer
+    # parsing, each with its own unrelated failure modes. They are deliberately
+    # collapsed into one RuntimeError so callers have a single failure contract.
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Failed to load model: {e}")
         raise RuntimeError(f"Model loading failed: {e}")
 
 
-def analyze_sentiment(text: str) -> Dict:
+def analyze_sentiment(text: str) -> dict:
     """
     Analyze sentiment of financial text.
 
@@ -116,8 +120,7 @@ def analyze_sentiment(text: str) -> Dict:
 
     # Run inference
     outputs = session.run(
-        None,
-        {"input_ids": input_ids, "attention_mask": attention_mask}
+        None, {"input_ids": input_ids, "attention_mask": attention_mask}
     )
 
     # Softmax
@@ -153,12 +156,12 @@ def analyze_sentiment(text: str) -> Dict:
         "probabilities": {
             "negative": round(float(neg_prob), 4),
             "neutral": round(float(neut_prob), 4),
-            "positive": round(float(pos_prob), 4)
-        }
+            "positive": round(float(pos_prob), 4),
+        },
     }
 
 
-def get_model_info() -> Dict[str, str]:
+def get_model_info() -> dict[str, str]:
     """Get information about the model configuration."""
     return {
         "model_type": "onnx",
@@ -166,5 +169,5 @@ def get_model_info() -> Dict[str, str]:
         "s3_bucket": S3_BUCKET,
         "onnx_key": ONNX_MODEL_KEY,
         "max_length": str(MAX_LENGTH),
-        "loaded": _session is not None
+        "loaded": _session is not None,
     }

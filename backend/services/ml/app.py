@@ -9,16 +9,14 @@ Provides HTTP endpoints for sentiment analysis using ONNX Runtime:
 Model: DistilRoBERTa fine-tuned on financial news sentiment
 """
 
+import logging
 import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
-from typing import List
-import logging
-
 from model_onnx import analyze_sentiment, get_model_info
+from pydantic import BaseModel, Field, field_validator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -84,7 +82,7 @@ class SentimentResponse(BaseModel):
 class BatchSentimentRequest(BaseModel):
     """Request model for batch sentiment analysis"""
 
-    texts: List[str] = Field(
+    texts: list[str] = Field(
         ..., min_items=1, max_items=10, description="List of texts to analyze (max 10)"
     )
 
@@ -100,7 +98,7 @@ class BatchSentimentRequest(BaseModel):
 class BatchSentimentResponse(BaseModel):
     """Response model for batch sentiment analysis"""
 
-    results: List[SentimentResponse]
+    results: list[SentimentResponse]
     count: int
 
 
@@ -155,7 +153,10 @@ async def analyze_text_sentiment(request: SentimentRequest):
         logger.warning(f"Validation error: {error}")
         raise HTTPException(status_code=400, detail=str(error))
 
-    except Exception as error:
+    # Deliberate catch-all at the route boundary: any unanticipated failure
+    # must surface as a structured 500 rather than an unhandled 502, and the
+    # detail is kept generic so internals are not leaked to callers.
+    except Exception as error:  # noqa: BLE001
         logger.error(f"Sentiment analysis failed: {error}")
         raise HTTPException(
             status_code=500, detail="Internal server error during sentiment analysis"
@@ -211,7 +212,9 @@ async def analyze_batch_sentiment(request: BatchSentimentRequest):
         logger.warning(f"Validation error: {error}")
         raise HTTPException(status_code=400, detail=str(error))
 
-    except Exception as error:
+    # Deliberate catch-all at the route boundary — see the note on the single
+    # sentiment endpoint above.
+    except Exception as error:  # noqa: BLE001
         logger.error(f"Batch sentiment analysis failed: {error}")
         raise HTTPException(
             status_code=500, detail="Internal server error during batch analysis"
@@ -252,7 +255,9 @@ async def health_check():
             status="healthy", model_loaded=model_loaded, model_info=model_info
         )
 
-    except Exception as error:
+    # A health check must never raise: any failure to introspect the model is
+    # itself an unhealthy signal and is reported as one.
+    except Exception as error:  # noqa: BLE001
         logger.error(f"Health check failed: {error}")
         raise HTTPException(status_code=500, detail="Health check failed")
 

@@ -11,9 +11,10 @@ Output:
     models/distilroberta-financial.onnx
 """
 
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from pathlib import Path
+
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 MODEL_NAME = "mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
 OUTPUT_DIR = Path(__file__).parent.parent / "models"

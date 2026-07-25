@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -7,191 +7,215 @@ ENV_DEPLOY_FILE=".env.deploy"
 ML_STACK_NAME_SUFFIX="-ml"
 ML_MODEL_NAME="distilroberta-financial"
 
+INTERACTIVE=false
+DEPLOY_ADMIN=false
+SKIP_ML=false
+
+usage() {
+    cat <<'USAGE'
+Usage: ./scripts/deploy.sh [options]
+
+Non-interactive by default: every value is read from .env.deploy (or the
+environment), so this is safe to run from CI. Nothing is prompted unless
+--interactive is passed.
+
+Options:
+  --interactive     Prompt for core values instead of failing when unset.
+  --deploy-admin    Also deploy the admin dashboard (default: skip).
+  --skip-ml         Skip the ML sentiment stack entirely.
+  -h, --help        Show this help.
+
+Configuration is read from .env.deploy. That file is UPDATED IN PLACE — keys
+are added or replaced individually, and all other keys, comments and formatting
+are preserved. It is never rewritten from scratch.
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --interactive)  INTERACTIVE=true ;;
+        --deploy-admin) DEPLOY_ADMIN=true ;;
+        --skip-ml)      SKIP_ML=true ;;
+        -h|--help)      usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    esac
+    shift
+done
+
 echo "==================================="
-echo "React Stocks Backend Deployment"
+echo "news-investor-pro Backend Deployment"
 echo "==================================="
 echo ""
 
-# Load from .env.deploy if it exists
+# ---------------------------------------------------------------------------
+# Configuration loading
+# ---------------------------------------------------------------------------
+
+# `set -a; . file` handles empty values, '*', and '#' comments correctly.
+# The previous `export $(... | xargs)` form mangled all three.
 if [ -f "$ENV_DEPLOY_FILE" ]; then
-    echo "Loading configuration from $ENV_DEPLOY_FILE..."
-    export $(grep -v '^#' "$ENV_DEPLOY_FILE" | grep -v '^$' | xargs)
-fi
-
-# Get region with default
-DEFAULT_REGION="${AWS_REGION:-us-east-1}"
-read -p "AWS Region [$DEFAULT_REGION]: " input_region
-AWS_REGION="${input_region:-$DEFAULT_REGION}"
-
-# Get stack name with default
-DEFAULT_STACK="${STACK_NAME:-stocks-prediction-service}"
-read -p "Stack Name [$DEFAULT_STACK]: " input_stack
-STACK_NAME="${input_stack:-$DEFAULT_STACK}"
-
-# Get Finnhub API key
-if [ -n "$FINNHUB_API_KEY" ]; then
-    echo "Finnhub API Key: [hidden - press Enter to keep, or paste new key]"
+    echo "Loading configuration from $ENV_DEPLOY_FILE"
+    set -a
+    # shellcheck disable=SC1090
+    . "./$ENV_DEPLOY_FILE"
+    set +a
 else
-    echo "Finnhub API Key: [not set]"
-fi
-read -p "> " input_finnhub
-if [ -n "$input_finnhub" ]; then
-    FINNHUB_API_KEY="$input_finnhub"
-fi
-if [ -z "$FINNHUB_API_KEY" ]; then
-    echo "Error: Finnhub API Key is required"
-    exit 1
+    echo "No $ENV_DEPLOY_FILE found — relying on environment variables."
 fi
 
-# Get Alpha Vantage API key (optional - for historical news fallback)
-if [ -n "$ALPHA_VANTAGE_API_KEY" ]; then
-    echo "Alpha Vantage API Key: [hidden - press Enter to keep, or paste new key]"
-else
-    echo "Alpha Vantage API Key (optional, for historical news): [not set]"
-fi
-read -p "> " input_alphavantage
-if [ -n "$input_alphavantage" ]; then
-    ALPHA_VANTAGE_API_KEY="$input_alphavantage"
-fi
+# Update a single key in .env.deploy, preserving every other line.
+# This is what keeps hand-written values and comments from being clobbered.
+upsert_env() {
+    local key="$1" value="$2"
+    [ -f "$ENV_DEPLOY_FILE" ] || touch "$ENV_DEPLOY_FILE"
+    if grep -qE "^${key}=" "$ENV_DEPLOY_FILE"; then
+        awk -v k="$key" -v v="$value" \
+            '{ if (index($0, k "=") == 1) print k "=" v; else print }' \
+            "$ENV_DEPLOY_FILE" > "$ENV_DEPLOY_FILE.tmp" \
+            && mv "$ENV_DEPLOY_FILE.tmp" "$ENV_DEPLOY_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_DEPLOY_FILE"
+    fi
+    chmod 600 "$ENV_DEPLOY_FILE"
+}
 
-# Allowed Origins with default
-DEFAULT_ORIGINS="${ALLOWED_ORIGINS:-*}"
-read -p "Allowed Origins [$DEFAULT_ORIGINS]: " input_origins
-ALLOWED_ORIGINS="${input_origins:-$DEFAULT_ORIGINS}"
+# Resolve a value: use the existing one, prompt only in interactive mode,
+# and fail loudly if a required value is still missing.
+resolve() {
+    local var="$1" prompt="$2" required="$3" default="${4:-}"
+    local current="${!var:-}"
 
-# Save configuration to .env.deploy
-cat > "$ENV_DEPLOY_FILE" << EOF
-# Deployment configuration (auto-saved)
-AWS_REGION=$AWS_REGION
-STACK_NAME=$STACK_NAME
-FINNHUB_API_KEY=$FINNHUB_API_KEY
-ALPHA_VANTAGE_API_KEY=$ALPHA_VANTAGE_API_KEY
-ALLOWED_ORIGINS=$ALLOWED_ORIGINS
-EOF
-# Restrict file permissions - contains sensitive API keys
-chmod 600 "$ENV_DEPLOY_FILE"
-echo ""
-echo "Configuration saved to $ENV_DEPLOY_FILE (permissions: owner read/write only)"
+    if [ -z "$current" ] && [ -n "$default" ]; then
+        current="$default"
+    fi
 
-echo ""
-echo "Using configuration:"
-echo "  Region: $AWS_REGION"
-echo "  Stack Name: $STACK_NAME"
-echo "  Finnhub Key: ${FINNHUB_API_KEY:0:8}..."
-if [ -n "$ALPHA_VANTAGE_API_KEY" ]; then
-    echo "  Alpha Vantage Key: ${ALPHA_VANTAGE_API_KEY:0:8}..."
-else
-    echo "  Alpha Vantage Key: (not configured)"
-fi
-echo "  Allowed Origins: $ALLOWED_ORIGINS"
-echo ""
+    if [ "$INTERACTIVE" = true ]; then
+        local shown="${current:-<not set>}"
+        case "$var" in
+            *KEY|*SECRET) [ -n "$current" ] && shown="<hidden>" ;;
+        esac
+        read -r -p "$prompt [$shown]: " input
+        [ -n "$input" ] && current="$input"
+    fi
 
-# Get AWS Account ID
+    if [ -z "$current" ] && [ "$required" = true ]; then
+        echo "Error: $var is required but not set." >&2
+        echo "       Set it in $ENV_DEPLOY_FILE or pass --interactive." >&2
+        exit 1
+    fi
+
+    printf -v "$var" '%s' "$current"
+}
+
+resolve AWS_REGION           "AWS Region"        true  "us-west-2"
+resolve STACK_NAME           "Stack Name"        true  "news-investor-prod"
+resolve FINNHUB_API_KEY      "Finnhub API Key"   true
+resolve ALLOWED_ORIGINS      "Allowed Origins"   true  "*"
+
+# Optional — blank is a valid, meaningful configuration for all of these.
+resolve FINNHUB_WEBHOOK_SECRET  "Finnhub Webhook Secret"   false
+resolve ALPHA_VANTAGE_API_KEY   "Alpha Vantage API Key"    false
+resolve SES_FROM_EMAIL          "SES From Email"           false
+resolve COGNITO_CALLBACK_URL    "Cognito Callback URL"     false
+resolve REDDIT_CLIENT_ID        "Reddit Client ID"         false
+resolve REDDIT_CLIENT_SECRET    "Reddit Client Secret"     false
+resolve STRIPE_SECRET_KEY       "Stripe Secret Key"        false
+resolve STRIPE_WEBHOOK_SECRET   "Stripe Webhook Secret"    false
+resolve STRIPE_PRICE_ID_MONTHLY "Stripe Monthly Price ID"  false
+resolve PUBLIC_WEB_URL          "Public Web URL"           false
+
+# Persist only what we resolved; everything else in the file is untouched.
+upsert_env AWS_REGION      "$AWS_REGION"
+upsert_env STACK_NAME      "$STACK_NAME"
+upsert_env ALLOWED_ORIGINS "$ALLOWED_ORIGINS"
+
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# Stack-based naming for ML resources
-MODEL_BUCKET="${STACK_NAME}-ml-models-${AWS_ACCOUNT_ID}-${AWS_REGION}"
-MODEL_PREFIX="${STACK_NAME}/models"
+MODEL_BUCKET="${MODEL_BUCKET:-${STACK_NAME}-ml-models-${AWS_ACCOUNT_ID}-${AWS_REGION}}"
+MODEL_PREFIX="${MODEL_PREFIX:-${STACK_NAME}/models}"
 ML_STACK_NAME="${STACK_NAME}${ML_STACK_NAME_SUFFIX}"
-
-echo "==================================="
-echo "Step 1: Setup ML Model"
-echo "==================================="
-echo ""
-
-# Check if model exists in S3
-MODEL_EXISTS=false
-if aws s3api head-object --bucket "${MODEL_BUCKET}" --key "${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx" --region "$AWS_REGION" >/dev/null 2>&1; then
-    echo "ML model already exists in S3: s3://${MODEL_BUCKET}/${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx"
-    MODEL_EXISTS=true
-fi
-
-if [ "$MODEL_EXISTS" = false ]; then
-    echo "ML model not found in S3."
-
-    # Check if model exists locally
-    if [ -f "models/${ML_MODEL_NAME}.onnx" ]; then
-        echo "Found local ONNX model."
-    else
-        echo "ONNX model not found locally either."
-        read -p "Export model to ONNX now? (requires PyTorch) [Y/n]: " export_choice
-        if [[ ! "$export_choice" =~ ^[Nn]$ ]]; then
-            echo ""
-            echo "Installing export dependencies..."
-            if command -v uv &> /dev/null; then
-                uv pip install --system torch==2.2.0 transformers==4.38.0 onnx==1.16.0 onnxruntime==1.17.0 onnxscript
-            else
-                pip install torch==2.2.0 transformers==4.38.0 onnx==1.16.0 onnxruntime==1.17.0 onnxscript
-            fi
-
-            echo "Exporting model to ONNX..."
-            python3 scripts/export_onnx.py
-        else
-            echo "Skipping ML model deployment. Sentiment analysis will not work."
-            MODEL_EXISTS=skip
-        fi
-    fi
-
-    if [ "$MODEL_EXISTS" != "skip" ]; then
-        # Create S3 bucket if needed
-        if ! aws s3api head-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
-            echo ""
-            echo "Creating S3 bucket: $MODEL_BUCKET"
-            if [ "$AWS_REGION" = "us-east-1" ]; then
-                aws s3api create-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION"
-            else
-                aws s3api create-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION" \
-                    --create-bucket-configuration LocationConstraint="$AWS_REGION"
-            fi
-            # Block public access
-            aws s3api put-public-access-block --bucket "$MODEL_BUCKET" \
-                --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
-        fi
-
-        # Upload model to S3
-        echo ""
-        echo "Uploading model to S3..."
-        aws s3 cp "models/${ML_MODEL_NAME}.onnx" "s3://${MODEL_BUCKET}/${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx" --region "$AWS_REGION"
-
-        if [ -f "models/tokenizer/tokenizer.json" ]; then
-            echo "Uploading tokenizer..."
-            aws s3 cp "models/tokenizer/tokenizer.json" "s3://${MODEL_BUCKET}/${MODEL_PREFIX}/tokenizer/tokenizer.json" --region "$AWS_REGION"
-        fi
-
-        echo "Model uploaded successfully!"
-        MODEL_EXISTS=true
-    fi
-fi
-
-echo ""
-echo "==================================="
-echo "Step 2: Deploy ML Service Stack"
-echo "==================================="
-echo ""
-
-# Create deployment bucket if needed
 DEPLOY_BUCKET="sam-deploy-${STACK_NAME}-${AWS_REGION}"
-if ! aws s3 ls "s3://${DEPLOY_BUCKET}" --region "$AWS_REGION" 2>/dev/null; then
-    echo "Creating deployment bucket: ${DEPLOY_BUCKET}"
+
+upsert_env MODEL_BUCKET "$MODEL_BUCKET"
+upsert_env MODEL_PREFIX "$MODEL_PREFIX"
+
+echo ""
+echo "Configuration:"
+echo "  Region:          $AWS_REGION"
+echo "  Stack:           $STACK_NAME"
+echo "  Account:         $AWS_ACCOUNT_ID"
+echo "  Model bucket:    $MODEL_BUCKET"
+echo "  Finnhub key:     ${FINNHUB_API_KEY:0:8}…"
+echo "  Webhook secret:  $([ -n "$FINNHUB_WEBHOOK_SECRET" ] && echo 'configured' || echo 'NOT SET — /webhooks/finnhub returns 503')"
+echo "  Stripe:          $([ -n "$STRIPE_SECRET_KEY" ] && echo 'configured' || echo 'disabled (/stripe/* returns 500)')"
+echo "  Allowed origins: $ALLOWED_ORIGINS"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 1: ML model artifacts
+# ---------------------------------------------------------------------------
+echo "=== Step 1: ML model ==="
+
+MODEL_STATE=missing
+if [ "$SKIP_ML" = true ]; then
+    MODEL_STATE=skip
+elif aws s3api head-object --bucket "$MODEL_BUCKET" \
+        --key "${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx" --region "$AWS_REGION" >/dev/null 2>&1; then
+    echo "Model already in S3: s3://${MODEL_BUCKET}/${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx"
+    MODEL_STATE=present
+fi
+
+if [ "$MODEL_STATE" = missing ]; then
+    if [ ! -f "models/${ML_MODEL_NAME}.onnx" ]; then
+        echo "Error: ONNX model not found in S3 or at models/${ML_MODEL_NAME}.onnx" >&2
+        echo "       Run scripts/export_onnx.py, or pass --skip-ml to deploy without" >&2
+        echo "       ML sentiment (which falls back to the AFINN lexicon)." >&2
+        exit 1
+    fi
+
+    if ! aws s3api head-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
+        echo "Creating model bucket: $MODEL_BUCKET"
+        if [ "$AWS_REGION" = "us-east-1" ]; then
+            aws s3api create-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION"
+        else
+            aws s3api create-bucket --bucket "$MODEL_BUCKET" --region "$AWS_REGION" \
+                --create-bucket-configuration LocationConstraint="$AWS_REGION"
+        fi
+        aws s3api put-public-access-block --bucket "$MODEL_BUCKET" \
+            --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+    fi
+
+    echo "Uploading model…"
+    aws s3 cp "models/${ML_MODEL_NAME}.onnx" \
+        "s3://${MODEL_BUCKET}/${MODEL_PREFIX}/${ML_MODEL_NAME}.onnx" --region "$AWS_REGION"
+    if [ -d "models/tokenizer" ]; then
+        aws s3 cp "models/tokenizer/" \
+            "s3://${MODEL_BUCKET}/${MODEL_PREFIX}/tokenizer/" --recursive --region "$AWS_REGION"
+    fi
+    MODEL_STATE=present
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: ML stack
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Step 2: ML service stack ==="
+
+if ! aws s3api head-bucket --bucket "$DEPLOY_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
+    echo "Creating deployment bucket: $DEPLOY_BUCKET"
     if [ "$AWS_REGION" = "us-east-1" ]; then
-        aws s3 mb "s3://${DEPLOY_BUCKET}" --region "$AWS_REGION"
+        aws s3api create-bucket --bucket "$DEPLOY_BUCKET" --region "$AWS_REGION"
     else
         aws s3api create-bucket --bucket "$DEPLOY_BUCKET" --region "$AWS_REGION" \
             --create-bucket-configuration LocationConstraint="$AWS_REGION"
     fi
 fi
 
-if [ "$MODEL_EXISTS" = "skip" ]; then
-    echo "Skipping ML service deployment (no model)."
-    ML_API_URL=""
+ML_API_URL="${DISTILFINBERT_API_URL:-}"
+if [ "$MODEL_STATE" = skip ]; then
+    echo "Skipping ML stack (--skip-ml)."
 else
-    # Build ML service
-    echo "Building ML Lambda..."
     sam build --template-file ml-template-onnx.yaml
-
-    # Deploy ML service
-    echo ""
-    echo "Deploying ML service stack: $ML_STACK_NAME"
     sam deploy \
         --template-file .aws-sam/build/template.yaml \
         --stack-name "$ML_STACK_NAME" \
@@ -205,37 +229,28 @@ else
         --no-confirm-changeset \
         --no-fail-on-empty-changeset
 
-    # Get ML API URL
     ML_API_URL=$(aws cloudformation describe-stacks \
-        --stack-name "$ML_STACK_NAME" \
-        --region "$AWS_REGION" \
+        --stack-name "$ML_STACK_NAME" --region "$AWS_REGION" \
         --query 'Stacks[0].Outputs[?OutputKey==`SentimentApiUrl`].OutputValue' \
         --output text)
-
-    echo ""
-    echo "ML Service API URL: $ML_API_URL"
+    echo "ML API: $ML_API_URL"
+    upsert_env DISTILFINBERT_API_URL "$ML_API_URL"
 fi
 
+# ---------------------------------------------------------------------------
+# Step 3-4: main stack
+# ---------------------------------------------------------------------------
 echo ""
-echo "==================================="
-echo "Step 3: Build Main Lambda"
-echo "==================================="
-echo ""
-
-echo "Building TypeScript..."
+echo "=== Step 3: Build ==="
 npm run build
-
-echo ""
-echo "Building SAM application..."
 sam build --template template.yaml
 
 echo ""
-echo "==================================="
-echo "Step 4: Deploy Main Stack"
-echo "==================================="
-echo ""
+echo "=== Step 4: Deploy main stack ==="
 
-# Deploy main stack with ML API URL
+# Every configurable parameter is passed explicitly. Lambda sizing parameters
+# are intentionally omitted so template.yaml stays the single source of truth
+# for them.
 sam deploy \
     --stack-name "$STACK_NAME" \
     --region "$AWS_REGION" \
@@ -243,61 +258,60 @@ sam deploy \
     --capabilities CAPABILITY_IAM \
     --parameter-overrides \
         FinnhubApiKey="$FINNHUB_API_KEY" \
+        FinnhubWebhookSecret="$FINNHUB_WEBHOOK_SECRET" \
         AlphaVantageApiKey="$ALPHA_VANTAGE_API_KEY" \
         AllowedOrigins="$ALLOWED_ORIGINS" \
         DistilFinBERTApiUrl="$ML_API_URL" \
+        CognitoCallbackUrl="$COGNITO_CALLBACK_URL" \
+        SesFromEmail="$SES_FROM_EMAIL" \
+        RedditClientId="$REDDIT_CLIENT_ID" \
+        RedditClientSecret="$REDDIT_CLIENT_SECRET" \
+        StripeSecretKey="$STRIPE_SECRET_KEY" \
+        StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
+        StripePriceIdMonthly="$STRIPE_PRICE_ID_MONTHLY" \
+        PublicWebUrl="$PUBLIC_WEB_URL" \
     --no-confirm-changeset \
     --no-fail-on-empty-changeset
 
-echo ""
-echo "==================================="
-echo "Deployment Complete!"
-echo "==================================="
-echo ""
-
-# Get API Gateway URL
 API_URL=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
+    --stack-name "$STACK_NAME" --region "$AWS_REGION" \
     --query 'Stacks[0].Outputs[?OutputKey==`ReactStocksApiUrl`].OutputValue' \
     --output text)
 
+echo ""
+echo "==================================="
+echo "Deployment complete"
+echo "==================================="
+echo "  Main API: $API_URL"
+echo "  ML API:   ${ML_API_URL:-<none>}"
+if [ -n "$FINNHUB_WEBHOOK_SECRET" ]; then
+    echo ""
+    echo "  Register this URL at finnhub.io/dashboard/webhook:"
+    echo "    ${API_URL}/webhooks/finnhub"
+fi
+echo ""
+
 if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
-    echo "Warning: Could not retrieve API URL from stack outputs"
+    echo "Warning: could not read API URL from stack outputs" >&2
     exit 0
 fi
 
-echo "Main API URL: $API_URL"
-echo "ML API URL: $ML_API_URL"
-echo ""
+upsert_env DEPLOYED_API_URL "$API_URL"
 
-# Update frontend .env file (cross-platform sed)
+# ---------------------------------------------------------------------------
+# Step 5: frontend env + optional admin
+# ---------------------------------------------------------------------------
 FRONTEND_ENV="../frontend/.env"
-if [ -f "$FRONTEND_ENV" ]; then
-    # Update EXPO_PUBLIC_BACKEND_URL
-    if grep -q "^EXPO_PUBLIC_BACKEND_URL=" "$FRONTEND_ENV"; then
-        # Use temp file for cross-platform compatibility (macOS sed -i requires extension)
-        sed "s|^EXPO_PUBLIC_BACKEND_URL=.*|EXPO_PUBLIC_BACKEND_URL=$API_URL|" "$FRONTEND_ENV" > "$FRONTEND_ENV.tmp" && mv "$FRONTEND_ENV.tmp" "$FRONTEND_ENV"
-    else
-        echo "EXPO_PUBLIC_BACKEND_URL=$API_URL" >> "$FRONTEND_ENV"
-    fi
+if [ -f "$FRONTEND_ENV" ] && grep -q "^EXPO_PUBLIC_BACKEND_URL=" "$FRONTEND_ENV"; then
+    sed "s|^EXPO_PUBLIC_BACKEND_URL=.*|EXPO_PUBLIC_BACKEND_URL=$API_URL|" \
+        "$FRONTEND_ENV" > "$FRONTEND_ENV.tmp" && mv "$FRONTEND_ENV.tmp" "$FRONTEND_ENV"
 else
-    echo "EXPO_PUBLIC_BACKEND_URL=$API_URL" > "$FRONTEND_ENV"
+    echo "EXPO_PUBLIC_BACKEND_URL=$API_URL" >> "$FRONTEND_ENV"
 fi
+echo "Updated $FRONTEND_ENV"
 
-echo "Updated frontend .env with API URL"
-echo ""
-echo "EXPO_PUBLIC_BACKEND_URL=$API_URL"
-
-echo ""
-echo "==================================="
-echo "Step 5: Deploy Admin Dashboard"
-echo "==================================="
-echo ""
-
-read -p "Deploy admin dashboard? [Y/n]: " deploy_admin
-if [[ ! "$deploy_admin" =~ ^[Nn]$ ]]; then
+if [ "$DEPLOY_ADMIN" = true ]; then
+    echo ""
+    echo "=== Step 5: Admin dashboard ==="
     (cd ../admin && ./scripts/deploy-admin.sh)
-else
-    echo "Skipping admin dashboard deployment."
 fi
