@@ -7,6 +7,22 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { MODEL_CONFIG } from '../../types/prediction.types';
+
+/** A cached model whose weight vector matches the current feature layout. */
+function validCachedModel(overrides: Record<string, unknown> = {}) {
+  return {
+    pk: 'MODEL#AAPL',
+    sk: 'WEIGHTS#latest',
+    weights: new Array(MODEL_CONFIG.inputDim).fill(0.1),
+    bias: 0,
+    scalerMean: new Array(MODEL_CONFIG.inputDim).fill(0),
+    scalerStd: new Array(MODEL_CONFIG.inputDim).fill(1),
+    accuracy: 0.6,
+    trainedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
 
 const mockGetItem = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockPutItem = jest.fn<(...args: unknown[]) => Promise<void>>();
@@ -122,19 +138,63 @@ describe('pipeline service — model cache error metric', () => {
   });
 
   it('does not emit ModelCacheError on the happy cache-hit path', async () => {
-    mockGetItem.mockResolvedValueOnce({
-      pk: 'MODEL#AAPL',
-      sk: 'WEIGHTS#latest',
-      weights: [0.1],
-      bias: 0,
-      scalerMean: [0],
-      scalerStd: [1],
-      accuracy: 0.6,
-      trainedAt: new Date().toISOString(),
-    });
+    mockGetItem.mockResolvedValueOnce(validCachedModel());
 
     await runPredictionPipeline('AAPL', 90);
 
     expect(mockLogMetric).not.toHaveBeenCalled();
+    // Assert the cache branch was actually taken. Without this the test passes
+    // even when the cache is rejected and the pipeline silently retrains,
+    // because no metric fires on that path either.
+    expect(mockTrainModel).not.toHaveBeenCalled();
+    expect(mockGeneratePredictions).toHaveBeenCalled();
+  });
+});
+
+describe('pipeline service — cached model feature-layout guard', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetchHistoricalData.mockResolvedValue({ prices: [], sentiment: [] });
+    mockAggregateDailyFeatures.mockReturnValue([{ ticker: 'AAPL', date: '2026-01-01' }]);
+    mockGeneratePredictions.mockReturnValue([]);
+    // Downstream training path, used when the cache is rejected.
+    mockPrepareTrainingData.mockReturnValue({ X: [[1]], y: [1] });
+    mockCreateScaler.mockReturnValue({ mean: [0], std: [1] });
+    mockNormalizeFeatures.mockReturnValue([[0]]);
+    mockTrainModel.mockResolvedValue({
+      model: { weights: new Array(MODEL_CONFIG.inputDim).fill(0), bias: 0 },
+      metrics: { accuracy: 0.6, loss: 0.5 },
+    });
+    mockWalkForwardValidate.mockResolvedValue({ meanAccuracy: 0.6, foldScores: [0.6] });
+    mockPutItem.mockResolvedValue(undefined);
+  });
+
+  it('uses a cached model whose weight count matches the current inputDim', async () => {
+    mockGetItem.mockResolvedValueOnce(validCachedModel());
+
+    await runPredictionPipeline('AAPL', 90);
+
+    expect(mockTrainModel).not.toHaveBeenCalled();
+  });
+
+  it('retrains when the cached weight count predates a feature-layout change', async () => {
+    // A model trained before availability flags existed: 14 weights, not 16.
+    // Using it would misalign every weight with a different feature and yield
+    // confident nonsense rather than an error.
+    mockGetItem.mockResolvedValueOnce(validCachedModel({ weights: new Array(14).fill(0.1) }));
+
+    await runPredictionPipeline('AAPL', 90);
+
+    expect(mockTrainModel).toHaveBeenCalled();
+  });
+
+  it('retrains when the cached model has more weights than the current layout', async () => {
+    mockGetItem.mockResolvedValueOnce(
+      validCachedModel({ weights: new Array(MODEL_CONFIG.inputDim + 1).fill(0.1) }),
+    );
+
+    await runPredictionPipeline('AAPL', 90);
+
+    expect(mockTrainModel).toHaveBeenCalled();
   });
 });

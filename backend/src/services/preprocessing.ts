@@ -6,16 +6,51 @@ export interface Scaler {
 }
 
 /**
+ * Build the base feature vector for one day, excluding the horizon feature.
+ *
+ * Single source of truth for feature order. Training (prepare_training_data)
+ * and inference (generate_predictions in mlModel.ts) both go through this, so
+ * the two cannot silently disagree — a mismatch there would train on one
+ * feature layout and predict with another, producing plausible-looking
+ * nonsense rather than an error.
+ *
+ * Feature order (15):
+ *  1-5:   open, high, low, close, volume
+ *  6-11:  event_earnings, event_ma, event_guidance, event_analyst,
+ *         event_product, event_general
+ *  12:    aspect_score
+ *  13:    ml_score
+ *  14:    aspect_available
+ *  15:    ml_available
+ *
+ * The horizon feature is appended by callers, giving MODEL_CONFIG.inputDim (16).
+ */
+export function buildBaseFeatureVector(f: DailyFeatures): number[] {
+  return [
+    f.open,
+    f.high,
+    f.low,
+    f.close,
+    f.volume,
+    f.event_earnings,
+    f.event_ma,
+    f.event_guidance,
+    f.event_analyst,
+    f.event_product,
+    f.event_general,
+    f.aspect_score,
+    f.ml_score,
+    f.aspect_available,
+    f.ml_available,
+  ];
+}
+
+/**
  * Extracts feature matrix X and label vector y from DailyFeatures.
  * Filters out rows where label is null (noise exclusion).
  * Augments data with 'horizon' feature (values 1, 14, 30) for each sample.
  *
- * Feature Order (14 features):
- * 1-5: open, high, low, close, volume
- * 6-11: earnings, ma, guidance, analyst, product, general
- * 12: aspect_score
- * 13: ml_score
- * 14: horizon
+ * See buildBaseFeatureVector for the feature order.
  *
  * @param dailyFeatures List of daily features.
  * @returns Object containing X (feature matrix) and y (label vector) as arrays.
@@ -37,21 +72,7 @@ export function prepare_training_data(dailyFeatures: DailyFeatures[]): {
 
   // Explode each daily feature into 3 samples, one for each horizon
   for (const f of validFeatures) {
-    const baseFeatures = [
-      f.open,
-      f.high,
-      f.low,
-      f.close,
-      f.volume,
-      f.event_earnings,
-      f.event_ma,
-      f.event_guidance,
-      f.event_analyst,
-      f.event_product,
-      f.event_general,
-      f.aspect_score,
-      f.ml_score,
-    ];
+    const baseFeatures = buildBaseFeatureVector(f);
 
     for (const horizon of horizons) {
       X_array.push([...baseFeatures, horizon]);

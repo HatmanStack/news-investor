@@ -480,7 +480,7 @@ describe('Preprocessing', () => {
       mlScore: [0.7, -0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     };
 
-    it('should produce 10 columns with all features present', () => {
+    it('should produce 12 columns with all features present', () => {
       const input: PredictionInput = {
         ...baseInput,
         socialScore: [0.5, 0.3, 0.2, null, 0.1, 0, -0.1, null, 0.4, 0.2, 0.1],
@@ -490,13 +490,16 @@ describe('Preprocessing', () => {
       const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
 
       expect(matrix).toHaveLength(11);
-      expect(matrix[0]).toHaveLength(10); // 8 base + social_score + insider_net_sentiment
-      expect(featureNames).toHaveLength(10);
+      // 8 base + (social_score, social_available) + (insider_net_sentiment, insider_available)
+      expect(matrix[0]).toHaveLength(12);
+      expect(featureNames).toHaveLength(12);
       expect(featureNames).toContain('social_score');
+      expect(featureNames).toContain('social_available');
       expect(featureNames).toContain('insider_net_sentiment');
+      expect(featureNames).toContain('insider_available');
     });
 
-    it('should produce 9 columns with only social data', () => {
+    it('should produce 10 columns with only social data', () => {
       const input: PredictionInput = {
         ...baseInput,
         socialScore: [0.5, 0.3, null, null, 0.1, 0, -0.1, null, 0.4, 0.2, 0.1],
@@ -505,13 +508,15 @@ describe('Preprocessing', () => {
       const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
 
       expect(matrix).toHaveLength(11);
-      expect(matrix[0]).toHaveLength(9); // 8 base + social_score
-      expect(featureNames).toHaveLength(9);
+      expect(matrix[0]).toHaveLength(10); // 8 base + social_score + social_available
+      expect(featureNames).toHaveLength(10);
       expect(featureNames).toContain('social_score');
+      expect(featureNames).toContain('social_available');
       expect(featureNames).not.toContain('insider_net_sentiment');
+      expect(featureNames).not.toContain('insider_available');
     });
 
-    it('should produce 9 columns with only insider data', () => {
+    it('should produce 10 columns with only insider data', () => {
       const input: PredictionInput = {
         ...baseInput,
         insiderNetSentiment: [0.3, null, 0.2, 0.1, null, 0, -0.1, 0.4, null, 0.2, 0.1],
@@ -520,10 +525,12 @@ describe('Preprocessing', () => {
       const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
 
       expect(matrix).toHaveLength(11);
-      expect(matrix[0]).toHaveLength(9); // 8 base + insider_net_sentiment
-      expect(featureNames).toHaveLength(9);
+      expect(matrix[0]).toHaveLength(10); // 8 base + insider_net_sentiment + insider_available
+      expect(featureNames).toHaveLength(10);
       expect(featureNames).toContain('insider_net_sentiment');
+      expect(featureNames).toContain('insider_available');
       expect(featureNames).not.toContain('social_score');
+      expect(featureNames).not.toContain('social_available');
     });
 
     it('should produce 8 columns with neither social nor insider data', () => {
@@ -536,22 +543,54 @@ describe('Preprocessing', () => {
       expect(featureNames).not.toContain('insider_net_sentiment');
     });
 
-    it('should handle null values in social/insider arrays by replacing with 0', () => {
+    it('should mark missing social/insider values as unavailable rather than neutral', () => {
       const input: PredictionInput = {
         ...baseInput,
         socialScore: [null, null, null, null, null, null, null, null, null, null, 0.5],
         insiderNetSentiment: [0.3, null, null, null, null, null, null, null, null, null, null],
       };
 
-      const { matrix } = buildCandidateFeatureMatrix(input);
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
 
       // socialScore has 1 non-null entry -> included
       // insiderNetSentiment has 1 non-null entry -> included
-      expect(matrix[0]).toHaveLength(10);
+      expect(matrix[0]).toHaveLength(12);
 
-      // Null social scores should be 0 in the matrix
-      expect(matrix[0]![8]).toBe(0); // first social entry is null -> 0
-      expect(matrix[10]![8]).toBe(0.5); // last social entry is 0.5
+      const social = featureNames.indexOf('social_score');
+      const socialAvail = featureNames.indexOf('social_available');
+      const insider = featureNames.indexOf('insider_net_sentiment');
+      const insiderAvail = featureNames.indexOf('insider_available');
+
+      // Missing values still coalesce to 0, but the companion flag records that
+      // they were absent — so the model can tell "no data" from "neutral".
+      expect(matrix[0]![social]).toBe(0);
+      expect(matrix[0]![socialAvail]).toBe(0);
+      expect(matrix[10]![social]).toBe(0.5);
+      expect(matrix[10]![socialAvail]).toBe(1);
+
+      expect(matrix[0]![insider]).toBe(0.3);
+      expect(matrix[0]![insiderAvail]).toBe(1);
+      expect(matrix[1]![insider]).toBe(0);
+      expect(matrix[1]![insiderAvail]).toBe(0);
+    });
+
+    it('should distinguish a genuine zero score from a missing one', () => {
+      // The bug this guards: 0 is a valid neutral sentiment value, so without
+      // the availability flag it is indistinguishable from absent data.
+      const input: PredictionInput = {
+        ...baseInput,
+        socialScore: [0, null, 0.2, 0.1, 0.1, 0, -0.1, 0.4, 0.3, 0.2, 0.1],
+      };
+
+      const { matrix, featureNames } = buildCandidateFeatureMatrix(input);
+      const social = featureNames.indexOf('social_score');
+      const socialAvail = featureNames.indexOf('social_available');
+
+      // Row 0 is a real 0; row 1 is missing. Scores match, flags differ.
+      expect(matrix[0]![social]).toBe(0);
+      expect(matrix[1]![social]).toBe(0);
+      expect(matrix[0]![socialAvail]).toBe(1);
+      expect(matrix[1]![socialAvail]).toBe(0);
     });
 
     it('should exclude social/insider when arrays are all null', () => {
@@ -579,8 +618,14 @@ describe('Preprocessing', () => {
 
       // First 8 should be the base features
       expect(featureNames.slice(0, 8)).toEqual([...FEATURE_NAMES]);
-      expect(featureNames[8]).toBe('social_score');
-      expect(featureNames[9]).toBe('insider_net_sentiment');
+      // Each optional signal contributes its score followed by its
+      // availability flag, in that order.
+      expect(featureNames.slice(8)).toEqual([
+        'social_score',
+        'social_available',
+        'insider_net_sentiment',
+        'insider_available',
+      ]);
     });
 
     it('should not modify existing buildFeatureMatrix output', () => {

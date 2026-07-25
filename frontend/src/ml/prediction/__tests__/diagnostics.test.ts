@@ -14,6 +14,24 @@ describe('normalizeFStats', () => {
     expect(result.reduce((s, r) => s + r.percentage, 0)).toBeCloseTo(100, -1);
   });
 
+  it('should label and categorize the availability flags as sentiment', () => {
+    // These fall back to the raw internal name and the 'price' category when
+    // absent from FEATURE_LABEL_MAP, which would show a sentiment-coverage
+    // flag under price diagnostics.
+    const result = normalizeFStats([
+      { name: 'social_available', F: 10, pValue: 0.01 },
+      { name: 'insider_available', F: 10, pValue: 0.01 },
+    ]);
+
+    const social = result.find((r) => r.internalName === 'social_available')!;
+    const insider = result.find((r) => r.internalName === 'insider_available')!;
+
+    expect(social.name).toBe('Social Coverage');
+    expect(social.category).toBe('sentiment');
+    expect(insider.name).toBe('Insider Filing Coverage');
+    expect(insider.category).toBe('sentiment');
+  });
+
   it('should handle all-zero F-statistics', () => {
     const fStats = [
       { name: 'volume', F: 0, pValue: 1 },

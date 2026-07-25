@@ -142,9 +142,16 @@ export function aggregate_daily_features(
       }
     }
 
-    // Compute weighted averages
+    // Compute weighted averages. These collapse to 0 when no article
+    // contributed, which is indistinguishable from a genuine neutral score —
+    // hence the availability flags computed alongside them.
     const aspectScore = compute_materiality_weighted_avg(aspectScores, aspectWeights);
     const mlScore = compute_materiality_weighted_avg(mlScores, mlWeights);
+
+    // Tracked separately: the ML sentiment service can be circuit-broken while
+    // aspect analysis still succeeds, so the two can diverge on the same day.
+    const aspectAvailable = aspectScores.length > 0 ? 1 : 0;
+    const mlAvailable = mlScores.length > 0 ? 1 : 0;
 
     // Compute weighted event features
     const eventFeatures = compute_event_one_hot_weighted(articles);
@@ -176,6 +183,8 @@ export function aggregate_daily_features(
 
       aspect_score: aspectScore,
       ml_score: mlScore,
+      aspect_available: aspectAvailable,
+      ml_available: mlAvailable,
 
       label: label,
     });

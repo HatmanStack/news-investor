@@ -43,6 +43,17 @@ async function getCachedModel(ticker: string): Promise<{
       return null;
     }
 
+    // A cached model trained on a different feature layout must not be used:
+    // the weight vector would silently misalign with the current features and
+    // produce confident nonsense rather than an error. Treat it as stale.
+    if (item.weights.length !== MODEL_CONFIG.inputDim) {
+      logger.info(`Cached model for ${ticker} has a stale feature layout, retraining`, {
+        cachedDim: item.weights.length,
+        expectedDim: MODEL_CONFIG.inputDim,
+      });
+      return null;
+    }
+
     logger.info(`Using cached model for ${ticker}`, {
       ageHours: ageHours.toFixed(1),
       accuracy: item.accuracy.toFixed(4),

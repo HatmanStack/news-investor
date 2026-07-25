@@ -32,10 +32,12 @@ export interface PredictionResponse {
  * Configuration for the Logistic Regression model
  */
 export const MODEL_CONFIG = {
-  /** Number of input features (14 features: 13 base features + horizon feature)
+  /** Number of input features (16 features: 15 base features + horizon feature)
    * Base features: OHLCV (5) + event types (6) + sentiment scores (2)
-   * Horizon feature: appended during both training and inference */
-  inputDim: 14,
+   *                + sentiment availability indicators (2)
+   * Horizon feature: appended during both training and inference.
+   * Built by buildBaseFeatureVector() so training and inference cannot drift. */
+  inputDim: 16,
   /** Learning rate for Adam optimizer */
   learningRate: 0.01,
   /** Number of training epochs */
@@ -117,9 +119,18 @@ export interface DailyFeatures {
   event_analyst: number;
   event_product: number;
   event_general: number;
-  // Sentiment features
+  // Sentiment features.
+  // NOTE: 0 is a valid *neutral* score, so on its own it cannot be distinguished
+  // from "no articles that day". The availability flags below carry that
+  // distinction — without them a no-coverage day is indistinguishable from a
+  // heavily-covered but neutral one, which silently poisons training.
   aspect_score: number;
   ml_score: number;
+  // Availability indicators: 1 if at least one article contributed a score that
+  // day, 0 otherwise. Small caps routinely have zero-article days, so these are
+  // load-bearing, not cosmetic.
+  aspect_available: number;
+  ml_available: number;
   // Label (0=down, 1=up, null=exclude)
   label: number | null;
 }

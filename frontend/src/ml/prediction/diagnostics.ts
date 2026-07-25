@@ -18,6 +18,11 @@ const FEATURE_LABEL_MAP: Record<string, { label: string; category: 'sentiment' |
   volatility: { label: 'Price Volatility', category: 'price' },
   social_score: { label: 'Social Buzz', category: 'sentiment' },
   insider_net_sentiment: { label: 'Insider Activity', category: 'sentiment' },
+  // Availability flags for the optional signals. Without entries here they
+  // would fall back to the raw internal name and, worse, to the 'price'
+  // category — showing a sentiment-coverage flag under price diagnostics.
+  social_available: { label: 'Social Coverage', category: 'sentiment' },
+  insider_available: { label: 'Insider Filing Coverage', category: 'sentiment' },
 };
 
 /**

@@ -336,21 +336,34 @@ export function buildCandidateFeatureMatrix(input: PredictionInput): {
     return { matrix: baseMatrix, featureNames };
   }
 
-  // Extend each row with additional features
+  // Extend each row with additional features.
+  //
+  // Each signal contributes TWO columns: the score, and a per-row availability
+  // indicator. Coalescing a missing score to 0 on its own is a lie — 0 is the
+  // neutral value, so "no Form 4 filing today" becomes indistinguishable from
+  // "insiders traded in a perfectly balanced way". Insider filings are sparse
+  // and social coverage is concentrated in a handful of tickers, so most rows
+  // are missing and the model would otherwise be trained largely on fabricated
+  // neutrals.
+  //
+  // The indicator is per-row rather than a series-level fraction because that
+  // is where the information is: which specific days had a signal.
   const matrix: FeatureMatrix = new Array(n);
   for (let i = 0; i < n; i++) {
     const row = [...baseMatrix[i]!];
     if (hasSocial) {
-      row.push(input.socialScore![i] ?? 0);
+      const score = input.socialScore![i];
+      row.push(score ?? 0, score == null ? 0 : 1);
     }
     if (hasInsider) {
-      row.push(input.insiderNetSentiment![i] ?? 0);
+      const score = input.insiderNetSentiment![i];
+      row.push(score ?? 0, score == null ? 0 : 1);
     }
     matrix[i] = row;
   }
 
-  if (hasSocial) featureNames.push('social_score');
-  if (hasInsider) featureNames.push('insider_net_sentiment');
+  if (hasSocial) featureNames.push('social_score', 'social_available');
+  if (hasInsider) featureNames.push('insider_net_sentiment', 'insider_available');
 
   return { matrix, featureNames };
 }

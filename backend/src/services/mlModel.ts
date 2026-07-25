@@ -4,7 +4,7 @@ import {
   DailyFeatures,
   PredictionResult,
 } from '../types/prediction.types';
-import { Scaler, normalize_features } from './preprocessing';
+import { Scaler, normalize_features, buildBaseFeatureVector } from './preprocessing';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -253,22 +253,9 @@ export function generate_predictions(
   const horizons = [1, 14, 30];
   const predictions: PredictionResult[] = [];
 
-  // Base features (13 dim)
-  const baseFeatures = [
-    latestFeatures.open,
-    latestFeatures.high,
-    latestFeatures.low,
-    latestFeatures.close,
-    latestFeatures.volume,
-    latestFeatures.event_earnings,
-    latestFeatures.event_ma,
-    latestFeatures.event_guidance,
-    latestFeatures.event_analyst,
-    latestFeatures.event_product,
-    latestFeatures.event_general,
-    latestFeatures.aspect_score,
-    latestFeatures.ml_score,
-  ];
+  // Shared with prepare_training_data so the inference layout cannot drift
+  // from the layout the model was trained on.
+  const baseFeatures = buildBaseFeatureVector(latestFeatures);
 
   for (const horizon of horizons) {
     const rawFeatures = [...baseFeatures, horizon];
