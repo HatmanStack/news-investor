@@ -9,8 +9,12 @@
  */
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+// Must list every bundle produced by `npm run build`. A bundle missing here is
+// silently unverified, which is the failure mode this script exists to prevent —
+// so the count is asserted against dist/ below rather than trusted.
 const BUNDLES = [
   'index',
   'sentimentWorker',
@@ -19,6 +23,7 @@ const BUNDLES = [
   'admin',
   'aggregation',
   'calibration',
+  'sweep',
 ];
 
 let failed = 0;
@@ -46,4 +51,18 @@ if (failed > 0) {
   console.error(`\n${failed} bundle(s) failed to initialise.`);
   process.exit(1);
 }
+
+// Catch a new Lambda whose bundle was added to the build but not to BUNDLES.
+// Without this the list silently drifts and the new entry point ships unchecked.
+const built = (await readdir(resolve(process.cwd(), 'dist')))
+  .filter((f) => f.endsWith('.js'))
+  .map((f) => f.replace(/\.js$/, ''))
+  .sort();
+const unlisted = built.filter((name) => !BUNDLES.includes(name));
+if (unlisted.length > 0) {
+  console.error(`\nBundles present in dist/ but not verified: ${unlisted.join(', ')}`);
+  console.error('Add them to BUNDLES in scripts/verify-bundles.mjs.');
+  process.exit(1);
+}
+
 console.log(`\nAll ${BUNDLES.length} bundles initialise cleanly.`);
