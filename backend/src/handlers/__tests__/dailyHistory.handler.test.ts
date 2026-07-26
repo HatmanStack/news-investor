@@ -37,6 +37,21 @@ jest.unstable_mockModule('../../utils/truncation.util.js', () => ({
   buildTruncationResponseMeta: jest.fn(() => undefined),
 }));
 
+const mockResolveOptionalUser = jest
+  .fn<(...a: unknown[]) => Promise<unknown>>()
+  .mockResolvedValue(null);
+jest.unstable_mockModule('../../middleware/auth.middleware.js', () => ({
+  resolveOptionalUser: mockResolveOptionalUser,
+  optionalAuth: jest.fn().mockReturnValue(null),
+}));
+const mockGetUserTier = jest.fn<(...a: unknown[]) => Promise<unknown>>().mockResolvedValue(null);
+jest.unstable_mockModule('../../repositories/user.repository.js', () => ({
+  getUserTier: mockGetUserTier,
+}));
+jest.unstable_mockModule('../../services/quota.service.js', () => ({
+  checkAndRecordUsage: jest.fn(),
+}));
+
 const { handleDailyHistoryRequest } = await import('../sentiment.handler.js');
 
 function createAPIGatewayEvent(
@@ -173,5 +188,67 @@ describe('handleDailyHistoryRequest', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.data).toHaveLength(0);
+  });
+});
+
+describe('handleDailyHistoryRequest — insider_data gate', () => {
+  const withInsider = [
+    {
+      date: '2026-07-25',
+      avgAspectScore: 0.3,
+      materialEventCount: 1,
+      eventCounts: {},
+      avgSignalScore: 0.5,
+      insiderNetSentiment: -0.42,
+    },
+  ];
+
+  const evt = () =>
+    createAPIGatewayEvent({
+      queryStringParameters: { ticker: 'AAPL', startDate: '2026-07-01', endDate: '2026-07-26' },
+    });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockQueryByTickerAndDateRange.mockResolvedValue(withInsider);
+    mockResolveOptionalUser.mockResolvedValue(null);
+    mockGetUserTier.mockResolvedValue(null);
+  });
+
+  it('withholds insiderNetSentiment from anonymous callers', async () => {
+    // A <FeatureGate> in the UI is bypassed by calling this endpoint directly,
+    // so the gate has to live server-side.
+    const body = JSON.parse((await handleDailyHistoryRequest(evt())).body);
+
+    expect(body.data[0].insiderNetSentiment).toBeUndefined();
+    expect(body.data[0].sentimentScore).toBe(0.3);
+  });
+
+  it('withholds insiderNetSentiment from free-tier users', async () => {
+    mockResolveOptionalUser.mockResolvedValue({ sub: 'u1', email: 'f@t.com' });
+    mockGetUserTier.mockResolvedValue({ tier: 'free' });
+
+    const body = JSON.parse((await handleDailyHistoryRequest(evt())).body);
+
+    expect(body.data[0].insiderNetSentiment).toBeUndefined();
+  });
+
+  it('returns insiderNetSentiment to pro users', async () => {
+    mockResolveOptionalUser.mockResolvedValue({ sub: 'u2', email: 'p@t.com' });
+    mockGetUserTier.mockResolvedValue({ tier: 'pro' });
+
+    const body = JSON.parse((await handleDailyHistoryRequest(evt())).body);
+
+    expect(body.data[0].insiderNetSentiment).toBe(-0.42);
+  });
+
+  it('leaves the rest of the payload intact when gating', async () => {
+    const body = JSON.parse((await handleDailyHistoryRequest(evt())).body);
+
+    expect(body.data[0]).toMatchObject({
+      date: '2026-07-25',
+      materialEventCount: 1,
+      avgSignalScore: 0.5,
+    });
   });
 });
