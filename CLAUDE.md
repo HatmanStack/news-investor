@@ -80,7 +80,7 @@ frontend/
 │   ├── services/api/    # API client layer
 │   ├── database/        # Platform abstraction (StorageAdapter with SqliteAdapter/LocalStorageAdapter)
 │   │   └── repositories/    # Repository pattern for data access
-│   ├── ml/              # Browser-side ML (sentiment analysis, predictions)
+│   ├── ml/              # Browser-side sentiment analysis (predictions are server-side)
 │   └── components/      # Reusable UI components
 ```
 
@@ -141,7 +141,6 @@ Frontend `.env` (auto-updated by backend deploy):
 ```dotenv
 EXPO_PUBLIC_BACKEND_URL=https://xxx.execute-api.region.amazonaws.com
 EXPO_PUBLIC_BROWSER_SENTIMENT=true
-EXPO_PUBLIC_BROWSER_PREDICTION=false
 EXPO_PUBLIC_USE_LAMBDA_SENTIMENT=true
 EXPO_PUBLIC_LOG_LEVEL=warn
 ```
@@ -182,10 +181,18 @@ The default `AllowedOrigins: '*'` in `template.yaml` is intentional:
 - With no authentication, CORS provides no security benefit (nothing to protect via same-origin policy)
 - The wildcard default simplifies local development and demo deployments
 
-### Development Instrumentation
+### Prediction Claims
 
-The prediction service includes ANOVA F-test diagnostics (`computeFeatureFStats` in `frontend/src/ml/prediction/ftest.ts`; consumed by `prediction.service.ts`):
+Predictions are computed **server-side only** (`POST /predict`). The browser-side
+predictor was removed: it trained a second model per stock view that labelled a
+different target than the backend, so the model and the UI disagreed about what
+was being predicted.
 
-- **Purpose**: Feature importance analysis during model development
-- **Output**: Console logging for developer inspection, NOT shown to end users
-- **Control**: Logging verbosity controlled by `LOG_LEVEL` environment variable
+Do not reintroduce client-side training. The backend caches trained weights per
+ticker, so its cost amortises across requests; browser training is repeated in
+full by every user on every view and none of it is reusable.
+
+Model output is labelled experimental and carries a disclaimer wherever it
+renders (`PredictionDisclaimer`). Measured out-of-sample accuracy is near chance
+on price-only features, so presenting it as a price forecast is not
+supportable.

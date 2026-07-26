@@ -8,7 +8,15 @@ import { createBackendClient } from '@/services/api/backendClient';
 interface HorizonStats {
   total: number;
   correct: number;
-  accuracy: number;
+  /**
+   * Null when fewer predictions have resolved than the backend's publishing
+   * floor. Rendering null as 0 would present a withheld figure as "0% accurate".
+   */
+  accuracy: number | null;
+  /** True once enough predictions have resolved to publish accuracy. */
+  hasSufficientSample: boolean;
+  /** How many more resolutions are needed before accuracy is published. */
+  needed: number;
 }
 
 interface RecentPrediction {

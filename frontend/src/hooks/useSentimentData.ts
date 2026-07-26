@@ -15,8 +15,7 @@ import {
   fetchCombinedSentiment,
   fetchArticleSentiment,
 } from '@/services/data/sentimentDataFetcher';
-import { generateBrowserPredictions } from '@/ml/prediction/browserPredictions';
-import { submitPredictionSnapshot } from '@/services/sync/predictionSnapshotService';
+import { fetchPredictions } from '@/services/api/predictionApi';
 import type { CombinedWordDetails, WordCountDetails } from '@/types/database.types';
 import type { DiagnosticsOutput } from '@/ml/prediction/types';
 import { MIN_SENTIMENT_DATA } from '@/constants/ml.constants';
@@ -68,16 +67,19 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
         return sentimentData;
       }
 
-      // Step 2: Generate browser-based predictions
+      // Step 2: Fetch predictions from the backend.
+      //
+      // Previously trained a model in the browser on every view. That was
+      // removed: it ran after this fetch so it saved no round trip, retrained
+      // per user per view with no reuse, and — critically — labelled a
+      // different target than the backend and the track-record scorer, which
+      // is what made the three disagree. POST /predict is now the only
+      // predictor, and it caches trained weights per ticker.
       if (sentimentData.length >= MIN_SENTIMENT_DATA) {
-        const predictions = await generateBrowserPredictions(ticker, sentimentData, days);
+        const response = await fetchPredictions(ticker);
+        const predictions = response?.predictions ?? null;
 
         if (predictions) {
-          // Capture diagnostics from prediction result
-          if (predictions.diagnostics) {
-            diagnosticsRef.current = predictions.diagnostics;
-          }
-
           // Attach predictions to latest record
           const latestRecord = sentimentData.reduce((latest, current) =>
             current.date > latest.date ? current : latest,
@@ -95,7 +97,6 @@ export function useSentimentData(ticker: string, options: UseSentimentDataOption
           void Promise.allSettled([
             CombinedWordRepository.upsert(latestRecord),
             updatePredictions(ticker, predictions),
-            submitPredictionSnapshot(ticker, predictions),
           ]).then((results) => {
             for (const r of results) {
               if (r.status === 'rejected') {

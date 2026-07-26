@@ -18,8 +18,8 @@ jest.mock('@/services/data/sentimentDataFetcher', () => ({
   fetchArticleSentiment: jest.fn(),
 }));
 
-jest.mock('@/ml/prediction/browserPredictions', () => ({
-  generateBrowserPredictions: jest.fn(),
+jest.mock('@/services/api/predictionApi', () => ({
+  fetchPredictions: jest.fn(),
 }));
 
 jest.mock('@/database/repositories/combinedWord.repository', () => ({
@@ -43,7 +43,7 @@ jest.mock('date-fns', () => ({
 const { fetchCombinedSentiment, fetchArticleSentiment } = jest.requireMock(
   '@/services/data/sentimentDataFetcher',
 );
-const { generateBrowserPredictions } = jest.requireMock('@/ml/prediction/browserPredictions');
+const { fetchPredictions } = jest.requireMock('@/services/api/predictionApi');
 const CombinedWordRepository = jest.requireMock('@/database/repositories/combinedWord.repository');
 
 describe('useSentimentData', () => {
@@ -56,7 +56,7 @@ describe('useSentimentData', () => {
       { date: '2025-01-10', ticker: 'AAPL', positive: 5, negative: 2, sentimentNumber: 0.4 },
     ];
     fetchCombinedSentiment.mockResolvedValue({ data: mockData });
-    generateBrowserPredictions.mockResolvedValue(null);
+    fetchPredictions.mockResolvedValue(null);
 
     const { result } = renderHook(() => useSentimentData('AAPL'), {
       wrapper: createTestProviders(),
@@ -77,7 +77,7 @@ describe('useSentimentData', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([]);
-    expect(generateBrowserPredictions).not.toHaveBeenCalled();
+    expect(fetchPredictions).not.toHaveBeenCalled();
   });
 
   it('generates predictions when enough data is available', async () => {
@@ -89,10 +89,13 @@ describe('useSentimentData', () => {
       sentimentNumber: 0.4,
     }));
     fetchCombinedSentiment.mockResolvedValue({ data: mockData });
-    generateBrowserPredictions.mockResolvedValue({
-      nextDay: { direction: 'up', probability: 0.7 },
-      twoWeek: null,
-      oneMonth: null,
+    fetchPredictions.mockResolvedValue({
+      ticker: 'AAPL',
+      predictions: {
+        nextDay: { direction: 'up', probability: 0.7 },
+        twoWeek: null,
+        oneMonth: null,
+      },
     });
 
     const { result } = renderHook(() => useSentimentData('AAPL'), {
@@ -101,7 +104,7 @@ describe('useSentimentData', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(generateBrowserPredictions).toHaveBeenCalled();
+    expect(fetchPredictions).toHaveBeenCalled();
     // Latest record should have predictions attached
     const latest = result.current.data!.reduce((a: any, b: any) => (a.date > b.date ? a : b));
     expect(latest.nextDayDirection).toBe('up');
@@ -123,7 +126,7 @@ describe('useSentimentData', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(generateBrowserPredictions).not.toHaveBeenCalled();
+    expect(fetchPredictions).not.toHaveBeenCalled();
   });
 
   it('is disabled when ticker is empty', () => {

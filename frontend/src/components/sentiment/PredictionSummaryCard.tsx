@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { PredictionDisclaimer } from '@/components/common/PredictionDisclaimer';
 import { Text, Card, useTheme } from 'react-native-paper';
 import { MonoText, SentimentGradient } from '@/components/common';
 import { formatPercentage } from '@/utils/formatting/numberFormatting';
@@ -100,7 +101,7 @@ export const PredictionSummaryCard: React.FC<PredictionSummaryCardProps> = ({
       <Card style={styles.card} mode="elevated">
         <Card.Content>
           <Text variant="titleMedium" style={styles.title}>
-            Price Movement Predictions
+            Model Signal (Experimental)
           </Text>
           <Text style={{ color: theme.colors.onSurfaceVariant }}>Generating predictions...</Text>
         </Card.Content>
@@ -112,7 +113,7 @@ export const PredictionSummaryCard: React.FC<PredictionSummaryCardProps> = ({
     <Card style={styles.card} mode="elevated">
       <Card.Content>
         <Text variant="titleMedium" style={styles.title}>
-          Price Movement Predictions
+          Model Signal (Experimental)
         </Text>
 
         {hasPredictions ? (
@@ -140,6 +141,7 @@ export const PredictionSummaryCard: React.FC<PredictionSummaryCardProps> = ({
             </Text>
           </View>
         )}
+        <PredictionDisclaimer variant="prediction" />
       </Card.Content>
     </Card>
   );
