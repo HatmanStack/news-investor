@@ -12,11 +12,15 @@ on:
 
 jobs:
   claude:
+    # Gate the OAuth-token-bearing job on author_association so that
+    # only OWNER/MEMBER/COLLABORATOR can trigger Claude. Without this,
+    # any external commenter on a public PR could spend the OAuth
+    # token by typing '@claude' (the token is exposed to the action).
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,3 +41,10 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+
+          # Let the reviewer verify claims by running the suite and linter
+          # rather than reading the diff and trusting CI. Deliberately no bare
+          # interpreter (python/node/sh): that would make the allowlist
+          # decorative. Safe only because the job is gated on
+          # author_association above.
+          claude_args: '--allowed-tools "Bash(npm ci:*),Bash(npm test:*),Bash(npm run:*),Bash(npx vitest:*),Bash(npx tsc:*),Bash(npx eslint:*),Bash(uv venv:*),Bash(uv pip install:*),Bash(pytest:*),Bash(python -m pytest:*),Bash(ruff:*),Bash(python -m ruff:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)"'
