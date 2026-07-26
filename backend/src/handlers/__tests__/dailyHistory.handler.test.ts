@@ -35,6 +35,7 @@ jest.unstable_mockModule('../../utils/error.util.js', () => ({
 jest.unstable_mockModule('../../utils/truncation.util.js', () => ({
   truncateByDateRange: jest.fn(<T>(items: T[]) => ({ data: items, meta: null })),
   buildTruncationResponseMeta: jest.fn(() => undefined),
+  truncateBody: jest.fn((body: string) => body),
 }));
 
 const mockResolveOptionalUser = jest

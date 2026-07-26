@@ -8,6 +8,7 @@ import { describe, it, expect } from '@jest/globals';
 import {
   truncateByDateRange,
   buildTruncationResponseMeta,
+  truncateBody,
   type TruncationMeta,
 } from '../truncation.util.js';
 
@@ -88,5 +89,54 @@ describe('buildTruncationResponseMeta', () => {
     expect(buildTruncationResponseMeta(meta)).toEqual({
       _meta: { truncated: true, maxDays: 90 },
     });
+  });
+});
+
+describe('truncateBody', () => {
+  const long =
+    'Apple reported record quarterly earnings that comfortably beat analyst estimates ' +
+    'across every major segment, with services revenue reaching an all-time high and ' +
+    'management raising guidance for the coming quarter on strong demand signals.';
+
+  it('returns the full body for entitled callers', () => {
+    expect(truncateBody(long, true)).toBe(long);
+  });
+
+  it('withholds the remainder from unentitled callers', () => {
+    const result = truncateBody(long, false);
+
+    expect(result.length).toBeLessThan(long.length);
+    expect(long).toContain(result.replace('…', '').trim());
+  });
+
+  it('actually removes the gated text rather than hiding it', () => {
+    // The previous "paywall" shipped the whole string and clamped it in CSS,
+    // so the gated text was still in the payload.
+    const result = truncateBody(long, false);
+
+    expect(result).not.toContain('strong demand signals');
+  });
+
+  it('leaves short bodies untouched', () => {
+    expect(truncateBody('Brief update.', false)).toBe('Brief update.');
+  });
+
+  it('does not cut mid-word', () => {
+    const result = truncateBody(long, false);
+    const withoutEllipsis = result.replace('…', '');
+
+    expect(withoutEllipsis.endsWith(' ')).toBe(false);
+    // The character after the cut in the original is a boundary, not a letter
+    // continuing the final word.
+    expect(long.startsWith(withoutEllipsis)).toBe(true);
+    expect(long[withoutEllipsis.length]).toMatch(/\s|$/);
+  });
+
+  it('marks truncation visibly', () => {
+    expect(truncateBody(long, false).endsWith('…')).toBe(true);
+  });
+
+  it('handles an empty body', () => {
+    expect(truncateBody('', false)).toBe('');
   });
 });

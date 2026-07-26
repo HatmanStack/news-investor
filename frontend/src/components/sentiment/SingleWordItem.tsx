@@ -9,7 +9,6 @@ import { Card, Text, Chip } from 'react-native-paper';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useToast } from '@/components/common';
 import { logger } from '@/utils/logger';
-import { FeatureGate } from '@/features/tier';
 import type { WordCountDetails } from '@/types/database.types';
 import { formatShortDate } from '@/utils/date/dateUtils';
 
@@ -184,22 +183,26 @@ export const SingleWordItem: React.FC<SingleWordItemProps> = React.memo(({ item 
             {item.title}
           </Text>
         )}
-        <FeatureGate
-          feature="full_article_body"
-          fallback={
-            <Text
-              variant="bodySmall"
-              style={[styles.body, { color: theme.colors.onSurfaceVariant }]}
-              numberOfLines={2}
-            >
-              {item.body || 'No description available'}
-            </Text>
-          }
-        >
-          <Text variant="bodySmall" style={[styles.body, { color: theme.colors.onSurfaceVariant }]}>
-            {item.body || 'No description available'}
+        {/*
+          No FeatureGate here. It previously wrapped two branches that rendered
+          the identical string and differed only by numberOfLines, so the
+          "gated" text was in the DOM and in the API response for every caller.
+          The entitlement is enforced server-side now: an unentitled caller
+          receives a shortened body and `bodyTruncated: true`, so there is
+          nothing left to hide client-side.
+        */}
+        <Text variant="bodySmall" style={[styles.body, { color: theme.colors.onSurfaceVariant }]}>
+          {item.body || 'No description available'}
+        </Text>
+        {item.bodyTruncated && (
+          <Text
+            variant="labelSmall"
+            style={[styles.body, { color: theme.colors.primary }]}
+            accessibilityRole="text"
+          >
+            Full article text available on Pro
           </Text>
-        </FeatureGate>
+        )}
       </Card.Content>
     </Card>
   );

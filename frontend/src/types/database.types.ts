@@ -98,6 +98,11 @@ export interface WordCountDetails {
   title?: string; // Article headline
   url?: string; // Link to original article
   publisher?: string; // News source (e.g., "Reuters", "Bloomberg")
+  /**
+   * True when the backend shortened the body because the caller lacks
+   * full_article_body. The withheld text is not present in the response.
+   */
+  bodyTruncated?: boolean;
 
   // Bag-of-words sentiment
   positive: number; // Count of positive words found in article

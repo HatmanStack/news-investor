@@ -72,3 +72,31 @@ export function buildTruncationResponseMeta(
   }
   return { _meta: meta };
 }
+
+/**
+ * Preview length for article bodies on the free tier, in characters.
+ *
+ * Enough to convey what a story is about — roughly a sentence or two — without
+ * delivering the whole summary.
+ */
+export const FREE_TIER_BODY_PREVIEW_CHARS = 200;
+
+/**
+ * Truncate an article body for callers without the full_article_body feature.
+ *
+ * Withholding happens here rather than in the UI: a client-side gate leaves the
+ * full text in the response payload, so anyone reading the network tab or
+ * calling the endpoint directly still has it. Truncating server-side is what
+ * makes the entitlement real.
+ *
+ * Cuts on a word boundary where one is reasonably close, so the preview does
+ * not end mid-word.
+ */
+export function truncateBody(body: string, allowFull: boolean): string {
+  if (allowFull || body.length <= FREE_TIER_BODY_PREVIEW_CHARS) return body;
+
+  const slice = body.slice(0, FREE_TIER_BODY_PREVIEW_CHARS);
+  const lastSpace = slice.lastIndexOf(' ');
+  const cut = lastSpace > FREE_TIER_BODY_PREVIEW_CHARS - 40 ? slice.slice(0, lastSpace) : slice;
+  return `${cut.trimEnd()}…`;
+}
