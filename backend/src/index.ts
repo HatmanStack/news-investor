@@ -11,7 +11,7 @@
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
-import { errorResponse, type APIGatewayResponse } from './utils/response.util';
+import { errorResponse, setRequestOrigin, type APIGatewayResponse } from './utils/response.util';
 import { logError, getStatusCodeFromError, sanitizeErrorMessage } from './utils/error.util';
 import { logLambdaStartStatus, logRequestMetrics } from './utils/metrics.util';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util';
@@ -107,6 +107,14 @@ function isDirectInvocation(event: unknown): event is DirectInvocationEvent {
 export async function handler(
   event: APIGatewayProxyEventV2 | DirectInvocationEvent,
 ): Promise<APIGatewayResponse> {
+  // Capture the requesting origin before any branch can return: the CORS
+  // header must name exactly one origin, so when ALLOWED_ORIGINS lists
+  // several, the response echoes whichever one asked.
+  const requestOrigin =
+    (event as APIGatewayProxyEventV2).headers?.origin ??
+    (event as APIGatewayProxyEventV2).headers?.Origin;
+  setRequestOrigin(requestOrigin);
+
   // Handle direct Lambda invocation (e.g., prediction trigger from sentiment handler)
   if (isDirectInvocation(event)) {
     logger.info('Direct invocation detected, routing to prediction handler', {
