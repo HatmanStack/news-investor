@@ -110,6 +110,18 @@ Parameters:
     Default: 25
     Description: API Gateway steady-state rate limit (requests/second)
 
+  AlarmEmail:
+    Type: String
+    Default: ''
+    Description: >-
+      Email address to receive CloudWatch alarm notifications. Leave empty to
+      create no subscription. Without it the alarms below change state in the
+      console and tell nobody. AWS sends a confirmation email that must be
+      accepted before any notification is delivered.
+
+Conditions:
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -462,6 +474,16 @@ Resources:
           Value: news-investor
 
   # CloudWatch Alarms
+
+  # Without this every alarm in this stack is decorative: it transitions to
+  # ALARM in the console and notifies nothing.
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlarmEmail
+    Properties:
+      TopicArn: !Ref CostAnomalySNSTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
   LambdaInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

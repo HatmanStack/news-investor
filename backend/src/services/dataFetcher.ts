@@ -5,7 +5,12 @@ import {
   makeArticlePK,
   SortKeyPrefix,
 } from '../types/dynamodb.types.js';
-import type { StockHistoricalItem, ArticleAnalysisItem } from '../types/dynamodb.types';
+import type {
+  StockHistoricalItem,
+  StockCacheItem,
+  ArticleAnalysisItem,
+} from '../types/dynamodb.types';
+import { readStockField } from '../utils/stockPrice.util.js';
 import { StockPrice, ArticleSentiment, HistoricalData } from '../types/prediction.types';
 import { logger } from '../utils/logger.util.js';
 
@@ -34,23 +39,55 @@ async function fetchPriceData(
   endDate: string,
 ): Promise<StockPrice[]> {
   try {
-    const items = await queryItems<StockHistoricalItem>(makeHistoricalPK(ticker), {
-      skBetween: {
-        start: makeDateSK(startDate),
-        end: makeDateSK(endDate),
-      },
-    });
+    // Read both price entities and merge them.
+    //
+    // HIST# is the durable spine and the intended source, but it is only
+    // written when a price fetch misses the STOCK# cache, so it covers the
+    // tickers somebody happened to view with a cold cache — not the universe
+    // the news sweep ingests. STOCK# covers a different, overlapping set.
+    // Requiring HIST# alone meant a ticker with plenty of price history in
+    // STOCK# was refused a prediction for want of 30 days.
+    //
+    // HIST# wins on conflict: it carries adjusted values and never expires,
+    // whereas STOCK# is a TTL'd response cache.
+    const [histItems, stockItems] = await Promise.all([
+      queryItems<StockHistoricalItem>(makeHistoricalPK(ticker), {
+        skBetween: { start: makeDateSK(startDate), end: makeDateSK(endDate) },
+      }),
+      queryItems<StockCacheItem>(`STOCK#${ticker.toUpperCase()}`, {
+        skBetween: { start: makeDateSK(startDate), end: makeDateSK(endDate) },
+      }),
+    ]);
 
-    return items
-      .map((item: StockHistoricalItem) => ({
+    const byDate = new Map<string, StockPrice>();
+
+    for (const item of stockItems) {
+      const close = readStockField(item, 'close');
+      // A row missing a close is unusable as a training row and must not be
+      // silently coerced to zero, which would read as a real price.
+      if (close === null) continue;
+      byDate.set(item.date, {
+        date: item.date,
+        open: readStockField(item, 'open') ?? close,
+        high: readStockField(item, 'high') ?? close,
+        low: readStockField(item, 'low') ?? close,
+        close,
+        volume: readStockField(item, 'volume') ?? 0,
+      });
+    }
+
+    for (const item of histItems) {
+      byDate.set(item.date, {
         date: item.date,
         open: item.open,
         high: item.high,
         low: item.low,
         close: item.close,
         volume: item.volume,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      });
+    }
+
+    return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   } catch (error) {
     logger.error(`Error fetching price data for ${ticker}`, error);
     throw error;

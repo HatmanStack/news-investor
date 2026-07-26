@@ -274,6 +274,34 @@ def query_stocks_by_date_range(ticker: str, start_date: str, end_date: str) -> l
         raise
 
 
+def has_historical(ticker: str) -> bool:
+    """
+    Whether any HIST# record exists for a ticker.
+
+    A one-item Query, used to decide whether a cache-hit response should also
+    lay down the durable spine. HIST# was only ever written on the cache-miss
+    path, so a ticker whose STOCK# cache was already warm when that write was
+    introduced could never acquire HIST# — the miss that would have written it
+    never happens again while the cache stays warm.
+
+    Existence, not completeness: this is a cheap gate on a repair that is
+    itself idempotent, not a coverage measurement.
+    """
+    try:
+        table = _get_table()
+        response = table.query(
+            KeyConditionExpression=Key("pk").eq(f"HIST#{ticker.upper()}"),
+            Limit=1,
+            ProjectionExpression="pk",
+        )
+        return len(response.get("Items", [])) > 0
+    except Exception as e:
+        # Answer "yes" on failure so the caller skips the backfill. A failed
+        # probe must not turn every cache hit into a bulk write.
+        logger.error(f"[StocksCache] Error probing HIST# for {ticker}: {e}", exc_info=True)
+        return True
+
+
 def batch_put_historical(items: list[dict[str, Any]]) -> None:
     """
     Persist HIST# entities — the price spine the ML pipeline trains on.

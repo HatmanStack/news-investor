@@ -8,6 +8,7 @@ from datetime import datetime
 from repositories.stocks_cache import (
     batch_put_historical,
     batch_put_stocks,
+    has_historical,
     query_stocks_by_date_range,
 )
 from services.yfinance_service import fetch_stock_prices, fetch_symbol_metadata
@@ -77,6 +78,42 @@ def handle_prices_request(
                     "splitFactor": float(price_data.get("splitFactor", 1.0)),
                 }
                 data.append(record)
+
+            # Lay down the durable HIST# spine if this ticker has none.
+            #
+            # HIST# was only written on the cache-miss path below, so a ticker
+            # whose STOCK# cache was already warm when that write was added is
+            # stuck: it returns here every time and never reaches the writer.
+            # Those tickers can never be predicted on, because the model
+            # requires 30 days of price history.
+            #
+            # Gated on an existence probe so this costs one extra read per
+            # cache hit and one bulk write per ticker, ever — not a write
+            # amplification on every request.
+            try:
+                if not has_historical(ticker):
+                    batch_put_historical(
+                        [
+                            {
+                                "ticker": ticker,
+                                "date": record["date"][:10],
+                                "open": record["open"],
+                                "high": record["high"],
+                                "low": record["low"],
+                                "close": record["close"],
+                                "volume": record["volume"],
+                                "adjClose": record.get("adjClose"),
+                            }
+                            for record in data
+                        ]
+                    )
+                    logger.info(
+                        f"[StocksHandler] Backfilled {len(data)} HIST# records for {ticker} "
+                        f"from cache hit"
+                    )
+            except Exception as e:
+                # Never fail the price response over a repair.
+                logger.error(f"[StocksHandler] HIST# backfill failed for {ticker}: {e}")
 
             return PriceResult(data=data, cached=True, cacheHitRate=cache_hit_rate)
 

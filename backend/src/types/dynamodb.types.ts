@@ -67,15 +67,34 @@ export interface BaseTableItem {
  * Stock cache item
  * PK: STOCK#AAPL, SK: DATE#2024-01-15
  */
+/**
+ * STOCK# price cache item, as actually written by `batch_put_stocks` in
+ * python/repositories/stocks_cache.py — the only producer of this entity.
+ *
+ * OHLCV lives under `priceData`. This interface previously declared those
+ * fields flat, so every reader compiled against a shape that is never stored
+ * and silently read undefined. Read through `readStockField`/`readStockClose`
+ * in utils/stockPrice.util.ts rather than reaching in directly; the flat
+ * fields remain optional there only to tolerate pre-nesting rows.
+ */
 export interface StockCacheItem extends BaseTableItem {
   entityType: 'STOCK';
   ticker: string;
   date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
+  priceData: {
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    adjOpen?: number;
+    adjHigh?: number;
+    adjLow?: number;
+    adjClose?: number;
+    adjVolume?: number;
+    divCash?: number;
+    splitFactor?: number;
+  };
 }
 
 /**

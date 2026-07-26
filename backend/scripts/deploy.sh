@@ -123,6 +123,7 @@ resolve STRIPE_SECRET_KEY       "Stripe Secret Key"        false
 resolve STRIPE_WEBHOOK_SECRET   "Stripe Webhook Secret"    false
 resolve STRIPE_PRICE_ID_MONTHLY "Stripe Monthly Price ID"  false
 resolve PUBLIC_WEB_URL          "Public Web URL"           false
+resolve ALARM_EMAIL             "Alarm Email"              false
 
 # Persist only what we resolved; everything else in the file is untouched.
 upsert_env AWS_REGION      "$AWS_REGION"
@@ -149,6 +150,7 @@ echo "  Finnhub key:     ${FINNHUB_API_KEY:0:8}…"
 echo "  Webhook secret:  $([ -n "$FINNHUB_WEBHOOK_SECRET" ] && echo 'configured' || echo 'NOT SET — /webhooks/finnhub returns 503')"
 echo "  Stripe:          $([ -n "$STRIPE_SECRET_KEY" ] && echo 'configured' || echo 'disabled (/stripe/* returns 500)')"
 echo "  Allowed origins: $ALLOWED_ORIGINS"
+echo "  Alarm email:     $([ -n "$ALARM_EMAIL" ] && echo "$ALARM_EMAIL (confirm the SNS email AWS sends)" || echo 'NOT SET — alarms notify nobody')"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -252,17 +254,32 @@ echo "=== Step 4: Deploy main stack ==="
 # are intentionally omitted so template.yaml stays the single source of truth
 # for them.
 #
-# The ParameterKey=/ParameterValue= long form is required rather than the
-# Key=Value shorthand: SAM's shorthand parser rejects an empty value outright
-# ("AlphaVantageApiKey= is not a valid format"), and empty is a legitimate,
-# meaningful setting for most of these — it is how Stripe and Reddit stay
-# disabled. The long form accepts it.
+# The quoted Key="Value" shorthand, not the ParameterKey=/ParameterValue= long
+# form. The long form was chosen on the belief that shorthand rejects empty
+# values; what it actually rejects is a *bare* empty (`SesFromEmail=`), while
+# `SesFromEmail=""` is accepted and resolves to the empty string. The long form
+# does not error on an empty value — it drops the parameter entirely, so
+# CloudFormation falls back to the template default. That is silent and wrong
+# for the three parameters whose defaults are not empty: SesFromEmail
+# ('reports@hatstack.fun'), CognitoCallbackUrl and PublicWebUrl (both
+# 'http://localhost:8081'). Deploying with those blank in .env.deploy shipped
+# the defaults instead of blank.
 #
-# Caveat: a value containing a comma would break this form's parsing. None of
-# these carry commas today; ALLOWED_ORIGINS is the only plausible case, and
-# multi-origin CORS is already broken upstream in response.util.ts.
+# The shorthand also carries comma-containing values intact, which the long
+# form's own docs warn against. That matters now that ALLOWED_ORIGINS can
+# legitimately list several origins.
+#
+# Verified against `sam deploy --debug` (SAM CLI 1.158.0), which prints the
+# resolved parameter set before contacting AWS.
+escape_param_value() {
+    local v=$1
+    v=${v//\\/\\\\}
+    v=${v//\"/\\\"}
+    printf '%s' "$v"
+}
+
 add_param() {
-    PARAM_OVERRIDES+=("ParameterKey=$1,ParameterValue=$2")
+    PARAM_OVERRIDES+=("$1=\"$(escape_param_value "$2")\"")
 }
 
 PARAM_OVERRIDES=()
@@ -279,6 +296,7 @@ add_param StripeSecretKey      "$STRIPE_SECRET_KEY"
 add_param StripeWebhookSecret  "$STRIPE_WEBHOOK_SECRET"
 add_param StripePriceIdMonthly "$STRIPE_PRICE_ID_MONTHLY"
 add_param PublicWebUrl         "$PUBLIC_WEB_URL"
+add_param AlarmEmail           "$ALARM_EMAIL"
 
 sam deploy \
     --stack-name "$STACK_NAME" \
@@ -294,6 +312,18 @@ API_URL=$(aws cloudformation describe-stacks \
     --query 'Stacks[0].Outputs[?OutputKey==`ReactStocksApiUrl`].OutputValue' \
     --output text)
 
+# Check before announcing. This block used to print "Deployment complete" and
+# then exit 0 on a missing API URL, so a deploy that produced no usable stack
+# reported success — to a human reading the terminal and to any CI step
+# checking the exit code. An unreadable output means the stack is not in a
+# state anyone should build on top of, so it is fatal.
+if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
+    echo "Error: stack '$STACK_NAME' has no readable ReactStocksApiUrl output." >&2
+    echo "       The deploy did not produce a usable API. Check the stack events:" >&2
+    echo "       aws cloudformation describe-stack-events --stack-name $STACK_NAME --region $AWS_REGION" >&2
+    exit 1
+fi
+
 echo ""
 echo "==================================="
 echo "Deployment complete"
@@ -306,11 +336,6 @@ if [ -n "$FINNHUB_WEBHOOK_SECRET" ]; then
     echo "    ${API_URL}/webhooks/finnhub"
 fi
 echo ""
-
-if [ -z "$API_URL" ] || [ "$API_URL" = "None" ]; then
-    echo "Warning: could not read API URL from stack outputs" >&2
-    exit 0
-fi
 
 upsert_env DEPLOYED_API_URL "$API_URL"
 

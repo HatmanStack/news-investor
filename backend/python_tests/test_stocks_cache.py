@@ -472,3 +472,58 @@ class TestBatchPutHistorical:
         batch_put_historical([])
 
         mock_get_table.assert_not_called()
+
+
+class TestHasHistorical:
+    """Tests for has_historical — the gate on the cache-hit HIST# backfill."""
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_true_when_a_record_exists(self, mock_get_table):
+        """Any HIST# record means the spine is already laid down."""
+        from repositories.stocks_cache import has_historical
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": [{"pk": "HIST#AAPL"}]}
+        mock_get_table.return_value = mock_table
+
+        assert has_historical("AAPL") is True
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_false_when_none_exist(self, mock_get_table):
+        """No HIST# record is what makes a warm-cache ticker unpredictable."""
+        from repositories.stocks_cache import has_historical
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+        mock_get_table.return_value = mock_table
+
+        assert has_historical("AAPL") is False
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_queries_the_hist_partition_with_limit_one(self, mock_get_table):
+        """Existence probe, not a scan: one item, key projection only."""
+        from repositories.stocks_cache import has_historical
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+        mock_get_table.return_value = mock_table
+
+        has_historical("aapl")
+
+        kwargs = mock_table.query.call_args.kwargs
+        assert kwargs["Limit"] == 1
+        assert kwargs["ProjectionExpression"] == "pk"
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_reports_present_when_the_probe_fails(self, mock_get_table):
+        """
+        Fail closed. A probe that errors must not be read as "missing" — that
+        would turn every cache hit on every ticker into a bulk write.
+        """
+        from repositories.stocks_cache import has_historical
+
+        mock_table = MagicMock()
+        mock_table.query.side_effect = RuntimeError("throttled")
+        mock_get_table.return_value = mock_table
+
+        assert has_historical("AAPL") is True

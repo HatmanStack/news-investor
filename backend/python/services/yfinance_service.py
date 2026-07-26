@@ -197,11 +197,15 @@ def search_tickers(query: str) -> list[YahooSearchQuote]:
 
     try:
         url = "https://query2.finance.yahoo.com/v1/finance/search"
-        params = {
+        # Typed str->str: an untyped literal widens to dict[str, object],
+        # which requests' `params` signature rejects. Booleans and ints are
+        # spelled exactly as requests would have serialised them, so the
+        # wire format is unchanged ("False", not "false").
+        params: dict[str, str] = {
             "q": query.strip(),
-            "quotesCount": 10,
-            "newsCount": 0,
-            "enableFuzzyQuery": False,
+            "quotesCount": "10",
+            "newsCount": "0",
+            "enableFuzzyQuery": "False",
             "quotesQueryId": "tss_match_phrase_query",
         }
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -216,11 +220,14 @@ def search_tickers(query: str) -> list[YahooSearchQuote]:
         return quotes
 
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 404:
+        # e.response is Optional on HTTPError; narrow once rather than
+        # dereferencing it twice and trusting it to be set.
+        status = e.response.status_code if e.response is not None else 502
+        if status == 404:
             logger.info(f"[YFinanceService] No results found for query: {query}")
             return []
         logger.error(f"[YFinanceService] HTTP error searching for {query}: {e}")
-        raise APIError(f"Search failed: {e}", e.response.status_code) from e
+        raise APIError(f"Search failed: {e}", status) from e
     except requests.exceptions.Timeout as e:
         logger.error(f"[YFinanceService] Timeout searching for {query}")
         raise APIError("Search request timed out", 504) from e

@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from typing import ClassVar
 from unittest.mock import patch
 
 import pandas as pd
@@ -208,3 +209,79 @@ class TestStocksHandlerMetadata:
         result = handle_stocks_request(event)
 
         assert result["statusCode"] == 404
+
+
+class TestHistoricalBackfillOnCacheHit:
+    """
+    The cache-hit path must lay down HIST# when a ticker has none.
+
+    HIST# was only written on the cache-miss path, so a ticker whose STOCK#
+    cache was already warm when that write was introduced returns from the
+    cache-hit branch forever and never acquires the durable price spine the
+    prediction model needs.
+    """
+
+    CACHED: ClassVar = [
+        {"ticker": "AAPL", "date": f"2024-01-{15 + i}", "priceData": {"close": 150.0 + i}}
+        for i in range(5)
+    ]
+    EVENT: ClassVar = {
+        "queryStringParameters": {
+            "ticker": "AAPL",
+            "startDate": "2024-01-15",
+            "endDate": "2024-01-19",
+        }
+    }
+
+    @patch("handlers.stocks.batch_put_historical")
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_backfills_when_no_historical_exists(self, mock_query, mock_has, mock_put):
+        from handlers.stocks import handle_stocks_request
+
+        mock_query.return_value = self.CACHED
+        mock_has.return_value = False
+
+        result = handle_stocks_request(self.EVENT)
+
+        assert result["statusCode"] == 200
+        mock_put.assert_called_once()
+        written = mock_put.call_args.args[0]
+        assert len(written) == 5
+        assert {row["ticker"] for row in written} == {"AAPL"}
+        # Dates must be YYYY-MM-DD, not the ISO timestamps the response carries.
+        assert all(len(row["date"]) == 10 for row in written)
+
+    @patch("handlers.stocks.batch_put_historical")
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_does_not_rewrite_when_historical_exists(self, mock_query, mock_has, mock_put):
+        """One bulk write per ticker ever, not one per cache hit."""
+        from handlers.stocks import handle_stocks_request
+
+        mock_query.return_value = self.CACHED
+        mock_has.return_value = True
+
+        result = handle_stocks_request(self.EVENT)
+
+        assert result["statusCode"] == 200
+        mock_put.assert_not_called()
+
+    @patch("handlers.stocks.batch_put_historical")
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_backfill_failure_does_not_break_the_price_response(
+        self, mock_query, mock_has, mock_put
+    ):
+        """A repair must never cost the caller the answer they asked for."""
+        from handlers.stocks import handle_stocks_request
+
+        mock_query.return_value = self.CACHED
+        mock_has.return_value = False
+        mock_put.side_effect = RuntimeError("dynamo down")
+
+        result = handle_stocks_request(self.EVENT)
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert len(body["data"]) == 5
