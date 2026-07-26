@@ -251,25 +251,41 @@ echo "=== Step 4: Deploy main stack ==="
 # Every configurable parameter is passed explicitly. Lambda sizing parameters
 # are intentionally omitted so template.yaml stays the single source of truth
 # for them.
+#
+# The ParameterKey=/ParameterValue= long form is required rather than the
+# Key=Value shorthand: SAM's shorthand parser rejects an empty value outright
+# ("AlphaVantageApiKey= is not a valid format"), and empty is a legitimate,
+# meaningful setting for most of these — it is how Stripe and Reddit stay
+# disabled. The long form accepts it.
+#
+# Caveat: a value containing a comma would break this form's parsing. None of
+# these carry commas today; ALLOWED_ORIGINS is the only plausible case, and
+# multi-origin CORS is already broken upstream in response.util.ts.
+add_param() {
+    PARAM_OVERRIDES+=("ParameterKey=$1,ParameterValue=$2")
+}
+
+PARAM_OVERRIDES=()
+add_param FinnhubApiKey        "$FINNHUB_API_KEY"
+add_param FinnhubWebhookSecret "$FINNHUB_WEBHOOK_SECRET"
+add_param AlphaVantageApiKey   "$ALPHA_VANTAGE_API_KEY"
+add_param AllowedOrigins       "$ALLOWED_ORIGINS"
+add_param DistilFinBERTApiUrl  "$ML_API_URL"
+add_param CognitoCallbackUrl   "$COGNITO_CALLBACK_URL"
+add_param SesFromEmail         "$SES_FROM_EMAIL"
+add_param RedditClientId       "$REDDIT_CLIENT_ID"
+add_param RedditClientSecret   "$REDDIT_CLIENT_SECRET"
+add_param StripeSecretKey      "$STRIPE_SECRET_KEY"
+add_param StripeWebhookSecret  "$STRIPE_WEBHOOK_SECRET"
+add_param StripePriceIdMonthly "$STRIPE_PRICE_ID_MONTHLY"
+add_param PublicWebUrl         "$PUBLIC_WEB_URL"
+
 sam deploy \
     --stack-name "$STACK_NAME" \
     --region "$AWS_REGION" \
     --s3-bucket "$DEPLOY_BUCKET" \
     --capabilities CAPABILITY_IAM \
-    --parameter-overrides \
-        FinnhubApiKey="$FINNHUB_API_KEY" \
-        FinnhubWebhookSecret="$FINNHUB_WEBHOOK_SECRET" \
-        AlphaVantageApiKey="$ALPHA_VANTAGE_API_KEY" \
-        AllowedOrigins="$ALLOWED_ORIGINS" \
-        DistilFinBERTApiUrl="$ML_API_URL" \
-        CognitoCallbackUrl="$COGNITO_CALLBACK_URL" \
-        SesFromEmail="$SES_FROM_EMAIL" \
-        RedditClientId="$REDDIT_CLIENT_ID" \
-        RedditClientSecret="$REDDIT_CLIENT_SECRET" \
-        StripeSecretKey="$STRIPE_SECRET_KEY" \
-        StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
-        StripePriceIdMonthly="$STRIPE_PRICE_ID_MONTHLY" \
-        PublicWebUrl="$PUBLIC_WEB_URL" \
+    --parameter-overrides "${PARAM_OVERRIDES[@]}" \
     --no-confirm-changeset \
     --no-fail-on-empty-changeset
 

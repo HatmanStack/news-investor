@@ -19,7 +19,7 @@
     "test:e2e": "cd backend && npm run test:e2e",
     "lint:docs": "markdownlint-cli2 '*.md' 'docs/**/*.md' '.github/**/*.md'",
     "lint:docs:links": "command -v lychee > /dev/null 2>&1 && lychee --no-progress '*.md' 'docs/**/*.md' || echo 'Install lychee (https://github.com/lycheeverse/lychee) for local link checking'",
-    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:docs && npm run lint:python-types && npm run test && npm run test:backend && ./scripts/check-console-calls.sh",
+    "check": "npm run lint && npm run lint:backend && npm run lint:ml && npm run lint:docs && npm run lint:python-types && npm run test && npm run test:backend && npm run verify:bundles --workspace=news-investor-backend && ./scripts/check-console-calls.sh",
     "test:admin": "cd admin && npm test",
     "lint:admin": "cd admin && npm run type-check",
     "build:admin": "cd admin && npm run build",
