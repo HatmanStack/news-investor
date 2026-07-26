@@ -10,6 +10,7 @@ import type { SQSEvent, SQSRecord, SQSBatchResponse } from 'aws-lambda';
 import { z } from 'zod';
 import { processSentimentForTicker } from './services/sentimentProcessing.service.js';
 import * as SentimentJobsRepository from './repositories/sentimentJobs.repository.js';
+import * as DailySentimentAggregateRepository from './repositories/dailySentimentAggregate.repository.js';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util.js';
 import { annotateEarningsProximity } from './services/earningsProximity.service.js';
 import { recomputeTrending } from './services/trending.service.js';
@@ -49,11 +50,27 @@ async function processRecord(record: SQSRecord): Promise<void> {
     await SentimentJobsRepository.updateJobStatus(jobId, 'IN_PROGRESS');
 
     const result = await processSentimentForTicker(ticker, startDate, endDate);
+
+    // Persist the daily aggregates. processSentimentForTicker computes these
+    // and returns them; until now nothing wrote them, so DAILY# entities were
+    // never created. The annotation step below reads them, which is why it was
+    // logging "No DAILY# entities found" and doing nothing.
+    for (const day of result.dailySentiment) {
+      await DailySentimentAggregateRepository.upsertDailySentiment(ticker, day.date, {
+        eventCounts: day.eventCounts,
+        avgAspectScore: day.avgAspectScore,
+        avgMlScore: day.avgMlScore,
+        avgSignalScore: day.avgSignalScore,
+        materialEventCount: day.materialEventCount,
+      });
+    }
+
     await SentimentJobsRepository.markJobCompleted(jobId, result.articlesProcessed);
 
     logger.info('Sentiment job completed', {
       jobId,
       articlesProcessed: result.articlesProcessed,
+      dailyAggregatesWritten: result.dailySentiment.length,
     });
 
     // Annotate daily aggregates with earnings proximity

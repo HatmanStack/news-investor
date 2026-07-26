@@ -349,3 +349,126 @@ class TestCalculateTtl:
         expected_min = int(time.time()) + (23 * 60 * 60)
         expected_max = int(time.time()) + (25 * 60 * 60)
         assert expected_min < ttl < expected_max
+
+
+class TestBatchPutHistorical:
+    """Tests for batch_put_historical — the ML price spine (HIST# entities)."""
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_writes_hist_entities_with_flat_ohlcv(self, mock_get_table):
+        """HIST# items use flat OHLCV, which is the shape dataFetcher.ts reads."""
+        from repositories.stocks_cache import batch_put_historical
+
+        mock_table = MagicMock()
+        mock_batch = MagicMock()
+        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch
+        mock_get_table.return_value = mock_table
+
+        batch_put_historical(
+            [
+                {
+                    "ticker": "aapl",
+                    "date": "2026-07-25",
+                    "open": 321.79,
+                    "high": 334.37,
+                    "low": 321.62,
+                    "close": 333.02,
+                    "volume": 1000000,
+                }
+            ]
+        )
+
+        item = mock_batch.put_item.call_args[1]["Item"]
+        assert item["pk"] == "HIST#AAPL"
+        assert item["sk"] == "DATE#2026-07-25"
+        assert item["entityType"] == "HISTORICAL"
+        assert item["close"] == Decimal("333.02")
+        assert item["volume"] == Decimal(1000000)
+        # Flat, not nested under priceData like STOCK# entries.
+        assert "priceData" not in item
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_does_not_set_ttl(self, mock_get_table):
+        """HIST# is the training record and must never expire."""
+        from repositories.stocks_cache import batch_put_historical
+
+        mock_table = MagicMock()
+        mock_batch = MagicMock()
+        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch
+        mock_get_table.return_value = mock_table
+
+        batch_put_historical(
+            [
+                {
+                    "ticker": "AAPL",
+                    "date": "2026-07-25",
+                    "open": 1.0,
+                    "high": 1.0,
+                    "low": 1.0,
+                    "close": 1.0,
+                    "volume": 1,
+                }
+            ]
+        )
+
+        assert "ttl" not in mock_batch.put_item.call_args[1]["Item"]
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_includes_adj_close_when_present(self, mock_get_table):
+        from repositories.stocks_cache import batch_put_historical
+
+        mock_table = MagicMock()
+        mock_batch = MagicMock()
+        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch
+        mock_get_table.return_value = mock_table
+
+        batch_put_historical(
+            [
+                {
+                    "ticker": "AAPL",
+                    "date": "2026-07-25",
+                    "open": 1.0,
+                    "high": 1.0,
+                    "low": 1.0,
+                    "close": 1.0,
+                    "volume": 1,
+                    "adjClose": 0.99,
+                }
+            ]
+        )
+
+        assert mock_batch.put_item.call_args[1]["Item"]["adjClose"] == Decimal("0.99")
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_omits_adj_close_when_absent(self, mock_get_table):
+        from repositories.stocks_cache import batch_put_historical
+
+        mock_table = MagicMock()
+        mock_batch = MagicMock()
+        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch
+        mock_get_table.return_value = mock_table
+
+        batch_put_historical(
+            [
+                {
+                    "ticker": "AAPL",
+                    "date": "2026-07-25",
+                    "open": 1.0,
+                    "high": 1.0,
+                    "low": 1.0,
+                    "close": 1.0,
+                    "volume": 1,
+                    "adjClose": None,
+                }
+            ]
+        )
+
+        assert "adjClose" not in mock_batch.put_item.call_args[1]["Item"]
+
+    @patch("repositories.stocks_cache._get_table")
+    def test_no_write_for_empty_input(self, mock_get_table):
+        from repositories.stocks_cache import batch_put_historical
+
+        batch_put_historical([])
+
+        mock_get_table.assert_not_called()

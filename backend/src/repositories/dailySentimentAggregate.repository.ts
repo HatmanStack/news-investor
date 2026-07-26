@@ -7,7 +7,14 @@
  * Note: This table has NO TTL (persistent ML training data).
  */
 
-import { getItem, putItem, queryItems } from '../utils/dynamodb.util.js';
+import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  getItem,
+  putItem,
+  queryItems,
+  getDynamoDbClient,
+  getTableName,
+} from '../utils/dynamodb.util.js';
 import { makeDailyPK, makeDateSK, SortKeyPrefix } from '../types/dynamodb.types.js';
 import type { DailySentimentItem, DailySentimentData } from '../types/dynamodb.types.js';
 import { logger } from '../utils/logger.util.js';
@@ -23,6 +30,93 @@ export async function putDailyAggregate(item: DailySentimentData): Promise<void>
     logger.error('Error putting item', error);
     throw error;
   }
+}
+
+/**
+ * Sentiment-derived fields of a daily aggregate — the subset produced by the
+ * sentiment pipeline, as opposed to the prediction fields written by
+ * POST /predict or the annotations added by the earnings and insider services.
+ */
+export type DailySentimentFields = Pick<
+  DailySentimentData,
+  'eventCounts' | 'avgAspectScore' | 'avgMlScore' | 'avgSignalScore' | 'materialEventCount'
+>;
+
+/**
+ * Write the sentiment portion of a daily aggregate without disturbing the rest.
+ *
+ * putDailyAggregate is a whole-item put, so writing sentiment fields directly
+ * would erase the prediction fields (nextDayDirection and friends) and the
+ * earnings/insider annotations that other code paths attach to the same item.
+ *
+ * This touches only the sentiment attributes, in a single atomic UpdateItem.
+ * A read-then-put would drop any prediction or annotation write that landed
+ * in between; DynamoDB applies this at the attribute level, so concurrent
+ * writers to disjoint attributes cannot clobber each other. That matters
+ * because this runs on every ingestion and the aggregate is the durable
+ * training record.
+ *
+ * Fields absent from `fields` are REMOVEd rather than left stale, matching the
+ * whole-item semantics callers previously got: reprocessing a day whose ML
+ * score is no longer computable should clear it, not preserve a stale value.
+ *
+ * UpdateItem creates the item when it does not exist, so the identity
+ * attributes are set unconditionally (idempotent — same values every time) and
+ * createdAt is guarded with if_not_exists to preserve the original timestamp.
+ */
+export async function upsertDailySentiment(
+  ticker: string,
+  date: string,
+  fields: DailySentimentFields,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const upperTicker = ticker.toUpperCase();
+
+  const names: Record<string, string> = {
+    '#entityType': 'entityType',
+    '#ticker': 'ticker',
+    '#date': 'date',
+    '#createdAt': 'createdAt',
+    '#updatedAt': 'updatedAt',
+  };
+  const values: Record<string, unknown> = {
+    ':entityType': 'DAILY',
+    ':ticker': upperTicker,
+    ':date': date,
+    ':now': now,
+  };
+
+  const sets = [
+    '#entityType = :entityType',
+    '#ticker = :ticker',
+    '#date = :date',
+    '#createdAt = if_not_exists(#createdAt, :now)',
+    '#updatedAt = :now',
+  ];
+  const removes: string[] = [];
+
+  for (const [key, value] of Object.entries(fields)) {
+    names[`#${key}`] = key;
+    if (value === undefined) {
+      removes.push(`#${key}`);
+    } else {
+      values[`:${key}`] = value;
+      sets.push(`#${key} = :${key}`);
+    }
+  }
+
+  const expression =
+    `SET ${sets.join(', ')}` + (removes.length ? ` REMOVE ${removes.join(', ')}` : '');
+
+  await getDynamoDbClient().send(
+    new UpdateCommand({
+      TableName: getTableName(),
+      Key: { pk: makeDailyPK(upperTicker), sk: makeDateSK(date) },
+      UpdateExpression: expression,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }),
+  );
 }
 
 /**

@@ -5,7 +5,11 @@ Handles GET /stocks requests for prices and metadata.
 
 from datetime import datetime
 
-from repositories.stocks_cache import batch_put_stocks, query_stocks_by_date_range
+from repositories.stocks_cache import (
+    batch_put_historical,
+    batch_put_stocks,
+    query_stocks_by_date_range,
+)
 from services.yfinance_service import fetch_stock_prices, fetch_symbol_metadata
 from typedefs import ApiGatewayEvent, ApiGatewayResponse, MetadataResult, PriceRecord, PriceResult
 from utils.error import APIError
@@ -115,6 +119,29 @@ def handle_prices_request(
                 logger.info(f"[StocksHandler] Cached {len(cache_items)} price records for {ticker}")
             except Exception as e:
                 logger.error(f"[StocksHandler] Failed to cache stock prices: {e}")
+
+            # Persist the same fetch as HIST# — the durable price spine the ML
+            # pipeline reads. STOCK# above is a TTL'd response cache and expires,
+            # so it cannot serve as training data. Kept in its own try block so a
+            # failure here never breaks the price response the caller asked for.
+            try:
+                batch_put_historical(
+                    [
+                        {
+                            "ticker": ticker,
+                            "date": record["date"][:10],
+                            "open": record["open"],
+                            "high": record["high"],
+                            "low": record["low"],
+                            "close": record["close"],
+                            "volume": record["volume"],
+                            "adjClose": record.get("adjClose"),
+                        }
+                        for record in data
+                    ]
+                )
+            except Exception as e:
+                logger.error(f"[StocksHandler] Failed to persist historical prices: {e}")
 
         return PriceResult(data=data, cached=False, cacheHitRate=cache_hit_rate)
 

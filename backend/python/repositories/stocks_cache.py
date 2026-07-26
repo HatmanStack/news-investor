@@ -272,3 +272,58 @@ def query_stocks_by_date_range(ticker: str, start_date: str, end_date: str) -> l
     except Exception as e:
         logger.error(f"[StocksCache] Error querying stocks by date range: {e}", exc_info=True)
         raise
+
+
+def batch_put_historical(items: list[dict[str, Any]]) -> None:
+    """
+    Persist HIST# entities — the price spine the ML pipeline trains on.
+
+    Distinct from batch_put_stocks in two ways that matter:
+
+    * No TTL. STOCK# entries are an API response cache and expire; HIST# is the
+      historical record and must not. A model cannot be trained on data that
+      quietly deletes itself.
+    * Flat OHLCV at the top level, not nested under priceData, because that is
+      the shape backend/src/services/dataFetcher.ts reads
+      (StockHistoricalItem in dynamodb.types.ts).
+
+    Nothing populated HIST# before this, so POST /predict failed with
+    "Insufficient price data: Found 0 days, required 30" regardless of how much
+    price data had been cached.
+
+    Args:
+        items: List of dicts with ticker, date, open, high, low, close, volume,
+               and optionally adjClose.
+    """
+    if not items:
+        return
+
+    try:
+        table = _get_table()
+        now = int(time.time() * 1000)
+
+        with table.batch_writer() as batch:
+            for item in items:
+                ticker_upper = item["ticker"].upper()
+                hist_item: dict[str, Any] = {
+                    "pk": f"HIST#{ticker_upper}",
+                    "sk": f"DATE#{item['date']}",
+                    "entityType": "HISTORICAL",
+                    "ticker": ticker_upper,
+                    "date": item["date"],
+                    "open": _float_to_decimal(item["open"]),
+                    "high": _float_to_decimal(item["high"]),
+                    "low": _float_to_decimal(item["low"]),
+                    "close": _float_to_decimal(item["close"]),
+                    "volume": _float_to_decimal(item["volume"]),
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                if item.get("adjClose") is not None:
+                    hist_item["adjClose"] = _float_to_decimal(item["adjClose"])
+                batch.put_item(Item=hist_item)
+
+        logger.info(f"[StocksCache] Batch put {len(items)} HIST# records")
+    except Exception as e:
+        logger.error(f"[StocksCache] Error batch putting historical: {e}", exc_info=True)
+        raise

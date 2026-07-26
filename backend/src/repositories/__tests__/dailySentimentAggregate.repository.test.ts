@@ -12,19 +12,120 @@ const mockGetItem = jest.fn<(...args: unknown[]) => Promise<DailySentimentItem |
 const mockPutItem = jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockQueryItems = jest.fn<(...args: unknown[]) => Promise<DailySentimentItem[]>>();
 
+const mockSend = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: mockGetItem,
   putItem: mockPutItem,
   queryItems: mockQueryItems,
+  getDynamoDbClient: () => ({ send: mockSend }),
+  getTableName: () => 'test-table',
 }));
 
 // Import after mocking
-const { putDailyAggregate, getDailyAggregate, getLatestDailyAggregate, queryByTickerAndDateRange } =
-  await import('../dailySentimentAggregate.repository.js');
+const {
+  putDailyAggregate,
+  getDailyAggregate,
+  getLatestDailyAggregate,
+  queryByTickerAndDateRange,
+  upsertDailySentiment,
+} = await import('../dailySentimentAggregate.repository.js');
 
 describe('DailySentimentAggregateRepository', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('upsertDailySentiment', () => {
+    const fields = {
+      eventCounts: { EARNINGS: 2 },
+      avgAspectScore: 0.4,
+      avgMlScore: 0.6,
+      avgSignalScore: 0.7,
+      materialEventCount: 2,
+    };
+
+    const sentCommand = () =>
+      mockSend.mock.calls[0]![0] as {
+        input: {
+          Key: Record<string, string>;
+          UpdateExpression: string;
+          ExpressionAttributeValues: Record<string, unknown>;
+        };
+      };
+
+    it('targets the right key and sets the sentiment fields', async () => {
+      await upsertDailySentiment('aapl', '2026-07-25', fields);
+
+      const { input } = sentCommand();
+      expect(input.Key).toEqual({ pk: 'DAILY#AAPL', sk: 'DATE#2026-07-25' });
+      expect(input.UpdateExpression).toContain('#avgMlScore = :avgMlScore');
+      expect(input.ExpressionAttributeValues[':avgMlScore']).toBe(0.6);
+      expect(input.ExpressionAttributeValues[':materialEventCount']).toBe(2);
+    });
+
+    it('never references prediction or annotation attributes', async () => {
+      // Preservation is now structural: an attribute-level update cannot touch
+      // fields it does not name, so a concurrent POST /predict write survives.
+      await upsertDailySentiment('AAPL', '2026-07-25', fields);
+
+      const expr = sentCommand().input.UpdateExpression as string;
+      for (const attr of [
+        'nextDayDirection',
+        'nextDayProbability',
+        'twoWeekDirection',
+        'oneMonthDirection',
+        'insiderNetSentiment',
+        'earningsProximity',
+      ]) {
+        expect(expr).not.toContain(attr);
+      }
+    });
+
+    it('does not read the item first', async () => {
+      await upsertDailySentiment('AAPL', '2026-07-25', fields);
+
+      // A read-then-put is exactly the race this replaced.
+      expect(mockGetItem).not.toHaveBeenCalled();
+      expect(mockPutItem).not.toHaveBeenCalled();
+    });
+
+    it('preserves createdAt on an existing item', async () => {
+      await upsertDailySentiment('AAPL', '2026-07-25', fields);
+
+      expect(sentCommand().input.UpdateExpression).toContain(
+        '#createdAt = if_not_exists(#createdAt, :now)',
+      );
+    });
+
+    it('sets identity attributes so a newly created item is well formed', async () => {
+      await upsertDailySentiment('AAPL', '2026-07-25', fields);
+
+      const { input } = sentCommand();
+      expect(input.ExpressionAttributeValues[':entityType']).toBe('DAILY');
+      expect(input.ExpressionAttributeValues[':ticker']).toBe('AAPL');
+      expect(input.ExpressionAttributeValues[':date']).toBe('2026-07-25');
+    });
+
+    it('REMOVEs fields that are undefined rather than leaving them stale', async () => {
+      await upsertDailySentiment('AAPL', '2026-07-25', {
+        ...fields,
+        avgMlScore: undefined,
+        avgSignalScore: undefined,
+      });
+
+      const expr = sentCommand().input.UpdateExpression as string;
+      expect(expr).toContain('REMOVE');
+      expect(expr).toContain('#avgMlScore');
+      expect(expr).not.toContain('#avgMlScore = :avgMlScore');
+      expect(sentCommand().input.ExpressionAttributeValues[':avgMlScore']).toBeUndefined();
+    });
+
+    it('omits the REMOVE clause when every field is present', async () => {
+      await upsertDailySentiment('AAPL', '2026-07-25', fields);
+
+      expect(sentCommand().input.UpdateExpression).not.toContain('REMOVE');
+    });
   });
 
   describe('getDailyAggregate', () => {
