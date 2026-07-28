@@ -7,7 +7,7 @@ Uses pk/sk composite keys matching the single-table design.
 import os
 import time
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -44,7 +44,10 @@ BATCH_BACKOFF_MS = [100, 200, 400]  # milliseconds
 _dynamodb = None
 
 
-def _get_dynamodb():
+# -> Any because boto3 ships no stubs and is scoped out in pyproject.toml's
+# overrides block. Annotating the return keeps disallow_untyped_defs honest
+# without claiming a precision the ecosystem does not offer.
+def _get_dynamodb() -> Any:
     """Get DynamoDB resource (lazy initialization)."""
     global _dynamodb
     if _dynamodb is None:
@@ -54,7 +57,7 @@ def _get_dynamodb():
     return _dynamodb
 
 
-def _get_table():
+def _get_table() -> Any:
     """Get DynamoDB table resource (lazy initialization)."""
     return _get_dynamodb().Table(TABLE_NAME)
 
@@ -103,7 +106,8 @@ def get_stock(ticker: str, date: str) -> dict[str, Any] | None:
     try:
         table = _get_table()
         response = table.get_item(Key={"pk": f"STOCK#{ticker.upper()}", "sk": f"DATE#{date}"})
-        return response.get("Item")
+        # boto3 is unstubbed, so get_item's response is Any.
+        return cast(dict[str, Any] | None, response.get("Item"))
     except Exception as e:
         logger.error(f"[StocksCache] Error getting stock: {e}", exc_info=True)
         raise

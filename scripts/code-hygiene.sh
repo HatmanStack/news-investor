@@ -60,19 +60,39 @@ echo ""
 # [2/6] Python Dead Code (vulture)
 # ============================================================================
 echo -e "${CYAN}[2/6] Python dead code analysis (vulture)...${NC}"
-VULTURE_OUTPUT=$(python3 -m vulture \
-    backend/python/ \
-    backend/services/ml/ \
-    backend/vulture_whitelist.py \
-    --exclude "backend/python_tests/,__pycache__,.aws-sam" \
-    --min-confidence 80 2>&1 || true)
 
-if [ -n "$VULTURE_OUTPUT" ]; then
-    echo -e "${YELLOW}  Found dead Python code:${NC}"
-    echo "$VULTURE_OUTPUT" | head -15
-    FAILED=1
+# Keep stderr out of the output variable and keep the exit status. Folding the
+# two together (2>&1 with || true) made "No module named vulture" indistinguishable
+# from a finding, so a machine without the tool reported dead code that isn't there.
+# vulture's exit codes (vulture/utils.py ExitCode): 0 NoDeadCode,
+# 1 InvalidInput, 2 InvalidCmdlineArguments, 3 DeadCode. Only 3 is a finding.
+VULTURE_OUTPUT=""
+if ! python3 -m vulture --version >/dev/null 2>&1; then
+    VULTURE_OUTPUT="(vulture not installed - skipped)"
+    echo -e "${YELLOW}  vulture not installed; skipping (pip install -r backend/python/requirements-dev.txt)${NC}"
 else
-    echo -e "${GREEN}  ✓ No dead Python code${NC}"
+    VULTURE_STATUS=0
+    VULTURE_OUTPUT=$(python3 -m vulture \
+        backend/python/ \
+        backend/services/ml/ \
+        backend/vulture_whitelist.py \
+        --exclude "backend/python_tests/,__pycache__,.aws-sam,.venv" \
+        --min-confidence 80) || VULTURE_STATUS=$?
+
+    case "$VULTURE_STATUS" in
+        0)
+            echo -e "${GREEN}  ✓ No dead Python code${NC}"
+            ;;
+        3)
+            echo -e "${YELLOW}  Found dead Python code:${NC}"
+            echo "$VULTURE_OUTPUT" | head -15
+            FAILED=1
+            ;;
+        *)
+            echo -e "${RED}  ✗ vulture could not run (exit $VULTURE_STATUS)${NC}"
+            FAILED=1
+            ;;
+    esac
 fi
 echo ""
 
@@ -175,10 +195,18 @@ if $REPORT_MODE; then
     REPORT_FILE="$REPO_ROOT/AUDIT-REPORT.md"
     echo -e "${CYAN}Generating report: $REPORT_FILE${NC}"
 
-    cat > "$REPORT_FILE" << 'REPORT_HEADER'
-# Code Hygiene Audit Report
+    # The delimiter below stays quoted so nothing in the table skeleton expands.
+    # That is also why the timestamp is computed here and written separately:
+    # inside a quoted heredoc, $(date -Iseconds) was emitted literally and every
+    # generated report read "Generated: $(date -Iseconds)".
+    GENERATED_AT=$(date -Iseconds)
+    {
+        echo "# Code Hygiene Audit Report"
+        echo ""
+        echo "Generated: $GENERATED_AT"
+    } > "$REPORT_FILE"
 
-Generated: $(date -Iseconds)
+    cat >> "$REPORT_FILE" << 'REPORT_HEADER'
 
 ## Summary
 
@@ -186,8 +214,12 @@ Generated: $(date -Iseconds)
 |----------|-------|--------|
 REPORT_HEADER
 
-    echo "| Unused Dependencies | $(echo "$KNIP_OUTPUT" | grep -c "package.json" || echo 0) | ⚠️ |" >> "$REPORT_FILE"
-    echo "| Unused Exports | $(echo "$KNIP_OUTPUT" | grep -cE "backend/src|frontend/src" || echo 0) | ⚠️ |" >> "$REPORT_FILE"
+    # `grep -c` always prints a count, and exits 1 when that count is zero. The
+    # `|| echo 0` fallback therefore fired *on top of* grep's own "0", emitting
+    # "0\n0" and breaking the table row across two lines. `|| true` keeps the
+    # non-zero exit from tripping set -e without adding a second number.
+    echo "| Unused Dependencies | $(echo "$KNIP_OUTPUT" | grep -c "package.json" || true) | ⚠️ |" >> "$REPORT_FILE"
+    echo "| Unused Exports | $(echo "$KNIP_OUTPUT" | grep -cE "backend/src|frontend/src" || true) | ⚠️ |" >> "$REPORT_FILE"
     echo "| Console Statements | $TS_CONSOLE_COUNT | $([ "$TS_CONSOLE_COUNT" -gt 100 ] && echo "⚠️" || echo "✅") |" >> "$REPORT_FILE"
     echo "| Python Print | $PY_PRINT_COUNT | $([ "$PY_PRINT_COUNT" -gt 20 ] && echo "⚠️" || echo "✅") |" >> "$REPORT_FILE"
     echo "| Unused Imports | $TOTAL_UNUSED | $([ "$TOTAL_UNUSED" -gt 0 ] && echo "⚠️" || echo "✅") |" >> "$REPORT_FILE"

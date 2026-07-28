@@ -19,7 +19,10 @@ TTL_SECONDS = 24 * 60 * 60  # 24 hours
 _dynamodb = None
 
 
-def _get_dynamodb():
+# -> Any because boto3 ships no stubs and is scoped out in pyproject.toml's
+# overrides block. Annotating the return keeps disallow_untyped_defs honest
+# without claiming a precision the ecosystem does not offer.
+def _get_dynamodb() -> Any:
     """Get DynamoDB resource (lazy initialization)."""
     global _dynamodb
     if _dynamodb is None:
@@ -31,7 +34,7 @@ def _get_dynamodb():
     return _dynamodb
 
 
-def _get_table():
+def _get_table() -> Any:
     """Get DynamoDB table resource."""
     table_name = os.environ.get("DYNAMODB_TABLE_NAME")
     if not table_name:

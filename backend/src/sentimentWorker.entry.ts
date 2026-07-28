@@ -12,12 +12,13 @@ import { processSentimentForTicker } from './services/sentimentProcessing.servic
 import * as SentimentJobsRepository from './repositories/sentimentJobs.repository.js';
 import * as DailySentimentAggregateRepository from './repositories/dailySentimentAggregate.repository.js';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util.js';
+import { MAX_TICKER_LENGTH } from './utils/validation.util.js';
 import { annotateEarningsProximity } from './services/earningsProximity.service.js';
 import { recomputeTrending } from './services/trending.service.js';
 
 const sqsMessageSchema = z.object({
   jobId: z.string().min(1),
-  ticker: z.string().min(1).max(10),
+  ticker: z.string().min(1).max(MAX_TICKER_LENGTH),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -82,7 +83,13 @@ async function processRecord(record: SQSRecord): Promise<void> {
       });
     }
 
-    // Recompute trending data after successful sentiment processing
+    // Recompute trending data after successful sentiment processing.
+    //
+    // This edition has no scheduled ingestion job, so the SQS worker is the
+    // only producer of DAILY aggregates and therefore the only place trending
+    // can be refreshed from. Message volume here is on-demand — one job per
+    // ticker per day at most — rather than a nightly walk of the whole S&P
+    // universe, so a recompute per message is bounded by user traffic.
     try {
       await recomputeTrending();
     } catch (trendingError) {

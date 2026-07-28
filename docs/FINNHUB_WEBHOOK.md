@@ -3,6 +3,11 @@
 How `POST /webhooks/finnhub` works, what we believe Finnhub sends, and how to
 confirm it once live deliveries start.
 
+**Pro edition only.** `finnhubWebhook.handler.ts` is in `.sync/config.json`'s
+`exclude_paths` and the community `template.yaml` declares no
+`POST /webhooks/finnhub` route, so nothing described here exists in the community
+edition.
+
 **Status: the payload schema below is an INFERENCE, not a verified contract.**
 No live delivery has been observed. Everything in "Expected payload" is derived
 from adjacent evidence, documented below so it can be checked rather than

@@ -137,7 +137,8 @@ export const PredictionSummaryCard: React.FC<PredictionSummaryCardProps> = ({
               variant="labelSmall"
               style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}
             >
-              Predictions require at least 29 days of sentiment and price data
+              Predictions need at least 29 days of price and sentiment history, and are withheld
+              when the model cannot beat chance on that history
             </Text>
           </View>
         )}

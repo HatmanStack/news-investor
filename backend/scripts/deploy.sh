@@ -1,7 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Resolve the script's own directory before the cd below, so sourcing works
+# whether this is invoked as ./scripts/deploy.sh, ./backend/scripts/deploy.sh,
+# or by absolute path.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+cd "$SCRIPT_DIR/.."
+
+# shellcheck source=backend/scripts/stack-defaults.sh
+. "$SCRIPT_DIR/stack-defaults.sh"
 
 ENV_DEPLOY_FILE=".env.deploy"
 ML_STACK_NAME_SUFFIX="-ml"
@@ -107,8 +115,8 @@ resolve() {
     printf -v "$var" '%s' "$current"
 }
 
-resolve AWS_REGION           "AWS Region"        true  "us-west-2"
-resolve STACK_NAME           "Stack Name"        true  "news-investor-prod"
+resolve AWS_REGION           "AWS Region"        true  "$DEFAULT_AWS_REGION"
+resolve STACK_NAME           "Stack Name"        true  "$DEFAULT_STACK_NAME"
 resolve FINNHUB_API_KEY      "Finnhub API Key"   true
 resolve ALLOWED_ORIGINS      "Allowed Origins"   true  "*"
 
@@ -116,7 +124,6 @@ resolve ALLOWED_ORIGINS      "Allowed Origins"   true  "*"
 resolve FINNHUB_WEBHOOK_SECRET  "Finnhub Webhook Secret"   false
 resolve ALPHA_VANTAGE_API_KEY   "Alpha Vantage API Key"    false
 resolve SES_FROM_EMAIL          "SES From Email"           false
-resolve COGNITO_CALLBACK_URL    "Cognito Callback URL"     false
 resolve REDDIT_CLIENT_ID        "Reddit Client ID"         false
 resolve REDDIT_CLIENT_SECRET    "Reddit Client Secret"     false
 resolve STRIPE_SECRET_KEY       "Stripe Secret Key"        false
@@ -260,10 +267,10 @@ echo "=== Step 4: Deploy main stack ==="
 # `SesFromEmail=""` is accepted and resolves to the empty string. The long form
 # does not error on an empty value — it drops the parameter entirely, so
 # CloudFormation falls back to the template default. That is silent and wrong
-# for the three parameters whose defaults are not empty: SesFromEmail
-# ('reports@hatstack.fun'), CognitoCallbackUrl and PublicWebUrl (both
-# 'http://localhost:8081'). Deploying with those blank in .env.deploy shipped
-# the defaults instead of blank.
+# for the parameters whose defaults are not empty: SesFromEmail
+# ('reports@hatstack.fun') and PublicWebUrl ('http://localhost:8081').
+# Deploying with those blank in .env.deploy shipped the defaults instead of
+# blank.
 #
 # The shorthand also carries comma-containing values intact, which the long
 # form's own docs warn against. That matters now that ALLOWED_ORIGINS can
@@ -288,7 +295,6 @@ add_param FinnhubWebhookSecret "$FINNHUB_WEBHOOK_SECRET"
 add_param AlphaVantageApiKey   "$ALPHA_VANTAGE_API_KEY"
 add_param AllowedOrigins       "$ALLOWED_ORIGINS"
 add_param DistilFinBERTApiUrl  "$ML_API_URL"
-add_param CognitoCallbackUrl   "$COGNITO_CALLBACK_URL"
 add_param SesFromEmail         "$SES_FROM_EMAIL"
 add_param RedditClientId       "$REDDIT_CLIENT_ID"
 add_param RedditClientSecret   "$REDDIT_CLIENT_SECRET"
@@ -342,13 +348,50 @@ upsert_env DEPLOYED_API_URL "$API_URL"
 # ---------------------------------------------------------------------------
 # Step 5: frontend env + optional admin
 # ---------------------------------------------------------------------------
-FRONTEND_ENV="../frontend/.env"
-if [ -f "$FRONTEND_ENV" ] && grep -q "^EXPO_PUBLIC_BACKEND_URL=" "$FRONTEND_ENV"; then
-    sed "s|^EXPO_PUBLIC_BACKEND_URL=.*|EXPO_PUBLIC_BACKEND_URL=$API_URL|" \
-        "$FRONTEND_ENV" > "$FRONTEND_ENV.tmp" && mv "$FRONTEND_ENV.tmp" "$FRONTEND_ENV"
+FRONTEND_ENV="$(frontend_dir)/.env"
+
+# Replace one key in place, preserving every other line. Same contract as
+# upsert_env above: never rewrite the file from scratch, because it also holds
+# hand-set values like EXPO_PUBLIC_LOG_LEVEL that no deploy owns.
+upsert_frontend_env() {
+    local key="$1" value="$2"
+    [ -f "$FRONTEND_ENV" ] || touch "$FRONTEND_ENV"
+    if grep -qE "^${key}=" "$FRONTEND_ENV"; then
+        awk -v k="$key" -v v="$value" \
+            '{ if (index($0, k "=") == 1) print k "=" v; else print }' \
+            "$FRONTEND_ENV" > "$FRONTEND_ENV.tmp" \
+            && mv "$FRONTEND_ENV.tmp" "$FRONTEND_ENV"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$FRONTEND_ENV"
+    fi
+}
+
+# Read a stack output, or the empty string if the stack does not export it.
+stack_output() {
+    aws cloudformation describe-stacks \
+        --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+        --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" \
+        --output text 2>/dev/null | sed 's/^None$//'
+}
+
+upsert_frontend_env EXPO_PUBLIC_BACKEND_URL "$API_URL"
+
+# CLAUDE.md presents the Cognito variables as part of the block this deploy
+# auto-updates, and until now neither script wrote them. They are optional by
+# design -- the app runs auth-optional with them empty, and the community
+# edition's template declares no Cognito resources at all -- so an absent
+# output is skipped rather than treated as a failure. Only the API URL is
+# required, and that check is above.
+USER_POOL_ID=$(stack_output CognitoUserPoolId)
+USER_POOL_CLIENT_ID=$(stack_output CognitoUserPoolClientId)
+if [ -n "$USER_POOL_ID" ] && [ -n "$USER_POOL_CLIENT_ID" ]; then
+    upsert_frontend_env EXPO_PUBLIC_COGNITO_USER_POOL_ID "$USER_POOL_ID"
+    upsert_frontend_env EXPO_PUBLIC_COGNITO_CLIENT_ID "$USER_POOL_CLIENT_ID"
+    echo "  Cognito:         $USER_POOL_ID"
 else
-    echo "EXPO_PUBLIC_BACKEND_URL=$API_URL" >> "$FRONTEND_ENV"
+    echo "  Cognito:         no user-pool outputs on this stack — sign-in stays disabled"
 fi
+
 echo "Updated $FRONTEND_ENV"
 
 if [ "$DEPLOY_ADMIN" = true ]; then

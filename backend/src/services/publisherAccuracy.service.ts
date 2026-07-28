@@ -10,8 +10,13 @@
  * PUBLISHER_STATS# entities via atomic increments.
  */
 
-import { queryByEntityType, queryItems } from '../utils/dynamodb.util.js';
-import { makeHistoricalPK, makeArticlePK, makeDateSK } from '../types/dynamodb.types.js';
+import { queryByEntityTypePaged, queryItems } from '../utils/dynamodb.util.js';
+import {
+  makeHistoricalPK,
+  makeArticlePK,
+  makeDateSK,
+  SortKeyPrefix,
+} from '../types/dynamodb.types.js';
 import type {
   ArticleAnalysisItem,
   DailySentimentItem,
@@ -21,6 +26,7 @@ import {
   getPublisherStats,
   incrementPublisherStats,
 } from '../repositories/publisherStats.repository.js';
+import { mapWithConcurrency } from '../utils/concurrency.util.js';
 import { logger } from '../utils/logger.util.js';
 
 /** Number of trading days after article publication to measure price movement */
@@ -28,6 +34,14 @@ const T_PLUS_DAYS = 3;
 
 /** Number of calendar days to look back for articles (covers a full week including weekends) */
 const LOOKBACK_DAYS = 7;
+
+/**
+ * Concurrent DynamoDB reads when fanning out per ticker.
+ *
+ * Ten, consistent with the rest of the pipeline (MAX_CONCURRENT_PIPELINE_TASKS),
+ * using the repo's inline semaphore rather than a new dependency.
+ */
+const TICKER_FANOUT_CONCURRENCY = 10;
 
 /**
  * Determine the sentiment direction of an article.
@@ -94,35 +108,60 @@ export async function accumulatePublisherStats(): Promise<void> {
 
   // Discover tickers with recent activity via DAILY# entities instead of
   // scanning ALL ARTICLE# entities through the GSI.
-  const recentDailyEntities = await queryByEntityType<DailySentimentItem>('DAILY', {
-    filterExpression: '#d BETWEEN :start AND :end',
-    expressionAttributeNames: { '#d': 'date' },
-    expressionAttributeValues: { ':start': lookbackDateStr, ':end': todayStr },
-  });
+  //
+  // Streamed a page at a time: only the distinct ticker set is retained, so
+  // memory is O(page + distinct tickers) rather than O(every DAILY record ever
+  // written) — and DAILY records carry no TTL by design, they are the ML
+  // training record. The FilterExpression still runs after the read, so this
+  // does not reduce RCU; narrowing that needs the GSI re-key deferred in
+  // Phase 0 ADR-006 of the 2026-07-26 audit.
+  const activeTickerSet = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await queryByEntityTypePaged<DailySentimentItem>('DAILY', {
+      cursor,
+      filterExpression: '#d BETWEEN :start AND :end',
+      expressionAttributeNames: { '#d': 'date' },
+      expressionAttributeValues: { ':start': lookbackDateStr, ':end': todayStr },
+    });
+    for (const item of page.items) {
+      activeTickerSet.add(item.ticker);
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
 
-  const activeTickers = [...new Set(recentDailyEntities.map((d) => d.ticker))];
+  const activeTickers = [...activeTickerSet];
 
   if (activeTickers.length === 0) {
     logger.info('[PublisherAccuracy] No tickers with recent activity');
     return;
   }
 
-  // Query ARTICLE# per-ticker with date-bounded SK ranges
-  const articles: ArticleAnalysisItem[] = [];
-  for (const ticker of activeTickers) {
-    const tickerArticles = await queryItems<ArticleAnalysisItem>(makeArticlePK(ticker), {
-      skBetween: {
-        start: `HASH#`,
-        end: `HASH#~`, // '~' sorts after all alphanumeric characters
-      },
-    });
-    // Filter to articles within the lookback window and before cutoff
-    for (const article of tickerArticles) {
-      if (article.date >= lookbackDateStr && article.date <= cutoffDateStr) {
-        articles.push(article);
-      }
-    }
-  }
+  // Fetch each active ticker's ARTICLE# records, bounded on both axes.
+  //
+  // Date: the SK is HASH#{hash}#DATE#{date}, so the date is a *suffix* and no
+  // SK range can narrow by it — `HASH#` -> `HASH#~` was every article ever
+  // recorded for the ticker, filtered to the window client-side afterwards, and
+  // ArticleAnalysisItem has no ttl so that set only grows. A server-side
+  // FilterExpression on the `date` attribute is therefore the only bound
+  // available without re-keying the entity. It does not reduce RCU — DynamoDB
+  // filters after the read — but it caps transfer and heap at the window's
+  // articles instead of the ticker's entire history. dataFetcher.ts:110 already
+  // uses this exact pattern for the same reason.
+  //
+  // Fan-out: ~500 sequential round trips became a bounded parallel map.
+  const perTicker = await mapWithConcurrency(
+    activeTickers,
+    (ticker) =>
+      queryItems<ArticleAnalysisItem>(makeArticlePK(ticker), {
+        skPrefix: `${SortKeyPrefix.HASH}#`,
+        filterExpression: '#d BETWEEN :start AND :end',
+        filterAttributeNames: { '#d': 'date' },
+        filterAttributeValues: { ':start': lookbackDateStr, ':end': cutoffDateStr },
+      }),
+    TICKER_FANOUT_CONCURRENCY,
+  );
+  const articles: ArticleAnalysisItem[] = perTicker.flat();
 
   if (articles.length === 0) {
     logger.info('[PublisherAccuracy] No articles to process');
@@ -146,6 +185,30 @@ export async function accumulatePublisherStats(): Promise<void> {
     publisherArticles.set(publisher, existing);
   }
 
+  // Fetch each ticker's price window once for the whole run.
+  //
+  // This map used to be rebuilt inside the publisher loop, so a ticker covered
+  // by P publishers cost P identical HIST# queries — the same redundant-read
+  // shape as the trending recompute, multiplied by publisher count rather than
+  // message count. The query itself was already date-bounded (HIST# sort keys
+  // are DATE#, so the range is a real key condition), so only the repetition
+  // was wasteful.
+  const tickersNeedingPrices = [...new Set(articlesWithPublisher.map((a) => a.ticker))];
+  const priceWindows = await mapWithConcurrency(
+    tickersNeedingPrices,
+    (ticker) =>
+      queryItems<StockHistoricalItem>(makeHistoricalPK(ticker), {
+        skBetween: {
+          start: makeDateSK(lookbackDateStr),
+          end: makeDateSK(todayStr),
+        },
+      }),
+    TICKER_FANOUT_CONCURRENCY,
+  );
+  const priceDataByTicker = new Map<string, StockHistoricalItem[]>(
+    tickersNeedingPrices.map((ticker, i) => [ticker, priceWindows[i]!]),
+  );
+
   // Process each publisher's articles
   let totalProcessed = 0;
   let totalSkipped = 0;
@@ -154,21 +217,6 @@ export async function accumulatePublisherStats(): Promise<void> {
     // Check lastUpdated to skip already-counted articles
     const stats = await getPublisherStats(publisher);
     const lastUpdated = stats?.lastUpdated;
-
-    // Get unique tickers for price lookups
-    const tickers = [...new Set(pubArticles.map((a) => a.ticker))];
-
-    // Fetch price data for all tickers
-    const priceDataByTicker = new Map<string, StockHistoricalItem[]>();
-    for (const ticker of tickers) {
-      const priceData = await queryItems<StockHistoricalItem>(makeHistoricalPK(ticker), {
-        skBetween: {
-          start: makeDateSK(lookbackDateStr),
-          end: makeDateSK(todayStr),
-        },
-      });
-      priceDataByTicker.set(ticker, priceData);
-    }
 
     for (const article of pubArticles) {
       // Skip if already counted

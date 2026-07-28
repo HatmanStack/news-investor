@@ -13,7 +13,13 @@ jest.mock('@/services/api/backendClient', () => ({
 
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      // Mutations keep the five-minute default gcTime unless told otherwise,
+      // and each settled mutation schedules a collection timer that outlives
+      // the test — the "worker process has failed to exit gracefully" warning.
+      mutations: { retry: false, gcTime: Infinity },
+    },
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);

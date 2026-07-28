@@ -33,7 +33,13 @@ const mockCombinedWordFindLatest = CombinedWordRepository.findLatestByTicker as 
 
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      // Mutations keep the five-minute default gcTime unless told otherwise,
+      // and each settled mutation schedules a collection timer that outlives
+      // the test — the "worker process has failed to exit gracefully" warning.
+      mutations: { retry: false, gcTime: Infinity },
+    },
   });
   const Wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);

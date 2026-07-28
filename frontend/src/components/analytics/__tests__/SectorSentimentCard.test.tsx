@@ -8,6 +8,24 @@ jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
 }));
 
+jest.mock('@/features/tier', () => ({
+  ...jest.requireActual('@/features/tier'),
+  // The gate itself is exercised in features/tier/__tests__/tier.test.tsx.
+  // Here it would only stand between the test and the component under test, so
+  // it is opened deliberately rather than by relying on a permissive default.
+  useTier: () => ({
+    tier: 'pro',
+    features: {},
+    quotas: {},
+    usage: {},
+    isFeatureEnabled: () => true,
+    loading: false,
+    error: null,
+    refetch: () => {},
+  }),
+  FeatureGate: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 describe('SectorSentimentCard', () => {
   const wrapper = createTestWrapper();
 

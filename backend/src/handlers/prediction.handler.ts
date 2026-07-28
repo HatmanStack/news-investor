@@ -1,12 +1,8 @@
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { APIGatewayResponse, getCorsHeaders } from '../utils/response.util';
-import { PredictionResponse } from '../types/prediction.types';
+import { PredictionResponse, HorizonPrediction } from '../types/prediction.types';
 import { runPredictionPipeline } from '../services/pipeline';
-import {
-  putDailyAggregate,
-  getDailyAggregate,
-} from '../repositories/dailySentimentAggregate.repository';
-import { DailySentimentData } from '../types/dynamodb.types';
+import { upsertDailyPredictions } from '../repositories/dailySentimentAggregate.repository';
 import { predictionRequestSchema, parseBody, formatZodError } from '../utils/schemas.util';
 import { logger } from '../utils/logger.util.js';
 
@@ -97,23 +93,26 @@ export async function predictionHandler(
     // Run pipeline
     const predictions = await runPredictionPipeline(ticker, days);
 
-    // Helper to extract and format prediction
-    const getPred = (h: number) => {
+    // A horizon the pipeline did not return is ABSENT, not invented.
+    //
+    // This used to substitute { direction: 'down', probability: 0.5 } for any
+    // horizon the model did not produce, and persist it below. The model now
+    // suppresses a horizon whose walk-forward CV accuracy is below the floor,
+    // or that had too few labelled rows to validate at all, so this path is
+    // routine rather than exceptional — and a fabricated direction would be
+    // the server authoring a claim it does not hold.
+    const getPred = (h: number): HorizonPrediction | undefined => {
       const p = predictions.find((item) => item.horizon === h);
-      if (p) {
-        return {
-          direction: p.direction,
-          probability: p.probability,
-        };
-      }
-      return { direction: 'down' as const, probability: 0.5 };
+      return p ? { direction: p.direction, probability: p.probability } : undefined;
     };
 
     const predNextDay = getPred(1);
     const predTwoWeek = getPred(14);
     const predOneMonth = getPred(30);
 
-    // Format response
+    // Format response. Undefined horizons drop out of the JSON entirely
+    // (JSON.stringify omits undefined values), so the client sees an absent
+    // key rather than a null it has to interpret.
     const response: PredictionResponse = {
       ticker,
       predictions: {
@@ -128,28 +127,22 @@ export async function predictionHandler(
     const today = new Date().toISOString().split('T')[0]!;
 
     try {
-      // Read existing aggregate item if it exists
-      const existingItem = await getDailyAggregate(ticker, today);
-
-      // Merge prediction fields into existing item (or create new)
-      const aggregateItem: DailySentimentData = {
-        ticker,
-        date: today,
-        // Preserve existing fields if present, otherwise use defaults
-        eventCounts: existingItem?.eventCounts || {},
-        avgAspectScore: existingItem?.avgAspectScore,
-        avgMlScore: existingItem?.avgMlScore,
-        materialEventCount: existingItem?.materialEventCount,
-        // Update prediction fields with new values
-        nextDayDirection: predNextDay.direction,
-        nextDayProbability: predNextDay.probability,
-        twoWeekDirection: predTwoWeek.direction,
-        twoWeekProbability: predTwoWeek.probability,
-        oneMonthDirection: predOneMonth.direction,
-        oneMonthProbability: predOneMonth.probability,
-      };
-
-      await putDailyAggregate(aggregateItem);
+      // Attribute-level update, NOT a read-merge-write. The aggregate is shared:
+      // the sentiment pipeline writes the article counts and average scores.
+      // Rebuilding the item here from a hand-listed subset erased every field
+      // not on that list, on every prediction request.
+      //
+      // A suppressed horizon REMOVEs its attributes rather than leaving the
+      // previous run's value in place — a forecast the model has withdrawn must
+      // stop being served, not linger.
+      await upsertDailyPredictions(ticker, today, {
+        nextDayDirection: predNextDay?.direction,
+        nextDayProbability: predNextDay?.probability,
+        twoWeekDirection: predTwoWeek?.direction,
+        twoWeekProbability: predTwoWeek?.probability,
+        oneMonthDirection: predOneMonth?.direction,
+        oneMonthProbability: predOneMonth?.probability,
+      });
       logger.info('Saved prediction to DynamoDB', { ticker, date: today });
     } catch (dbError) {
       logger.error('Failed to save prediction to DynamoDB', dbError);

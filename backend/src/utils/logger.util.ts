@@ -2,30 +2,26 @@
  * Structured Logger Utility
  *
  * Provides JSON-formatted logging with correlation ID propagation.
- * Uses AsyncLocalStorage to maintain request context across async operations.
  *
  * Features:
  * - JSON output with timestamp, level, message, correlationId
  * - X-Ray trace ID integration
- * - AsyncLocalStorage for correlation ID propagation
+ * - Correlation ID propagation via the request context in
+ *   requestContext.util.ts, which owns the AsyncLocalStorage store
  */
 
-import { AsyncLocalStorage } from 'async_hooks';
+import { getRequestContext } from './requestContext.util.js';
+
+// Request-scoped state lives in requestContext.util.ts. These are re-exported
+// so entry points keep a single import, and so that mocking this module in a
+// test does not also stub out the CORS origin negotiation in response.util.ts,
+// which reads the same store directly rather than through the logger.
+export { runWithContext, createRequestContext, getCorrelationId } from './requestContext.util.js';
 
 /**
  * Log levels supported by the logger
  */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-/**
- * Request context stored in AsyncLocalStorage
- */
-interface RequestContext {
-  correlationId: string;
-  xrayTraceId?: string;
-  path?: string;
-  method?: string;
-}
 
 /**
  * Structured log entry format
@@ -40,9 +36,6 @@ interface LogEntry {
   method?: string;
   [key: string]: unknown;
 }
-
-// AsyncLocalStorage instance for request context propagation
-const requestContextStorage = new AsyncLocalStorage<RequestContext>();
 
 /**
  * Get current log level from environment
@@ -63,40 +56,6 @@ function shouldLog(level: LogLevel): boolean {
   const levels: LogLevel[] = ['debug', 'info', 'warn', 'error'];
   const configuredLevel = getLogLevel();
   return levels.indexOf(level) >= levels.indexOf(configuredLevel);
-}
-
-/**
- * Get current request context from AsyncLocalStorage
- */
-function getRequestContext(): RequestContext | undefined {
-  return requestContextStorage.getStore();
-}
-
-/**
- * Get correlation ID from current request context
- */
-export function getCorrelationId(): string | undefined {
-  return requestContextStorage.getStore()?.correlationId;
-}
-
-/**
- * Run a function within a request context
- *
- * @param context - Request context (correlationId, traceId, etc.)
- * @param fn - Async function to run within the context
- * @returns Result of the function
- *
- * @example
- * await runWithContext({ correlationId: event.requestContext.requestId }, async () => {
- *   // All logs within this block will include the correlationId
- *   logger.info('Processing request');
- * });
- */
-export function runWithContext<T>(
-  context: RequestContext,
-  fn: () => T | Promise<T>,
-): T | Promise<T> {
-  return requestContextStorage.run(context, fn);
 }
 
 /**
@@ -174,37 +133,3 @@ export const logger = {
     logStructured('error', message, errorData);
   },
 };
-
-/**
- * Extract X-Ray trace ID from Lambda environment
- * @returns X-Ray trace ID or undefined
- */
-function getXRayTraceId(): string | undefined {
-  const traceHeader = process.env._X_AMZN_TRACE_ID;
-  if (!traceHeader) return undefined;
-
-  // Parse "Root=1-xxx;Parent=xxx;Sampled=1" format
-  const rootMatch = traceHeader.match(/Root=([^;]+)/);
-  return rootMatch?.[1];
-}
-
-/**
- * Create request context from API Gateway event
- *
- * @param requestId - API Gateway request ID
- * @param path - Request path
- * @param method - HTTP method
- * @returns RequestContext for use with runWithContext
- */
-export function createRequestContext(
-  requestId: string,
-  path?: string,
-  method?: string,
-): RequestContext {
-  return {
-    correlationId: requestId,
-    xrayTraceId: getXRayTraceId(),
-    path,
-    method,
-  };
-}

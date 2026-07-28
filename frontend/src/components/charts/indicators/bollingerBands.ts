@@ -8,9 +8,9 @@ export interface OHLCData {
   close: number;
 }
 
-export interface OHLCVData extends OHLCData {
-  volume?: number;
-}
+// OHLCVData (OHLCData + an optional `volume`) was exported here and imported by
+// nothing; the volume series is carried separately by the chart components that
+// need it.
 
 export interface BollingerBandsResult {
   time: Time;

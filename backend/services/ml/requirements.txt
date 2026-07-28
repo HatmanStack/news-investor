@@ -1,6 +1,20 @@
-onnxruntime>=1.16.0
-tokenizers>=0.15.0
-boto3>=1.28.0
-fastapi>=0.100.0
-pydantic>=2.0.2
-mangum>=0.17.0
+# Exact pins, matching the style of backend/python/requirements.txt.
+#
+# All six were `>=` -- onnxruntime>=1.16.0 admits a 2.x major -- so every
+# `sam build` of ml-template-onnx.yaml resolved fresh and two builds a week
+# apart could ship different runtimes with no commit between them.
+#
+# Method: there is no .aws-sam build of this template to read versions out of,
+# and every build resolves fresh by construction, so "what is running" is
+# whatever resolves today. Captured with
+# `uv pip compile backend/services/ml/requirements.txt --python-version 3.13`
+# on 2026-07-27 and pinned to exactly that resolution -- no version here is an
+# upgrade over what an unpinned build would have produced the same day.
+#
+# Maintained by Dependabot (pip ecosystem, directory /backend/services/ml).
+onnxruntime==1.28.0
+tokenizers==0.23.1
+boto3==1.43.57
+fastapi==0.140.7
+pydantic==2.13.4
+mangum==0.21.0

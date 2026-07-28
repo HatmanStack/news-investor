@@ -11,11 +11,12 @@
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
-import { errorResponse, setRequestOrigin, type APIGatewayResponse } from './utils/response.util';
+import { errorResponse, type APIGatewayResponse } from './utils/response.util';
 import { logError, getStatusCodeFromError, sanitizeErrorMessage } from './utils/error.util';
 import { logLambdaStartStatus, logRequestMetrics } from './utils/metrics.util';
 import { logger, runWithContext, createRequestContext } from './utils/logger.util';
 import { isColdStart } from './utils/coldStart.util';
+import { MAX_BODY_SIZE, requestBodyByteLength } from './utils/validation.util';
 
 // ── Direct handler imports ──
 import { handleNewsRequest } from './handlers/news.handler';
@@ -30,13 +31,7 @@ import { handleTrendingRequest } from './handlers/trending.handler';
 import { handleFreshnessRequest } from './handlers/freshness.handler';
 import { handleEarningsImpactRequest } from './handlers/earningsImpact.handler';
 import { predictionHandler } from './handlers/prediction.handler';
-import {
-  handleBatchNewsRequest,
-  handleBatchSentimentRequest,
-} from './handlers/batch.handler';
-
-/** Maximum request body size (10KB) */
-const MAX_BODY_SIZE = 10 * 1024;
+import { handleBatchNewsRequest, handleBatchSentimentRequest } from './handlers/batch.handler';
 
 /** Direct Lambda invocation payload (for prediction trigger from sentiment handler) */
 interface DirectInvocationEvent {
@@ -78,7 +73,12 @@ export const ROUTES: RouteDefinition[] = [
   { path: '/batch/sentiment', method: 'POST', handler: handleBatchSentimentRequest },
 
   // ── Prefix routes (parameterized) — must come after exact matches ──
-  { path: '/sentiment/job/', method: 'GET', prefix: true, handler: handleSentimentJobStatusRequest },
+  {
+    path: '/sentiment/job/',
+    method: 'GET',
+    prefix: true,
+    handler: handleSentimentJobStatusRequest,
+  },
 ];
 
 /**
@@ -107,14 +107,6 @@ function isDirectInvocation(event: unknown): event is DirectInvocationEvent {
 export async function handler(
   event: APIGatewayProxyEventV2 | DirectInvocationEvent,
 ): Promise<APIGatewayResponse> {
-  // Capture the requesting origin before any branch can return: the CORS
-  // header must name exactly one origin, so when ALLOWED_ORIGINS lists
-  // several, the response echoes whichever one asked.
-  const requestOrigin =
-    (event as APIGatewayProxyEventV2).headers?.origin ??
-    (event as APIGatewayProxyEventV2).headers?.Origin;
-  setRequestOrigin(requestOrigin);
-
   // Handle direct Lambda invocation (e.g., prediction trigger from sentiment handler)
   if (isDirectInvocation(event)) {
     logger.info('Direct invocation detected, routing to prediction handler', {
@@ -132,12 +124,21 @@ export async function handler(
   const coldStart = isColdStart();
   logLambdaStartStatus(coldStart, path);
 
-  // Run handler within request context for correlation ID propagation
-  return runWithContext(createRequestContext(requestId, path, method), async () => {
+  // Run handler within request context for correlation ID propagation, and for
+  // the requesting origin: the CORS header must name exactly one origin, so
+  // when ALLOWED_ORIGINS lists several, response.util.ts reads the origin back
+  // out of this context and echoes whichever one asked. Every path that
+  // constructs a response is inside this scope; the direct-invocation branch
+  // above it carries no HTTP origin to negotiate.
+  const requestOrigin = event.headers?.origin ?? event.headers?.Origin;
+  return runWithContext(createRequestContext(requestId, path, method, requestOrigin), async () => {
     logger.info('Incoming request', { isColdStart: coldStart });
 
-    // Request body size limit check
-    if (event.body && event.body.length > MAX_BODY_SIZE) {
+    // Request body size limit check, measured in decoded bytes: `.length` on
+    // the raw string counts UTF-16 code units, and for an isBase64Encoded
+    // payload the raw string is ~4/3 the decoded size, so the effective limit
+    // was ~7.5KB against a documented 10KB.
+    if (event.body && requestBodyByteLength(event.body, event.isBase64Encoded) > MAX_BODY_SIZE) {
       const response = errorResponse('Request body too large', 413);
       logRequestMetrics(path, 413, Date.now() - startTime);
       return response;

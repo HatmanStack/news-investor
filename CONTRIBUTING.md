@@ -14,15 +14,48 @@
 make dev
 ```
 
-This installs dependencies and starts MiniStack for local DynamoDB.
+`make dev` runs `make setup` (which runs `make setup-python`, then
+`npm install --legacy-peer-deps`) and starts MiniStack for local DynamoDB.
+
+`make setup-python` installs the Python toolchain into an already-active
+virtualenv, or creates `./.venv` if none is active. Without it, every Python
+command below fails on a fresh clone with `No module named pytest`.
 
 ### Running Tests
 
 ```bash
-npm run check    # Full CI check (lint + all tests)
-npm test         # Frontend tests only
+npm run check          # The local gate — see below for what it does and does not cover
+npm test               # Frontend tests only
 npm run test:backend   # Backend TS tests only
-PYTHONPATH=backend/python pytest backend/python_tests/   # Python tests
+npm run test:python    # Python tests (picks the right interpreter for you)
+```
+
+To run `pytest` directly, activate the virtualenv first:
+
+```bash
+source .venv/bin/activate
+PYTHONPATH=backend/python pytest backend/python_tests/
+```
+
+### What `npm run check` covers
+
+In order, from the `check` script in the root `package.json`:
+
+`format:check` → `lint` (frontend ESLint + tsc) → `lint:backend` → `lint:ml` →
+`lint:docs` → `lint:python-types` → `knip` → frontend tests with coverage →
+backend tests with coverage → `test:python` → `verify:bundles` →
+`check-console-calls.sh`.
+
+The script also calls `check:admin` and `check:sync`; both guard on a directory
+that does not exist in this edition, so both print a skip message and pass.
+
+**Four things it deliberately does not run**, because each fails for
+environmental rather than code reasons: E2E (needs Docker), the lychee link
+check (external binary and network), shellcheck (external binary), and vulture
+(a Python tool `npm run hygiene` skips when absent). **CI runs all four.**
+
+```bash
+make check-full   # npm run check plus those four
 ```
 
 ## Branch Strategy
@@ -33,7 +66,9 @@ PYTHONPATH=backend/python pytest backend/python_tests/   # Python tests
 
 ## PR Process
 
-1. Run `npm run check` before opening a PR (CI runs the same checks)
+1. Run `npm run check` before opening a PR, and `make check-full` if you have
+   Docker — see "What `npm run check` covers" above for the four things CI runs
+   that `check` does not
 2. Write descriptive PR titles using conventional commit format
 3. Include test coverage for new code
 
@@ -47,7 +82,10 @@ Follow conventional commits:
 - `test(scope):` -- adding or updating tests
 - `chore(scope):` -- maintenance tasks
 
-Enforced by commitlint via Husky pre-commit hook.
+Enforced by commitlint on the Husky **`commit-msg`** hook (`.husky/commit-msg`).
+The `pre-commit` hook runs lint-staged instead — Prettier on TS/JSON/Markdown and
+ruff on Python. If a commit is rejected for its message, `commit-msg` is the file
+to look at; if it is rejected for formatting, `pre-commit` is.
 
 ## Finding Tests
 
@@ -67,11 +105,17 @@ Run a single test file:
 npm test -- frontend/src/hooks/__tests__/useChartData.test.ts
 
 # Backend
-cd backend && npm test -- --testPathPattern=sentiment
+# Backend
+cd backend && npm test -- --testPathPatterns=sentiment
 
 # Python
+source .venv/bin/activate
 PYTHONPATH=backend/python pytest backend/python_tests/ -k "test_name"
 ```
+
+Note the **plural** `--testPathPatterns`. Jest 30 renamed the flag and this repo
+is on 30.3.0; the jest-29 singular spelling exits 1. The `source` line is not
+optional either — a bare `pytest` picks whatever is on `PATH`.
 
 ## Code Quality
 

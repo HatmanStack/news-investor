@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from constants.etf_holdings import ETF_TOP_HOLDINGS
 from utils.logger import get_structured_logger
@@ -61,7 +61,11 @@ def _fetch_from_yfinance(etf_ticker: str) -> list[str]:
     try:
         holdings_df = ticker.funds_data.top_holdings
         if holdings_df is not None and not holdings_df.empty:
-            return holdings_df.index.tolist()[:10]
+            # yfinance and pandas are both unstubbed (see the per-module
+            # overrides in pyproject.toml), so every value crossing this
+            # boundary is Any. Cast at the boundary rather than declaring the
+            # function -> Any, which would erase the contract for its callers.
+            return cast(list[str], holdings_df.index.tolist()[:10])
     except Exception as e:
         logger.warning(f"[ETFHoldings] yfinance API error for {etf_ticker}: {e}")
     return []
@@ -80,7 +84,9 @@ def _get_cached_holdings(etf_ticker: str, table: DynamoTable) -> list[str] | Non
             return None
 
         holdings_json = item.get("holdings", "[]")
-        return json.loads(holdings_json)
+        # json.loads returns Any. This key is written by _cache_holdings below,
+        # which only ever json.dumps a list[str].
+        return cast(list[str], json.loads(holdings_json))
     except Exception as e:
         logger.warning(f"Cache read error for ETF#{etf_ticker}: {e}")
         return None

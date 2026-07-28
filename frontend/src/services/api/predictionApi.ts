@@ -24,12 +24,21 @@ export interface HorizonPrediction {
   probability: number;
 }
 
+/**
+ * Every horizon is optional.
+ *
+ * The backend omits a horizon whose walk-forward CV accuracy is below its
+ * floor, or that had too few labelled rows to validate at all. It previously
+ * substituted `{ direction: 'down', probability: 0.5 }`, which rendered as a
+ * real bearish forecast and was written into the published track record.
+ * An absent horizon renders as an em-dash.
+ */
 export interface PredictionResponse {
   ticker: string;
   predictions: {
-    nextDay: HorizonPrediction;
-    twoWeek: HorizonPrediction;
-    oneMonth: HorizonPrediction;
+    nextDay?: HorizonPrediction;
+    twoWeek?: HorizonPrediction;
+    oneMonth?: HorizonPrediction;
   };
 }
 

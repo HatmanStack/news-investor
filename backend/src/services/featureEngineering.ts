@@ -1,4 +1,9 @@
-import { StockPrice, ArticleSentiment, DailyFeatures } from '../types/prediction.types';
+import {
+  StockPrice,
+  ArticleSentiment,
+  DailyFeatures,
+  MODEL_CONFIG,
+} from '../types/prediction.types';
 
 /**
  * Computes the weighted average of a list of values using materiality scores as weights.
@@ -63,24 +68,30 @@ function compute_event_one_hot_weighted(articles: ArticleSentiment[]): {
 }
 
 /**
- * Generates a classification label based on same-day price movement.
- * @param previousClose Previous day's closing price.
- * @param currentClose Current day's closing price.
+ * Generates a classification label from a FORWARD price movement.
+ *
+ * The direction of time matters and is the whole point: `baseClose` is the
+ * close on the day being labelled, `futureClose` is the close h days later.
+ * Labelling a day by its own same-day return leaks the target, because the
+ * day's prices are inputs to the model.
+ *
+ * @param baseClose Closing price on the day being labelled.
+ * @param futureClose Closing price h trading days later.
  * @param threshold Percentage threshold (e.g., 0.01 for 1%).
  * @returns 1 (up), 0 (down), or null (if within threshold/noise).
  */
 function generate_label(
-  previousClose: number,
-  currentClose: number,
-  threshold: number = 0.01,
+  baseClose: number,
+  futureClose: number,
+  threshold: number = MODEL_CONFIG.labelThreshold,
 ): number | null {
-  if (previousClose <= 0) {
+  if (baseClose <= 0) {
     // Handle invalid price data gracefully, or maybe log warning.
     // Returning null excludes it from training which is safe.
     return null;
   }
 
-  const priceChange = (currentClose - previousClose) / previousClose;
+  const priceChange = (futureClose - baseClose) / baseClose;
 
   if (priceChange > threshold) {
     return 1;
@@ -92,12 +103,12 @@ function generate_label(
 }
 
 /**
- * Aggregates per-article data into daily features using materiality weighting.
- * Also computes labels based on price movement.
+ * Aggregates per-article data into daily features using materiality weighting,
+ * and labels each day by its forward return at every configured horizon.
  * @param priceData List of StockPrice objects.
  * @param sentimentData List of ArticleSentiment objects.
  * @param ticker Stock ticker symbol.
- * @returns List of DailyFeatures objects.
+ * @returns List of DailyFeatures objects, ascending by date.
  */
 export function aggregate_daily_features(
   priceData: StockPrice[],
@@ -113,11 +124,18 @@ export function aggregate_daily_features(
     articlesByDate[article.date]!.push(article);
   }
 
+  // Ascending date order is load-bearing in two places below: the forward
+  // label reads priceData[i + h], and every lookback feature reads
+  // priceData[i - k]. fetchPriceData already sorts, but nothing in the type
+  // says so, and an unsorted series would invert the direction of time
+  // silently rather than raising.
+  const sortedPrices = [...priceData].sort((a, b) => a.date.localeCompare(b.date));
+
   // 2. Map daily features
   const dailyFeatures: DailyFeatures[] = [];
 
-  for (let i = 0; i < priceData.length; i++) {
-    const price = priceData[i];
+  for (let i = 0; i < sortedPrices.length; i++) {
+    const price = sortedPrices[i];
     if (!price) continue;
     const date = price.date;
     const articles = articlesByDate[date] || [];
@@ -156,19 +174,51 @@ export function aggregate_daily_features(
     // Compute weighted event features
     const eventFeatures = compute_event_one_hot_weighted(articles);
 
-    // Generate Label
-    let label: number | null = null;
-    // We need previous day's close.
-    // Assumption: priceData is sorted by date ascending (ensured by fetchPriceData).
-    if (i > 0) {
-      const previousPrice = priceData[i - 1];
-      if (previousPrice) {
-        label = generate_label(previousPrice.close, price.close);
-      }
+    // Scale-free price and volume features (ADR-004).
+    //
+    // Every one of these reads sortedPrices at an index <= i. The invariant is
+    // the point: no feature may reference a price the model would not have at
+    // prediction time. mlSemantics.test.ts proves it structurally by rebuilding
+    // day i's vector from a series truncated at i.
+    const lookback = MODEL_CONFIG.featureLookbackDays;
+    const hasLookback = i >= lookback;
+    const prevClose = i > 0 ? sortedPrices[i - 1]!.close : 0;
+    const backClose = hasLookback ? sortedPrices[i - lookback]!.close : 0;
+
+    let trailingVolumeMean = 0;
+    if (hasLookback) {
+      let sum = 0;
+      for (let k = i - lookback; k < i; k++) sum += sortedPrices[k]!.volume;
+      trailingVolumeMean = sum / lookback;
     }
 
-    // Label is nullable: null for current day (no future data) and noise-threshold days.
-    // Filtering happens in prepare_training_data (preprocessing.ts), not here.
+    const intradayRange = price.close > 0 ? (price.high - price.low) / price.close : 0;
+
+    // Days without the full window emit 0 for every lookback-dependent feature
+    // and set lookback_available = 0. Emitting a partial-window value instead
+    // would make the feature's distribution a function of i, which is the
+    // non-stationarity ADR-004 removes; emitting a bare 0 would be
+    // indistinguishable from a genuine zero return.
+    const overnightGap = hasLookback && prevClose > 0 ? (price.open - prevClose) / prevClose : 0;
+    const return1d = hasLookback && prevClose > 0 ? (price.close - prevClose) / prevClose : 0;
+    const return5d = hasLookback && backClose > 0 ? (price.close - backClose) / backClose : 0;
+    const volumeRatio = trailingVolumeMean > 0 ? price.volume / trailingVolumeMean : 0;
+
+    // Generate one label per horizon by looking FORWARD.
+    //
+    // priceData is sorted ascending by date — fetchPriceData sorts on
+    // `a.date.localeCompare(b.date)` before returning, and `sortedPrices`
+    // below re-establishes it here so a caller passing an unsorted series
+    // cannot silently invert the direction of time.
+    const labels: Record<number, number | null> = {};
+    for (const h of MODEL_CONFIG.horizons) {
+      const future = sortedPrices[i + h];
+      labels[h] = future ? generate_label(price.close, future.close) : null;
+    }
+
+    // A label is null when the move fell inside the noise band OR when the
+    // outcome is not known yet — the last h days of the series for horizon h.
+    // Filtering happens per horizon in prepare_training_data (preprocessing.ts).
 
     dailyFeatures.push({
       date: price.date,
@@ -179,6 +229,13 @@ export function aggregate_daily_features(
       close: price.close,
       volume: price.volume,
 
+      intraday_range: intradayRange,
+      overnight_gap: overnightGap,
+      return_1d: return1d,
+      return_5d: return5d,
+      volume_ratio: volumeRatio,
+      lookback_available: hasLookback ? 1 : 0,
+
       ...eventFeatures,
 
       aspect_score: aspectScore,
@@ -186,7 +243,7 @@ export function aggregate_daily_features(
       aspect_available: aspectAvailable,
       ml_available: mlAvailable,
 
-      label: label,
+      labels,
     });
   }
 

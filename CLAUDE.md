@@ -9,7 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Root monorepo commands
-npm install --legacy-peer-deps  # Install all dependencies
+make setup                       # Python toolchain + npm install --legacy-peer-deps
+npm install --legacy-peer-deps  # Install JS dependencies only
 npm test                         # Run frontend tests
 npm run test:backend             # Run backend tests
 npm run lint                     # Lint frontend (expo lint + tsc)
@@ -19,8 +20,9 @@ npm run lint:python-types        # Type-check Python code (mypy)
 npm run lint:docs                # Lint markdown files (markdownlint)
 npm run lint:docs:links          # Check links in markdown files (requires lychee)
 npm run format                   # Format all files (Prettier)
-npm run check                    # Full CI check (all lint + type-check + all tests + console-call check)
+npm run check                    # The local gate (see below for what it omits)
 npm run hygiene                  # Dead code detection (knip + vulture)
+npm run test:python              # Python tests via the right interpreter
 
 # Frontend (cd frontend)
 npm start                        # Expo dev server
@@ -42,9 +44,17 @@ npm run warm-cache               # Pre-populate DynamoDB cache
 make ministack                  # Start MiniStack DynamoDB
 make ministack-stop             # Stop MiniStack
 make test-e2e                    # Run E2E tests against MiniStack
-make setup                       # npm install --legacy-peer-deps
-make test                        # Full check (lint + tests)
+make setup                       # setup-python + npm install --legacy-peer-deps
+make setup-python                # Python toolchain into ./.venv (or the active venv)
+make dev                         # setup + ministack
+make test                        # npm run check
+make check-full                  # npm run check + E2E, lychee, shellcheck, vulture
 ```
+
+`npm run check` deliberately omits four things CI runs, each of which fails for
+environmental rather than code reasons: E2E (Docker), the lychee link check
+(external binary + network), shellcheck (external binary), and vulture (skipped
+gracefully when absent). `make check-full` runs `npm run check` plus all four.
 
 ### Running Single Tests
 
@@ -52,10 +62,11 @@ make test                        # Full check (lint + tests)
 # Frontend - run single test file
 npm test -- frontend/src/hooks/__tests__/useChartData.test.ts
 
-# Backend - run single test file
-cd backend && npm test -- --testPathPattern=sentiment
+# Backend - run single test file (PLURAL flag; jest 30 renamed it)
+cd backend && npm test -- --testPathPatterns=sentiment
 
-# Python tests
+# Python tests - run `make setup-python` once, then activate the virtualenv
+source .venv/bin/activate
 PYTHONPATH=backend/python pytest backend/python_tests/ -k "test_name"
 ```
 
@@ -93,14 +104,17 @@ frontend/
 
 ### Backend (AWS SAM + Lambda)
 
-Two Lambda functions sharing API Gateway and a single DynamoDB table (composite keys):
+Three Lambda functions sharing a single DynamoDB table (composite keys):
 
-1. **Node.js** (`ReactStocksFunction`): News, sentiment, prediction - built via esbuild
-2. **Python** (`PythonStocksFunction`): Stock data, search, earnings - uses yfinance
+1. **Node.js API** (`ReactStocksFunction`): News, sentiment, prediction - API Gateway, built via esbuild
+2. **Python API** (`PythonStocksFunction`): Stock data, search, earnings, ETF holdings - API Gateway, uses yfinance
+3. **Signal Calibration** (`SignalCalibrationFunction`): Weekly publisher reliability scoring - EventBridge scheduled (Sunday midnight UTC), no API Gateway route
 
 ```text
 backend/
-├── src/                 # Node.js Lambda
+├── src/                 # Node.js Lambdas
+│   ├── index.ts         # API Lambda entry point
+│   ├── calibration.entry.ts # Signal Calibration Lambda entry point
 │   ├── handlers/        # Route handlers
 │   ├── services/        # Business logic
 │   ├── repositories/    # DynamoDB data access
@@ -123,6 +137,7 @@ backend/
 | `HIST#XYZ`  | `DATE#YYYY-MM-DD` | Historical price data (ML)   |
 | `EARN#XYZ`  | `DATE#YYYY-MM-DD` | Earnings calendar (24h TTL)  |
 | `ETF#XLK`   | `HOLDINGS`        | Top 10 ETF holdings (7d TTL) |
+| `MODEL#XYZ` | `WEIGHTS#d{days}` | ML model weights cache       |
 
 ## Testing Notes
 
@@ -130,8 +145,8 @@ backend/
 - **Backend tests**: Jest with ESM support (`--experimental-vm-modules`)
 - **Backend E2E tests**: Real DynamoDB via MiniStack (`make ministack && make test-e2e`)
 - **Python tests**: pytest in `backend/python_tests/`
-- **Coverage thresholds**: Frontend 45% branches / 55% functions / 55% lines / 56% statements, Backend 63% branches / 75% functions / 71% lines / 70% statements
-- **Pre-commit hooks**: Husky runs Prettier (TS/JSON/MD) and ruff (Python) via lint-staged
+- **Coverage thresholds**: Frontend 49% branches / 57% functions / 55% lines / 55% statements (`frontend/jest.config.js`), Backend 76% branches / 91% functions / 87% lines / 87% statements (`backend/jest.config.js`). The jest configs are the source of truth; each carries the measured actuals it was ratcheted from in a comment above the block.
+- **Hooks**: `.husky/pre-commit` runs lint-staged (Prettier on TS/JSON/MD, ruff on Python). `.husky/commit-msg` runs commitlint. A rejected commit message comes from `commit-msg`, not `pre-commit`.
 - **Commit messages**: Enforced conventional commits via commitlint
 
 ## Environment Variables
@@ -191,6 +206,13 @@ was being predicted.
 Do not reintroduce client-side training. The backend caches trained weights per
 ticker, so its cost amortises across requests; browser training is repeated in
 full by every user on every view and none of it is reusable.
+
+A horizon the model cannot stand behind is withheld, not filled in. A horizon
+below the walk-forward cross-validation floor, or with too few labelled rows to
+validate, is absent from the `/predict` response rather than defaulted to a coin
+flip. On a 90-day history window the 30-day horizon is unvalidatable by
+arithmetic and is routinely absent, so callers must treat a missing horizon as
+normal rather than as an error.
 
 Model output is labelled experimental and carries a disclaimer wherever it
 renders (`PredictionDisclaimer`). Measured out-of-sample accuracy is near chance

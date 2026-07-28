@@ -69,6 +69,58 @@ export async function upsertDailySentiment(
   date: string,
   fields: DailySentimentFields,
 ): Promise<void> {
+  return upsertDailyFields(ticker, date, fields);
+}
+
+/**
+ * Prediction fields of a daily aggregate — the subset written by POST /predict.
+ *
+ * Kept disjoint from DailySentimentFields on purpose: the two are written by
+ * different code paths against the same item, and the whole point of the
+ * attribute-level upserts below is that neither can erase the other.
+ */
+export type DailyPredictionFields = Pick<
+  DailySentimentData,
+  | 'nextDayDirection'
+  | 'nextDayProbability'
+  | 'twoWeekDirection'
+  | 'twoWeekProbability'
+  | 'oneMonthDirection'
+  | 'oneMonthProbability'
+>;
+
+/**
+ * Write the prediction portion of a daily aggregate without disturbing the rest.
+ *
+ * The mirror of upsertDailySentiment, and it exists for the same reason stated
+ * there. POST /predict previously did a read-merge-write through
+ * putDailyAggregate, rebuilding the item from four preserved fields — which
+ * erased avgSignalScore, the four article counts, earningsProximity and
+ * insiderNetSentiment on every prediction request, permanently, until the next
+ * ingestion sweep recomputed them.
+ *
+ * A suppressed horizon REMOVEs its attributes rather than leaving them stale.
+ * A withdrawn forecast must not keep being served from a record the model no
+ * longer stands behind.
+ */
+export async function upsertDailyPredictions(
+  ticker: string,
+  date: string,
+  fields: DailyPredictionFields,
+): Promise<void> {
+  return upsertDailyFields(ticker, date, fields);
+}
+
+/**
+ * Shared attribute-level upsert. SETs the identity attributes unconditionally
+ * (idempotent), guards createdAt with if_not_exists, SETs every defined field
+ * and REMOVEs every explicitly-undefined one.
+ */
+async function upsertDailyFields(
+  ticker: string,
+  date: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
   const now = new Date().toISOString();
   const upperTicker = ticker.toUpperCase();
 

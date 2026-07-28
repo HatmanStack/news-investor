@@ -5,9 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Features marked with **[Pro]** are available in the pro edition only and are excluded from the community sync.
+Features marked with **[Pro]** are available in the pro edition only and are
+excluded from the community sync. **Always write the tag bold.** The bold is
+load-bearing rather than stylistic: `.github/workflows/sync-public.yml` strips
+pro entries from the public release notes with a pattern that matches only the
+bold form, so a tag written without its asterisks is not stripped and publishes
+verbatim to the community release.
+
+**Released sections are append-only.** Once a version heading is written, its
+entries are a record of what shipped and are never edited in bulk — a
+find/replace across this file once turned "Pinned LocalStack image" into "Pinned
+MiniStack image", asserting a control the repository did not have. Correct a
+released entry only deliberately, and say so in the commit message.
 
 ## [Unreleased]
+
+Two bodies of work: the features that shipped after 2.15.0 without being
+recorded here, and the 2026-07-26 audit remediation cycle.
+
+### Added
+
+- **[Pro]** Scheduled ingestion sweep (`SweepFunction`). Walks the S&P ticker universe each weekday at 22:00 UTC, after the US close, fetching news and queueing sentiment analysis. The app now accumulates coverage on its own instead of only holding what someone happened to look at. Tickers that produce nothing for three consecutive sweeps drop to a weekly re-probe rather than being abandoned.
+- **[Pro]** Finnhub webhook ingestion (`POST /webhooks/finnhub`). News events push sentiment analysis within minutes of publication instead of waiting for the next sweep. Authenticated by a shared secret; without `FINNHUB_WEBHOOK_SECRET` the endpoint refuses every event rather than accepting unauthenticated input.
+- **[Pro]** Server-side entitlement enforcement on every endpoint that returns pro data — notes, watchlist, annotations, alerts, reports, track record, peer and sector sentiment, social sentiment, portfolio risk and export. Previously several of these returned pro data to any signed-in caller; the paid tier now means something at the API, not only in the UI.
+- **[Pro]** Daily quota enforcement on sentiment analysis. Free accounts get the documented 10 analyses a day; the counter is now actually applied.
+- **[Pro]** Insider trading signals withheld from callers without the `insider_data` entitlement. The data was previously served to everyone and merely hidden by the interface.
+- **[Pro]** CloudWatch alarms on all nine Lambdas, on dead-letter queue depth, and on the Finnhub webhook's error rate — 35 alarms, up from 8. Set `ALARM_EMAIL` to receive them; unset, they change state and notify nobody.
+- **[Pro]** Reserved concurrency on the two public-facing Lambdas, so a traffic spike on one cannot starve the rest of the stack.
+- **[Pro]** API Gateway access logging.
+- Historical price data (`HIST#`) and daily sentiment aggregates are now persisted rather than recomputed, which is what lets predictions train on more than the current session's window.
+- Workspace READMEs for `frontend/`, `backend/` and `admin/`.
+- `make setup-python`, `make check-full` and `make sync-check`. `make setup` now installs the Python toolchain, so a fresh clone can run the Python tests without hunting for the missing step.
+
+### Changed
+
+- **The three prediction horizons now carry different information.** The 1-day, 2-week and 1-month forecasts were previously computed from the same label and were arithmetically the same number presented three ways. Each horizon is now labelled by its own forward return and validated separately.
+- **A horizon the model cannot stand behind is now withheld rather than shown.** Previously a horizon that could not be validated was filled in with a downward coin flip and recorded against the published accuracy. If you see fewer than three horizons, that is the model declining to guess. On the free tier's 90-day history window the 1-month horizon is routinely absent, because 90 days does not contain enough resolved 30-day outcomes to validate one; the pro tier's 365-day window does.
+- Predictions are trained on scale-free features — returns, gaps, ranges and volume ratios — instead of raw prices. Absolute price levels let the model reconstruct the same day's move, which inflated accuracy without predicting anything.
+- Prediction training is now reproducible: the same ticker and the same data produce the same forecast. Five retrains on identical data previously spanned 0.589–0.612 accuracy.
+- Model accuracy is measured with walk-forward cross-validation that embargoes overlapping outcome windows, so the reported figure is an out-of-sample estimate rather than a fit statistic.
+- Cached models are now keyed by training window, so a model trained on the free tier's history is never served to a pro caller or vice versa.
+- **[Pro]** The prediction track record is written only by the server. The endpoint that accepted client-submitted predictions is removed — authenticating it was not enough, because any signed-in caller could still choose the direction recorded against a ticker and shape the published accuracy.
+- **[Pro]** The admin API now honours `ALLOWED_ORIGINS` like the rest of the API. A production allow-list must include the admin dashboard's own CloudFront origin or the dashboard's requests will be blocked.
+- Feature gating in the app now falls back to free-tier entitlements when tier information is unavailable, instead of unlocking everything.
+- A fatal configuration error now renders an error screen explaining what is wrong, instead of an indefinite loading spinner.
+- Sentiment processing reads circuit-breaker state once per batch rather than once per article, and failure counting is atomic, so concurrent workers can no longer lose each other's counts.
+- The two heaviest DynamoDB index consumers stream results a page at a time instead of materialising full history in memory.
+- **[Pro]** The trending feed is recomputed once per sweep instead of once per queued message, removing roughly 500 redundant index passes per run.
+- `npm run check` now runs the same steps as CI, including admin lint, admin tests, Python tests and the two sync guards. Four checks are deliberately left out because they fail for environmental rather than code reasons — E2E, link checking, shellcheck and vulture — and `make check-full` runs those.
+- Coverage floors raised to measured actuals, and `frontend/app/` is now counted.
+- The CI toolchain, the ML service runtime and the MiniStack image are pinned.
+
+### Removed
+
+- **The browser-side prediction model.** It trained a second model in every stock view against a different target than the server and the accuracy scorer, so the interface, the model and the published accuracy figure disagreed with each other. Predictions come from `POST /predict` only.
+- `POST /predictions/snapshot`. See "Changed" above; it was removed rather than authenticated.
+- Four feature flags that gated nothing — `custom_models`, `api_access`, `extended_date_range` and `prediction_alerts`. `api_access` in particular advertised a public API that has never existed.
+- Seven CloudFormation parameters that were configurable and connected to nothing, so tuning them had no effect and produced no error.
+
+### Fixed
+
+- Prediction accuracy was inflated by target leakage: the model was labelled with the same day's return while being given that day's opening and closing prices. It could reconstruct the answer from its own inputs.
+- The E2E test suite could not run at all — every suite failed in setup — so the pipeline had no end-to-end coverage.
+- **[Pro]** Price data written by the ingestion path was read back in a shape the reader did not expect, silently narrowing price coverage.
+- **[Pro]** A malformed `ALLOWED_ORIGINS` list now fails closed rather than being treated as absent.
+- **[Pro]** The daily-aggregate write is atomic, so concurrent updates no longer overwrite each other's fields.
+- **[Pro]** The account usage meter in Settings showed 0 of everything regardless of actual consumption.
+- **[Pro]** The ingestion sweep no longer throttles itself out of work on quiet days, and stops early enough to report what it did not reach instead of being killed mid-run.
+- Two Lambda bundles could not start under ESM and the SAM template could not deploy.
+- A day with no sentiment coverage is now distinguishable from a day with neutral sentiment. They were previously identical to the model, which quietly poisoned training.
+- Deploy scripts wrote environment files to the wrong directory and disagreed with each other about the stack name.
+- Every command in the README, CONTRIBUTING and CLAUDE.md now runs as written. The single-test command used a flag Jest renamed two majors ago, and the documented Python test command failed on a fresh clone.
+
+### Security
+
+- **[Pro]** The community mirror is now published only after CI passes. It previously published on every push to `main` regardless of the result, and had already published a red commit.
+- **[Pro]** Build output, caches and `backend/.env.deploy` are excluded from the sync itself rather than relying on the destination repository's `.gitignore` to catch them.
+- The credential scanner's placeholder filter no longer suppresses real matches.
 
 ## [2.15.0] - 2026-05-03
 
@@ -453,7 +527,7 @@ Features marked with **[Pro]** are available in the pro edition only and are exc
 - Replaced `console.error` with structured logger in `useSentimentData.ts`
 - Replaced `hasOwnProperty` with `Object.hasOwn` in web database
 - Moved `JSON.stringify` inside `requestIdleCallback` to prevent stale snapshot writes
-- Pinned MiniStack image to `4.4.0` in `docker-compose.yml` and CI
+- Pinned LocalStack image to `4.4.0` in `docker-compose.yml` and CI
 - Lazy-loaded yfinance in `etf_holdings_service.py` to match `yfinance_service.py` cold-start pattern
 - Added `@functools.wraps` to `retry_with_backoff` decorator
 - Updated retry docstring from "exponential backoff" to "fixed-interval backoff"

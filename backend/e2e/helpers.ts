@@ -56,39 +56,101 @@ export function createEvent(
   } as APIGatewayProxyEventV2;
 }
 
+/** DynamoDB's BatchWriteItem ceiling. */
+const BATCH_SIZE = 25;
+
+/** Attempts per batch before a persistent UnprocessedItems failure throws. */
+const MAX_BATCH_ATTEMPTS = 5;
+
+type DeleteRequest = { DeleteRequest: { Key: { pk: unknown; sk: unknown } } };
+
+let cachedClient: DynamoDBDocumentClient | null = null;
+
 /**
- * Delete all items from the test table (for cleanup between tests)
+ * Lazily-created document client, shared across calls. clearTable() runs in
+ * every suite's beforeAll/beforeEach, and a client per call is a connection
+ * pool per call. Mirrors the lazy-client pattern in src/services/stripe.service.ts.
  */
-export async function clearTable(): Promise<void> {
-  const client = DynamoDBDocumentClient.from(
+function getClient(): DynamoDBDocumentClient {
+  if (cachedClient) return cachedClient;
+  cachedClient = DynamoDBDocumentClient.from(
     new DynamoDBClient({
       region: 'us-east-1',
       endpoint: ENDPOINT,
       credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
     }),
   );
+  return cachedClient;
+}
 
-  // Scan all items
-  const scanResult = await client.send(
-    new ScanCommand({
-      TableName: TABLE_NAME,
-      ProjectionExpression: 'pk, sk',
-    }),
-  );
+/**
+ * Delete one batch, retrying whatever DynamoDB declines.
+ *
+ * BatchWriteItem is partially-fallible: under throttling it returns the
+ * requests it did not apply in UnprocessedItems rather than failing. Dropping
+ * those leaves the table half-cleared, which is how cross-suite pollution
+ * reappears, so a persistent failure throws instead.
+ */
+async function deleteBatch(
+  client: DynamoDBDocumentClient,
+  requests: DeleteRequest[],
+): Promise<void> {
+  let pending = requests;
 
-  if (!scanResult.Items || scanResult.Items.length === 0) return;
+  for (let attempt = 1; ; attempt++) {
+    const response = await client.send(
+      new BatchWriteCommand({ RequestItems: { [TABLE_NAME]: pending } }),
+    );
 
-  // Delete in batches of 25
-  for (let i = 0; i < scanResult.Items.length; i += 25) {
-    const batch = scanResult.Items.slice(i, i + 25);
-    await client.send(
-      new BatchWriteCommand({
-        RequestItems: {
-          [TABLE_NAME]: batch.map((item) => ({
-            DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
-          })),
-        },
+    const unprocessed = (response.UnprocessedItems?.[TABLE_NAME] ?? []) as DeleteRequest[];
+    if (unprocessed.length === 0) return;
+
+    if (attempt >= MAX_BATCH_ATTEMPTS) {
+      throw new Error(
+        `clearTable: ${unprocessed.length} items still unprocessed after ${MAX_BATCH_ATTEMPTS} attempts`,
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+    pending = unprocessed;
+  }
+}
+
+/**
+ * Delete all items from the test table (for cleanup between tests).
+ *
+ * Pages the Scan to exhaustion and deletes each page before fetching the next,
+ * so memory stays O(page) and a table larger than one 1MB Scan response is
+ * still fully cleared.
+ */
+export async function clearTable(): Promise<void> {
+  const client = getClient();
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const scanResult = await client.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        ProjectionExpression: 'pk, sk',
+        // Stated explicitly because a bare ProjectionExpression leaves Select
+        // to the server. MiniStack defaults it to ALL_ATTRIBUTES and then
+        // rejects the combination -- "Select value ALL_ATTRIBUTES is not
+        // compatible with ProjectionExpression" -- which killed every E2E
+        // suite in beforeAll on CI run 30226118160.
+        Select: 'SPECIFIC_ATTRIBUTES',
+        ExclusiveStartKey: lastEvaluatedKey,
       }),
     );
-  }
+    lastEvaluatedKey = scanResult.LastEvaluatedKey;
+
+    const pageItems = scanResult.Items ?? [];
+    for (let i = 0; i < pageItems.length; i += BATCH_SIZE) {
+      await deleteBatch(
+        client,
+        pageItems.slice(i, i + BATCH_SIZE).map((item) => ({
+          DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
+        })),
+      );
+    }
+  } while (lastEvaluatedKey);
 }

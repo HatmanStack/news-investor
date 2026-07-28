@@ -22,7 +22,7 @@ import {
   resetMetrics as resetClassificationMetrics,
 } from '../eventClassification.service.js';
 import { analyzeAspects } from '../aspectAnalysis.service.js';
-import { getMlSentiment } from '../mlSentiment.service.js';
+import { getMlSentiment, openMlCircuitGate } from '../mlSentiment.service.js';
 import { calculateSignalScoresBatch, type ArticleMetadata } from '../signalScore.service.js';
 import { batchGetPublisherReliabilities } from '../../repositories/publisherReliability.repository.js';
 import { isMaterialEvent } from '../../types/event.types.js';
@@ -215,6 +215,14 @@ async function analyzeMlSentimentBatch(
   analyses: Map<string, ArticleAnalysis>,
 ): Promise<void> {
   const mlSentimentStartTime = Date.now();
+
+  // One circuit read for the whole batch. getMlSentiment used to issue a
+  // getItem per call, and this map runs per article, so a 100-article batch
+  // cost 100 reads of the same DynamoDB item. The gate latches, so a failure
+  // that trips the breaker part-way through still stops every article the
+  // workers pick up afterwards.
+  const circuitGate = await openMlCircuitGate();
+
   const mlSentimentResults = await mapWithConcurrency(
     articles,
     async (item) => {
@@ -223,7 +231,7 @@ async function analyzeMlSentimentBatch(
       if (eventType && isMaterialEvent(eventType)) {
         try {
           const text = `${item.article.title || ''} ${item.article.description || ''}`.trim();
-          const score = await getMlSentiment(text, ticker);
+          const score = await getMlSentiment(text, ticker, circuitGate);
           return { articleHash: item.articleHash, mlScore: score };
         } catch (error) {
           logger.error('MlSentiment analysis failed', error, {

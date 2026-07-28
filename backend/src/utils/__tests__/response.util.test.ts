@@ -3,7 +3,24 @@
  */
 
 import { describe, it, expect, afterEach } from '@jest/globals';
-import { getCorsHeaders, setRequestOrigin } from '../response.util.js';
+import { getCorsHeaders } from '../response.util.js';
+import { createRequestContext, runWithContext } from '../logger.util.js';
+
+/**
+ * Read the CORS headers as they would be built while handling a request from
+ * `origin`.
+ *
+ * The origin lives in the AsyncLocalStorage request context the entry points
+ * populate, so entering that context is the only faithful way to vary it — and
+ * that is the point. A response constructed outside a request context
+ * negotiates nothing, which is exactly what happens in the Lambda for a direct
+ * invocation, an SQS record or a scheduled event.
+ */
+function corsHeadersFor(origin: string | undefined): Record<string, string> {
+  return runWithContext(createRequestContext('test-req', '/test', 'GET', origin), () =>
+    getCorsHeaders(),
+  ) as Record<string, string>;
+}
 
 describe('CORS origin negotiation', () => {
   const original = process.env.ALLOWED_ORIGINS;
@@ -16,7 +33,6 @@ describe('CORS origin negotiation', () => {
     } else {
       process.env.ALLOWED_ORIGINS = original;
     }
-    setRequestOrigin(undefined);
   });
 
   it('returns the wildcard when configured open', () => {
@@ -35,47 +51,60 @@ describe('CORS origin negotiation', () => {
     // The original bug: the raw env var was passed through, producing a header
     // browsers reject outright, so multi-origin production configs did not work.
     process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
-    setRequestOrigin('https://b.example.com');
 
-    expect(getCorsHeaders()['Access-Control-Allow-Origin']).not.toContain(',');
+    expect(corsHeadersFor('https://b.example.com')['Access-Control-Allow-Origin']).not.toContain(
+      ',',
+    );
   });
 
   it('echoes the requesting origin when it is allowed', () => {
     process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
-    setRequestOrigin('https://b.example.com');
 
-    expect(getCorsHeaders()['Access-Control-Allow-Origin']).toBe('https://b.example.com');
+    expect(corsHeadersFor('https://b.example.com')['Access-Control-Allow-Origin']).toBe(
+      'https://b.example.com',
+    );
   });
 
   it('does not echo an origin that is not allowed', () => {
     process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
-    setRequestOrigin('https://evil.example.com');
 
-    const value = getCorsHeaders()['Access-Control-Allow-Origin'];
+    const value = corsHeadersFor('https://evil.example.com')['Access-Control-Allow-Origin'];
     expect(value).not.toBe('https://evil.example.com');
     expect(value).toBe('https://a.example.com');
   });
 
   it('tolerates whitespace around configured origins', () => {
     process.env.ALLOWED_ORIGINS = 'https://a.example.com , https://b.example.com';
-    setRequestOrigin('https://b.example.com');
 
-    expect(getCorsHeaders()['Access-Control-Allow-Origin']).toBe('https://b.example.com');
+    expect(corsHeadersFor('https://b.example.com')['Access-Control-Allow-Origin']).toBe(
+      'https://b.example.com',
+    );
   });
 
   it('sets Vary: Origin only when the response varies by origin', () => {
     process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
-    setRequestOrigin('https://a.example.com');
-    expect(getCorsHeaders().Vary).toBe('Origin');
+    expect(corsHeadersFor('https://a.example.com').Vary).toBe('Origin');
 
     process.env.ALLOWED_ORIGINS = '*';
-    expect(getCorsHeaders().Vary).toBeUndefined();
+    expect(corsHeadersFor('https://a.example.com').Vary).toBeUndefined();
   });
 
   it('falls back sensibly when the request carries no origin', () => {
     process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
-    setRequestOrigin(undefined);
 
+    expect(corsHeadersFor(undefined)['Access-Control-Allow-Origin']).toBe('https://a.example.com');
+  });
+
+  it('falls back the same way outside any request context', () => {
+    // Direct invocations, SQS records and scheduled events never enter
+    // runWithContext. They must degrade to the no-origin answer rather than
+    // reading back whatever the previous invocation in this container
+    // negotiated — the failure mode a module-level variable is prone to.
+    process.env.ALLOWED_ORIGINS = 'https://a.example.com,https://b.example.com';
+
+    expect(corsHeadersFor('https://b.example.com')['Access-Control-Allow-Origin']).toBe(
+      'https://b.example.com',
+    );
     expect(getCorsHeaders()['Access-Control-Allow-Origin']).toBe('https://a.example.com');
   });
 });
@@ -89,18 +118,16 @@ describe('a malformed allow-list', () => {
     } else {
       process.env.ALLOWED_ORIGINS = original;
     }
-    setRequestOrigin(undefined);
   });
 
   it('omits the allow-origin header rather than falling back to the wildcard', () => {
     // A typo in a production lockdown must not be more permissive than
     // leaving the variable unset.
     process.env.ALLOWED_ORIGINS = ',,,';
-    setRequestOrigin('https://evil.example.com');
 
-    const headers = getCorsHeaders();
-
-    expect(headers).not.toHaveProperty('Access-Control-Allow-Origin');
+    expect(corsHeadersFor('https://evil.example.com')).not.toHaveProperty(
+      'Access-Control-Allow-Origin',
+    );
   });
 
   it('omits it for a whitespace-only list too', () => {

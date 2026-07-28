@@ -187,10 +187,13 @@ async function aggregateSentiment(
  */
 export async function updatePredictions(
   ticker: string,
+  // A horizon may be null (older callers) or absent (the backend suppressed
+  // it because it could not clear its CV floor). Both mean "no forecast for
+  // this horizon" and both leave the stored fields untouched.
   predictions: {
-    nextDay: { direction: 'up' | 'down'; probability: number } | null;
-    twoWeek: { direction: 'up' | 'down'; probability: number } | null;
-    oneMonth: { direction: 'up' | 'down'; probability: number } | null;
+    nextDay?: { direction: 'up' | 'down'; probability: number } | null;
+    twoWeek?: { direction: 'up' | 'down'; probability: number } | null;
+    oneMonth?: { direction: 'up' | 'down'; probability: number } | null;
   },
 ): Promise<void> {
   try {
@@ -203,20 +206,20 @@ export async function updatePredictions(
 
     if (latest && latest.length > 0) {
       const record = latest[0]!;
+      // Written unconditionally, NOT via a conditional spread. A horizon the
+      // server has withheld arrives as an absent key, and a spread that
+      // contributes nothing leaves the previous run's direction and probability
+      // in the local record — so a forecast the server no longer stands behind
+      // keeps rendering. Clearing to undefined matches the parallel write path
+      // in hooks/useSentimentData.ts, which the two used to disagree about.
       const updatedRecord: CombinedWordDetails = {
         ...record,
-        ...(predictions.nextDay && {
-          nextDayDirection: predictions.nextDay.direction,
-          nextDayProbability: predictions.nextDay.probability,
-        }),
-        ...(predictions.twoWeek && {
-          twoWeekDirection: predictions.twoWeek.direction,
-          twoWeekProbability: predictions.twoWeek.probability,
-        }),
-        ...(predictions.oneMonth && {
-          oneMonthDirection: predictions.oneMonth.direction,
-          oneMonthProbability: predictions.oneMonth.probability,
-        }),
+        nextDayDirection: predictions.nextDay?.direction ?? undefined,
+        nextDayProbability: predictions.nextDay?.probability ?? undefined,
+        twoWeekDirection: predictions.twoWeek?.direction ?? undefined,
+        twoWeekProbability: predictions.twoWeek?.probability ?? undefined,
+        oneMonthDirection: predictions.oneMonth?.direction ?? undefined,
+        oneMonthProbability: predictions.oneMonth?.probability ?? undefined,
         updateDate: new Date().toISOString(),
       };
       await CombinedWordRepository.upsert(updatedRecord);
@@ -227,19 +230,15 @@ export async function updatePredictions(
     // Assuming PortfolioRepository has an update method or we can just update by ticker
     const portfolioItem = await PortfolioRepository.findByTicker(ticker);
     if (portfolioItem) {
+      // Same reasoning as the CombinedWordDetails write above: a withheld
+      // horizon must clear the stored value, not leave it behind.
       await PortfolioRepository.update(ticker, {
-        ...(predictions.nextDay && {
-          nextDayDirection: predictions.nextDay.direction,
-          nextDayProbability: predictions.nextDay.probability,
-        }),
-        ...(predictions.twoWeek && {
-          twoWeekDirection: predictions.twoWeek.direction,
-          twoWeekProbability: predictions.twoWeek.probability,
-        }),
-        ...(predictions.oneMonth && {
-          oneMonthDirection: predictions.oneMonth.direction,
-          oneMonthProbability: predictions.oneMonth.probability,
-        }),
+        nextDayDirection: predictions.nextDay?.direction ?? undefined,
+        nextDayProbability: predictions.nextDay?.probability ?? undefined,
+        twoWeekDirection: predictions.twoWeek?.direction ?? undefined,
+        twoWeekProbability: predictions.twoWeek?.probability ?? undefined,
+        oneMonthDirection: predictions.oneMonth?.direction ?? undefined,
+        oneMonthProbability: predictions.oneMonth?.probability ?? undefined,
       });
     }
   } catch (error) {

@@ -8,23 +8,28 @@
  * the built artifact catches that.
  */
 import { pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-// Must list every bundle produced by `npm run build`. A bundle missing here is
-// silently unverified, which is the failure mode this script exists to prevent —
-// so the count is asserted against dist/ below rather than trusted.
-const BUNDLES = [
-  'index',
-  'sentimentWorker',
-  'reports',
-  'alerts',
-  'admin',
-  'aggregation',
-  'calibration',
-  'sweep',
-];
+// The bundle list is derived from the build:* scripts rather than hardcoded.
+// A hardcoded list drifts the moment a Lambda is added, and it cannot be
+// shared between editions: the community edition builds a subset of these
+// entry points, so a pro-shaped list makes its `npm run check` fail on
+// bundles it never builds. package.json is the same source of truth the build
+// itself uses, so the list cannot disagree with what `npm run build` produces.
+// The dist/ cross-check below still catches a bundle nothing declares.
+const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+const BUNDLES = Object.entries(pkg.scripts ?? {})
+  .filter(([name]) => name.startsWith('build:'))
+  .map(([, command]) => /--outfile=dist\/([^\s]+)\.js/.exec(command)?.[1])
+  .filter((name) => name !== undefined)
+  .sort();
+
+if (BUNDLES.length === 0) {
+  console.error('No build:* script declares an --outfile=dist/*.js target.');
+  process.exit(1);
+}
 
 let failed = 0;
 for (const name of BUNDLES) {
@@ -52,8 +57,9 @@ if (failed > 0) {
   process.exit(1);
 }
 
-// Catch a new Lambda whose bundle was added to the build but not to BUNDLES.
-// Without this the list silently drifts and the new entry point ships unchecked.
+// Catch a bundle in dist/ that no build:* script declares — a stale artifact
+// from a removed Lambda, or one produced outside the build. Either way it is
+// unverified and would ship alongside the ones that are not.
 const built = (await readdir(resolve(process.cwd(), 'dist')))
   .filter((f) => f.endsWith('.js'))
   .map((f) => f.replace(/\.js$/, ''))
@@ -61,7 +67,9 @@ const built = (await readdir(resolve(process.cwd(), 'dist')))
 const unlisted = built.filter((name) => !BUNDLES.includes(name));
 if (unlisted.length > 0) {
   console.error(`\nBundles present in dist/ but not verified: ${unlisted.join(', ')}`);
-  console.error('Add them to BUNDLES in scripts/verify-bundles.mjs.');
+  console.error(
+    'No build:* script in package.json produces them. Declare one, or run npm run clean.',
+  );
   process.exit(1);
 }
 

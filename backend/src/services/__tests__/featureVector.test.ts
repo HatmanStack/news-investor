@@ -9,6 +9,11 @@
  * produce the same feature vector as a day with genuinely neutral coverage.
  * Collapsing both to 0 trains the model on fabricated neutrals, and small-cap
  * tickers have zero-article days most of the time.
+ *
+ * These assertions are about SHAPE and LAYOUT — cheap, and they catch feature
+ * drift. They do not check that the model means anything: the whole file
+ * passed while the predictor had same-day target leakage and one label shared
+ * across three horizons. Semantic coverage lives in mlSemantics.test.ts.
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -51,11 +56,17 @@ function dailyFeature(overrides: Partial<DailyFeatures> = {}): DailyFeatures {
     event_analyst: 0,
     event_product: 0,
     event_general: 1,
+    intraday_range: 0.048,
+    overnight_gap: 0,
+    return_1d: 0.03,
+    return_5d: 0.05,
+    volume_ratio: 1.1,
+    lookback_available: 1,
     aspect_score: 0.5,
     ml_score: 0.4,
     aspect_available: 1,
     ml_available: 1,
-    label: 1,
+    labels: { 1: 1, 14: 1, 30: 1 },
     ...overrides,
   };
 }
@@ -71,10 +82,61 @@ describe('buildBaseFeatureVector', () => {
     const base = buildBaseFeatureVector(
       dailyFeature({ aspect_score: 0.5, ml_score: 0.4, aspect_available: 1, ml_available: 0 }),
     );
-    expect(base[11]).toBe(0.5); // aspect_score
-    expect(base[12]).toBe(0.4); // ml_score
-    expect(base[13]).toBe(1); // aspect_available
-    expect(base[14]).toBe(0); // ml_available
+    expect(base[12]).toBe(0.5); // aspect_score
+    expect(base[13]).toBe(0.4); // ml_score
+    expect(base[14]).toBe(1); // aspect_available
+    expect(base[15]).toBe(0); // ml_available
+  });
+
+  it('emits no absolute price or volume level', () => {
+    // ADR-004. Absolute levels let the model reconstruct the same-day return
+    // and are not comparable across a window in which the price drifts.
+    const f = dailyFeature({
+      open: 101,
+      high: 105,
+      low: 100,
+      close: 104,
+      volume: 1_200_000,
+    });
+    const base = buildBaseFeatureVector(f);
+    for (const level of [f.open, f.high, f.low, f.close, f.volume]) {
+      expect(base).not.toContain(level);
+    }
+    // Nothing in the vector is on a price or volume scale at all.
+    for (const v of base) {
+      expect(Math.abs(v)).toBeLessThan(100);
+    }
+  });
+
+  it('emits the scale-free price features in the documented positions', () => {
+    const base = buildBaseFeatureVector(
+      dailyFeature({
+        intraday_range: 0.048,
+        overnight_gap: -0.002,
+        return_1d: 0.03,
+        return_5d: 0.07,
+        volume_ratio: 1.2,
+        lookback_available: 1,
+      }),
+    );
+    expect(base[0]).toBeCloseTo(0.048);
+    expect(base[1]).toBeCloseTo(-0.002);
+    expect(base[2]).toBeCloseTo(0.03);
+    expect(base[3]).toBeCloseTo(0.07);
+    expect(base[4]).toBeCloseTo(1.2);
+    expect(base[5]).toBe(1);
+  });
+
+  it('distinguishes a short-lookback day from a genuine zero return', () => {
+    // The same failure mode the sentiment availability flags exist to prevent:
+    // an unavailable value emitted as 0 must not look like a real 0.
+    const noLookback = buildBaseFeatureVector(
+      dailyFeature({ return_5d: 0, volume_ratio: 0, lookback_available: 0 }),
+    );
+    const genuineZero = buildBaseFeatureVector(
+      dailyFeature({ return_5d: 0, volume_ratio: 0, lookback_available: 1 }),
+    );
+    expect(noLookback).not.toEqual(genuineZero);
   });
 
   it('distinguishes a no-coverage day from a neutral-coverage day', () => {
@@ -105,9 +167,32 @@ describe('prepare_training_data', () => {
     expect(X).toHaveLength(2 * MODEL_CONFIG.horizons.length);
   });
 
-  it('drops rows with a null label', () => {
-    const { X } = prepare_training_data([dailyFeature(), dailyFeature({ label: null })]);
-    expect(X).toHaveLength(MODEL_CONFIG.horizons.length);
+  it('drops a day only for the horizons whose label is null', () => {
+    // The defect this replaces: one null label removed the day from all three
+    // horizons, and one non-null label was reused for all three.
+    const { X, y, rowsPerHorizon } = prepare_training_data([
+      dailyFeature(),
+      dailyFeature({ date: '2026-01-04', labels: { 1: 0, 14: null, 30: 1 } }),
+    ]);
+    expect(rowsPerHorizon).toEqual({ 1: 2, 14: 1, 30: 2 });
+    expect(X).toHaveLength(5);
+    expect(y).toEqual([1, 0, 1, 1, 1]);
+  });
+
+  it('groups rows by horizon so each horizon is a contiguous chronological block', () => {
+    const { X, rowsPerHorizon } = prepare_training_data([
+      dailyFeature(),
+      dailyFeature({ date: '2026-01-04' }),
+    ]);
+    const horizonColumn = X.map((row) => row[row.length - 1]);
+    expect(horizonColumn).toEqual([1, 1, 14, 14, 30, 30]);
+    expect(rowsPerHorizon).toEqual({ 1: 2, 14: 2, 30: 2 });
+  });
+
+  it('throws when no day carries a label for any horizon', () => {
+    expect(() =>
+      prepare_training_data([dailyFeature({ labels: { 1: null, 14: null, 30: null } })]),
+    ).toThrow(/No valid training data/);
   });
 });
 
@@ -128,7 +213,7 @@ describe('training / inference parity', () => {
       bias: 0,
     };
 
-    const predictions = generate_predictions(model, scaler, days[0]!);
+    const predictions = generate_predictions(model, scaler, days[0]!, MODEL_CONFIG.horizons);
     expect(predictions).toHaveLength(MODEL_CONFIG.horizons.length);
     for (const p of predictions) {
       expect(Number.isFinite(p.probability)).toBe(true);

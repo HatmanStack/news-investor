@@ -191,7 +191,6 @@ export async function fetchAlphaVantageNews(
     return articles;
   } catch (error) {
     await CircuitBreakerRepo.recordFailure(
-      cbState.consecutiveFailures,
       ALPHAVANTAGE_FAILURE_THRESHOLD,
       ALPHAVANTAGE_COOLDOWN_MS,
       CIRCUIT_SERVICE_ALPHAVANTAGE,

@@ -134,7 +134,6 @@ export async function fetchCompanyNews(
     return await retryWithBackoff(fetchFn);
   } catch (error) {
     await CircuitBreakerRepo.recordFailure(
-      cbState.consecutiveFailures,
       FINNHUB_FAILURE_THRESHOLD,
       FINNHUB_COOLDOWN_MS,
       CIRCUIT_SERVICE_FINNHUB,
@@ -214,7 +213,6 @@ export async function fetchSocialSentiment(
     return await retryWithBackoff(fetchFn);
   } catch (error) {
     await CircuitBreakerRepo.recordFailure(
-      cbState.consecutiveFailures,
       FINNHUB_FAILURE_THRESHOLD,
       FINNHUB_COOLDOWN_MS,
       CIRCUIT_SERVICE_FINNHUB,
@@ -288,7 +286,6 @@ export async function fetchInsiderTransactions(
     return await retryWithBackoff(fetchFn);
   } catch (error) {
     await CircuitBreakerRepo.recordFailure(
-      cbState.consecutiveFailures,
       FINNHUB_FAILURE_THRESHOLD,
       FINNHUB_COOLDOWN_MS,
       CIRCUIT_SERVICE_FINNHUB,

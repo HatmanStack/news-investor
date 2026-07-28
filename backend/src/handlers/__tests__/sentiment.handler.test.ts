@@ -239,9 +239,10 @@ describe('Sentiment Handler', () => {
   // handleSentimentJobStatusRequest (GET /sentiment/job/:jobId)
   // ──────────────────────────────────────────────────────────────
   describe('handleSentimentJobStatusRequest', () => {
-    it('should return 400 when jobId missing', async () => {
+    it('should return 400 when jobId missing from both pathParameters and rawPath', async () => {
       const event = createAPIGatewayEvent({
         pathParameters: {},
+        rawPath: '/sentiment/job/',
       });
 
       const response = await handleSentimentJobStatusRequest(event);
@@ -249,6 +250,29 @@ describe('Sentiment Handler', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.error).toContain('Job ID is required');
+    });
+
+    it('should extract jobId from rawPath when pathParameters is empty', async () => {
+      mockGetJob.mockResolvedValue({
+        jobId: 'AAPL_2025-01-01_2025-01-31',
+        status: 'COMPLETED',
+        ticker: 'AAPL',
+        startDate: '2025-01-01',
+        endDate: '2025-01-31',
+        startedAt: 1704067200000,
+        ttl: 9999999999,
+      });
+
+      const event = createAPIGatewayEvent({
+        pathParameters: {},
+        rawPath: '/sentiment/job/AAPL_2025-01-01_2025-01-31',
+      });
+
+      const response = await handleSentimentJobStatusRequest(event);
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.jobId).toBe('AAPL_2025-01-01_2025-01-31');
     });
 
     it('should return 404 when job not found', async () => {

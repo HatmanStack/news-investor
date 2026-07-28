@@ -8,6 +8,45 @@
 import type { Ticker } from '../types/branded.types.js';
 export type { Ticker } from '../types/branded.types.js';
 
+/**
+ * Maximum accepted request body, in bytes.
+ *
+ * Lives here rather than in `index.ts` so the pro and community routers cannot
+ * drift apart on it — the same reason `MAX_TICKER_LENGTH` moved here.
+ */
+export const MAX_BODY_SIZE = 10 * 1024;
+
+/**
+ * Size of a request body in bytes, as the limit is documented.
+ *
+ * `index.ts` measured `apiEvent.body.length`, which is wrong twice over:
+ *
+ * 1. `.length` counts UTF-16 code units, not bytes. A body of CJK text is
+ *    three bytes per unit and an emoji is four bytes across two units, so a
+ *    multi-byte body was undercounted by up to 3x.
+ * 2. For an `isBase64Encoded` payload the raw string is ~4/3 the decoded size,
+ *    so the effective limit was ~7.5KB against a documented 10KB.
+ *
+ * `Buffer.byteLength` answers both without allocating the decoded buffer.
+ */
+export function requestBodyByteLength(body: string, isBase64Encoded?: boolean): number {
+  return Buffer.byteLength(body, isBase64Encoded ? 'base64' : 'utf8');
+}
+
+/**
+ * Longest ticker this system accepts, on every boundary.
+ *
+ * The character class alone bounds nothing: a multi-kilobyte string of dots
+ * matches `/^[A-Z0-9.-]+$/`, fits under the MAX_BODY_SIZE cap above, and
+ * was then used to build a DynamoDB partition key via makeDailyPK/makeArticlePK.
+ * The SQS boundary already carried `.max(10)`; the HTTP path did not. Both now
+ * reference this constant so they cannot drift apart again.
+ *
+ * Ten characters covers every real symbol with room to spare — NYSE and Nasdaq
+ * symbols run to five, plus class suffixes like BRK.A and BF-B.
+ */
+export const MAX_TICKER_LENGTH = 10;
+
 /** General ticker pattern: letters, numbers, dots, hyphens (BRK.A, BF-B) */
 const TICKER_REGEX = /^[A-Z0-9.-]+$/;
 
@@ -24,8 +63,13 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
  * @returns Branded Ticker or null if invalid
  */
 export function validateTicker(raw: unknown, strict?: boolean): Ticker | null {
-  if (typeof raw !== 'string' || raw.length === 0) return null;
+  if (typeof raw !== 'string') return null;
+  // Trim first, then check emptiness. The reverse order tested the untrimmed
+  // input, so "   " passed the length check, normalised to "", and was rejected
+  // only because the regex needs one or more characters. Correctness that
+  // depends on a later check catching an earlier one's miss is fragile.
   const normalized = raw.toUpperCase().trim();
+  if (normalized.length === 0 || normalized.length > MAX_TICKER_LENGTH) return null;
   const pattern = strict ? TICKER_REGEX_STRICT : TICKER_REGEX;
   return pattern.test(normalized) ? (normalized as Ticker) : null;
 }

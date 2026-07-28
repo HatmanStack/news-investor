@@ -16,8 +16,12 @@ function createWrapper() {
     defaultOptions: {
       queries: {
         retry: false,
-        gcTime: 0,
+        gcTime: Infinity,
       },
+      // Mutations keep the five-minute default gcTime unless told otherwise,
+      // and each settled mutation schedules a collection timer that outlives
+      // the test — the "worker process has failed to exit gracefully" warning.
+      mutations: { retry: false, gcTime: Infinity },
     },
   });
 

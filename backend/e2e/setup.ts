@@ -18,6 +18,15 @@ export default async function setup() {
   process.env.AWS_ACCESS_KEY_ID = 'test';
   process.env.AWS_SECRET_ACCESS_KEY = 'test';
 
+  // The dummy static credentials above only take effect if nothing outranks
+  // them. When a developer has AWS_PROFILE exported, the Node credential
+  // provider chain warns "Multiple credential sources detected" and then
+  // proceeds with the profile -- so every request tries to resolve real SSO
+  // credentials against MiniStack and the whole suite fails on an expired
+  // token. CI never sets these; a developer machine usually does.
+  delete process.env.AWS_PROFILE;
+  delete process.env.AWS_SESSION_TOKEN;
+
   const client = new DynamoDBClient({
     region: 'us-east-1',
     endpoint: ENDPOINT,

@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { MAX_TICKER_LENGTH } from './validation.util.js';
 
 /**
  * Ticker symbol schema
@@ -16,7 +17,7 @@ import { z } from 'zod';
 const tickerSchema = z
   .string()
   .min(1, 'Ticker is required')
-  .max(10, 'Ticker must be at most 10 characters')
+  .max(MAX_TICKER_LENGTH, `Ticker must be at most ${MAX_TICKER_LENGTH} characters`)
   .regex(/^[A-Za-z0-9.-]+$/, 'Ticker must contain only letters, numbers, dots, and hyphens')
   .transform((s) => s.toUpperCase());
 
@@ -63,13 +64,30 @@ export const sentimentRequestSchema = z
   });
 
 /**
+ * Longest training window a caller may request, in days.
+ *
+ * `days` had a floor and no ceiling, so a caller could ask for an arbitrarily
+ * long history window. API Gateway requests overwrite it with the tier's
+ * retention (prediction.handler.ts:120), which is why this never surfaced; the
+ * bound matters for direct Lambda invocations such as warm-cache, which respect
+ * the caller's value. Ten years is far beyond any window the model uses.
+ */
+const MAX_PREDICTION_DAYS = 3650;
+
+/**
  * Prediction request schema
  * - ticker: Required stock symbol
- * - days: Optional number of days (default 90, min 30)
+ * - days: Optional number of days (default 90, min 30, max 3650)
  */
 export const predictionRequestSchema = z.object({
   ticker: tickerSchema,
-  days: z.number().int().min(30, 'Days must be at least 30').optional().default(90),
+  days: z
+    .number()
+    .int()
+    .min(30, 'Days must be at least 30')
+    .max(MAX_PREDICTION_DAYS, `Days must be at most ${MAX_PREDICTION_DAYS}`)
+    .optional()
+    .default(90),
 });
 
 /**
@@ -123,6 +141,10 @@ export const newsRequestSchema = z
     ticker: z
       .string()
       .min(1, 'Ticker is required')
+      // This schema was the one ticker boundary with no upper bound at all --
+      // the same gap validateTicker had, on the endpoint that forwards the
+      // symbol to Finnhub.
+      .max(MAX_TICKER_LENGTH, `Ticker must be at most ${MAX_TICKER_LENGTH} characters`)
       .regex(/^[A-Za-z0-9]+$/, 'Ticker must be alphanumeric')
       .transform((s) => s.toUpperCase()),
     from: dateSchema,

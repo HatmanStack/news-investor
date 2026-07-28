@@ -7,13 +7,21 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 const mockPutItem = jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockQueryItems = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 
+const mockSend = jest.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue({});
+
 jest.unstable_mockModule('../../utils/dynamodb.util.js', () => ({
   getItem: jest.fn(),
   putItem: mockPutItem,
   queryItems: mockQueryItems,
+  getTableName: jest.fn(() => 'test-table'),
+  getDynamoDbClient: jest.fn(() => ({ send: mockSend })),
 }));
 
-const { putTrending, getLatestTrending } = await import('../trending.repository.js');
+const { putTrending, getLatestTrending, claimTrendingRecompute, TRENDING_TTL_SECONDS } =
+  await import('../trending.repository.js');
+
+/** Hours between two consecutive runs of `cron(0 22 ? * MON-FRI *)`, worst case. */
+const LONGEST_SCHEDULED_GAP_HOURS = 72; // Friday 22:00 UTC -> Monday 22:00 UTC
 
 describe('TrendingRepository', () => {
   beforeEach(() => {
@@ -21,7 +29,7 @@ describe('TrendingRepository', () => {
   });
 
   describe('putTrending', () => {
-    it('writes trending data with correct PK/SK and 24h TTL', async () => {
+    it('writes trending data with correct PK/SK and a TTL', async () => {
       const tickers = [
         {
           ticker: 'AAPL',
@@ -41,6 +49,38 @@ describe('TrendingRepository', () => {
       expect(calledWith.entityType).toBe('TRENDING');
       expect(calledWith.tickers).toEqual(tickers);
       expect(calledWith.ttl).toBeGreaterThan(Math.floor(Date.now() / 1000));
+    });
+
+    it('sets a TTL that outlives the longest gap between scheduled sweeps', async () => {
+      // The sweep is the pro edition's only producer of this record and runs
+      // `cron(0 22 ? * MON-FRI *)` -- weekdays only. At the previous 24h TTL a
+      // Friday write expired on Saturday and the next write was Monday, so the
+      // record spent the weekend past its expiry. DynamoDB returns expired items
+      // until physical deletion but bounds that only at "typically within 48
+      // hours", which made the weekend feed non-deterministic rather than merely
+      // stale. This assertion fails against a 24h TTL: 24 is not > 72.
+      await putTrending('2025-11-01', []);
+
+      const written = mockPutItem.mock.calls[0]![0] as { ttl: number };
+      const lifetimeHours = (written.ttl - Math.floor(Date.now() / 1000)) / 3600;
+      expect(lifetimeHours).toBeGreaterThan(LONGEST_SCHEDULED_GAP_HOURS);
+    });
+
+    it('leaves headroom for a market holiday and one failed sweep', async () => {
+      // A Monday holiday stretches the gap to Friday -> Tuesday (96h); a
+      // Thursday-and-Friday closure next to a weekend gives Wednesday -> Monday
+      // (120h); one failed sweep on top of that is 144h. The cron fires on those
+      // days but recomputeTrending writes nothing when no ticker produced a
+      // DAILY aggregate, so a scheduled run is not the same as a write.
+      await putTrending('2025-11-01', []);
+
+      const written = mockPutItem.mock.calls[0]![0] as { ttl: number };
+      const lifetimeHours = (written.ttl - Math.floor(Date.now() / 1000)) / 3600;
+      expect(lifetimeHours).toBeGreaterThanOrEqual(144);
+    });
+
+    it('exports the TTL so the schedule and the expiry can be compared', () => {
+      expect(TRENDING_TTL_SECONDS / 3600).toBeGreaterThan(LONGEST_SCHEDULED_GAP_HOURS);
     });
   });
 
@@ -83,6 +123,51 @@ describe('TrendingRepository', () => {
       const result = await getLatestTrending();
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('claimTrendingRecompute', () => {
+    beforeEach(() => {
+      mockSend.mockReset();
+    });
+
+    it('claims the lease when no other worker holds it', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const claimed = await claimTrendingRecompute('2025-11-01', '2025-11-01T09:50:00.000Z');
+
+      expect(claimed).toBe(true);
+      const input = (mockSend.mock.calls[0]![0] as { input: Record<string, unknown> }).input;
+      expect(input.ConditionExpression).toBe(
+        'attribute_not_exists(#lease) OR #lease < :staleBefore',
+      );
+      expect(input.Key).toEqual({ pk: 'TRENDING#daily', sk: 'DATE#2025-11-01' });
+    });
+
+    it('declines when another worker already holds the lease', async () => {
+      // This is the case the lease exists for: many workers read the same stale
+      // record before the first write lands, and without mutual exclusion each
+      // one starts a full GSI pass.
+      const err = new Error('The conditional request failed');
+      err.name = 'ConditionalCheckFailedException';
+      mockSend.mockRejectedValueOnce(err);
+
+      await expect(claimTrendingRecompute('2025-11-01', '2025-11-01T09:50:00.000Z')).resolves.toBe(
+        false,
+      );
+    });
+
+    it('fails closed on an unexpected error rather than letting every worker through', async () => {
+      // Throttling is the case that matters: a lease write failing under load
+      // means the table is already struggling, and letting ~500 workers each
+      // start a full GSI pass would amplify the outage the lease prevents.
+      // Nothing is lost -- the next message retries, and runSweep recomputes
+      // unconditionally without a lease at the end of every sweep.
+      mockSend.mockRejectedValueOnce(new Error('ProvisionedThroughputExceededException'));
+
+      await expect(claimTrendingRecompute('2025-11-01', '2025-11-01T09:50:00.000Z')).resolves.toBe(
+        false,
+      );
     });
   });
 });

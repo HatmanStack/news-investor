@@ -12,7 +12,7 @@ Model: DistilRoBERTa fine-tuned on financial news sentiment
 import logging
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from model_onnx import analyze_sentiment, get_model_info
@@ -53,7 +53,7 @@ class SentimentRequest(BaseModel):
 
     @field_validator("text")
     @classmethod
-    def text_not_empty(cls, v):
+    def text_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("Text cannot be empty or whitespace only")
         return v
@@ -88,7 +88,7 @@ class BatchSentimentRequest(BaseModel):
 
     @field_validator("texts")
     @classmethod
-    def texts_not_empty(cls, v):
+    def texts_not_empty(cls, v: list[str]) -> list[str]:
         for text in v:
             if not text or not text.strip():
                 raise ValueError("All texts must be non-empty")
@@ -114,7 +114,7 @@ class HealthResponse(BaseModel):
 
 
 @app.post("/sentiment", response_model=SentimentResponse, tags=["Sentiment Analysis"])
-async def analyze_text_sentiment(request: SentimentRequest):
+async def analyze_text_sentiment(request: SentimentRequest) -> SentimentResponse:
     """
     Analyze sentiment of financial text.
 
@@ -168,7 +168,9 @@ async def analyze_text_sentiment(request: SentimentRequest):
     response_model=BatchSentimentResponse,
     tags=["Sentiment Analysis"],
 )
-async def analyze_batch_sentiment(request: BatchSentimentRequest):
+async def analyze_batch_sentiment(
+    request: BatchSentimentRequest,
+) -> BatchSentimentResponse:
     """
     Analyze sentiment for multiple texts in batch (max 10 texts).
 
@@ -222,7 +224,7 @@ async def analyze_batch_sentiment(request: BatchSentimentRequest):
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check():
+async def health_check() -> HealthResponse:
     """
     Health check endpoint.
 
@@ -242,14 +244,16 @@ async def health_check():
                 "cache_dir": "/tmp/models",
                 "max_length": "512",
                 "device": "cpu",
-                "loaded": "true"
+                "loaded": true
             }
         }
         ```
     """
     try:
         model_info = get_model_info()
-        model_loaded = model_info["loaded"]
+        # `loaded` is the one non-string entry in model_info; bool() is identity
+        # at runtime and narrows str | bool to the bool HealthResponse declares.
+        model_loaded = bool(model_info["loaded"])
 
         return HealthResponse(
             status="healthy", model_loaded=model_loaded, model_info=model_info
@@ -263,7 +267,7 @@ async def health_check():
 
 
 @app.get("/", tags=["Info"])
-async def root():
+async def root() -> dict[str, str | dict[str, str]]:
     """
     Root endpoint with API information.
     """
@@ -284,7 +288,7 @@ async def root():
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Global exception handler for uncaught errors.
     """

@@ -1,0 +1,10 @@
+{
+  "measured": "community tree, 2026-07-28: 44.36 br / 50.86 fn / 48.50 ln / 48.79 st",
+  "why_a_separate_file": "Community floors. The sync removes the auth screens, the tier context and components, notes, alerts, watchlist sync, annotations and diagnostics; what is left is covered slightly less densely than the pro tree, so the pro floors (49/57/55/55) fail here. Same ratchet convention: ~1 point under the measured actual. Re-measure with .sync/sync.sh --stage-only and run the suite there -- CI's community-build job does exactly that on every pull request.",
+  "global": {
+    "branches": 43,
+    "functions": 49,
+    "lines": 47,
+    "statements": 47
+  }
+}

@@ -3,6 +3,8 @@
  * Helpers for creating consistent Lambda responses with CORS headers
  */
 
+import { getRequestOrigin } from './requestContext.util.js';
+
 /**
  * API Gateway response structure
  */
@@ -10,23 +12,6 @@ export interface APIGatewayResponse {
   statusCode: number;
   headers: Record<string, string>;
   body: string;
-}
-
-/**
- * Origin of the request currently being handled.
- *
- * Module-level rather than threaded through every response helper: there are
- * ~32 call sites and a Lambda container handles one invocation at a time, so a
- * per-invocation value is both safe and far less invasive. The router sets it
- * on entry.
- */
-let currentRequestOrigin: string | undefined;
-
-/**
- * Record the requesting origin for this invocation. Called by the router.
- */
-export function setRequestOrigin(origin: string | undefined): void {
-  currentRequestOrigin = origin;
 }
 
 /**
@@ -41,8 +26,24 @@ export function setRequestOrigin(origin: string | undefined): void {
  * With a list configured, the request's own origin is echoed back when it is
  * allowed. Callers from a disallowed origin get the first configured origin,
  * which their browser then blocks — the correct outcome.
+ *
+ * The requesting origin comes from the AsyncLocalStorage request context in
+ * `requestContext.util.ts`, populated by whichever entry point wrapped the
+ * invocation in `runWithContext`. It used to be a module-level variable set by
+ * a separate `setRequestOrigin()` call, documented as made by "the router" —
+ * singular. This bundle has more than one HTTP entry point, one of them never
+ * made the call, and every response it built therefore fell through to
+ * `allowList[0]` no matter who asked. Every entry point already calls
+ * `runWithContext`, so reading the origin out of the context they build anyway
+ * removes the separate step there was to forget.
+ *
+ * Outside a request context — a direct Lambda invocation, an SQS record, a
+ * scheduled event — this reads undefined, which is the same answer as an HTTP
+ * request that sent no Origin header.
  */
 function resolveAllowedOrigin(): { origin: string | null; varyOnOrigin: boolean } {
+  const currentRequestOrigin = getRequestOrigin();
+
   const configured = process.env.ALLOWED_ORIGINS || '*';
 
   if (configured === '*') return { origin: '*', varyOnOrigin: false };

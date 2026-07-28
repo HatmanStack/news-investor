@@ -6,6 +6,11 @@ dist/
 .expo/
 coverage/
 backend/coverage/
+# pytest --cov writes this SQLite file to the repo root, and `npm run check`
+# now runs pytest with coverage, so every contributor produces one.
+.coverage
+# scripts/setup-python.sh creates this when no virtualenv is active.
+.venv/
 backend/samconfig.toml
 .eslintrc.js
 backend/.aws-sam/
@@ -17,3 +22,8 @@ backend/bin/sam
 .serena/
 ministack-data/
 dist-e2e/
+
+# Internal planning seed for the next roadmap. Also listed in
+# .sync/config.json exclude_paths — sync.sh rsyncs the working tree and never
+# consults .gitignore, so ignoring it here alone would still publish it.
+docs/next-roadmap-seed.md

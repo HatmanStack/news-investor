@@ -12,8 +12,8 @@ Cross-platform news-driven stock sentiment analysis and market predictions. Reac
 ```bash
 git clone https://github.com/HatmanStack/news-investor.git
 cd news-investor
-npm install --legacy-peer-deps
-make ministack            # Start MiniStack DynamoDB
+make setup                 # Python toolchain + npm install --legacy-peer-deps
+make ministack             # Start MiniStack DynamoDB
 make test-e2e              # Verify setup
 npm start                  # Expo dev server
 ```
@@ -40,12 +40,13 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 
 ### Testing
 
-| Command                | Description                                                     |
-| ---------------------- | --------------------------------------------------------------- |
-| `npm test`             | Frontend tests                                                  |
-| `npm run test:backend` | Backend unit tests (Jest + ESM)                                 |
-| `npm run test:e2e`     | E2E tests (requires MiniStack)                                  |
-| `npm run check`        | Full CI: all lint + type-check + all tests + console-call check |
+| Command                | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `npm test`             | Frontend tests                                                 |
+| `npm run test:backend` | Backend unit tests (Jest + ESM)                                |
+| `npm run test:e2e`     | E2E tests (requires MiniStack)                                 |
+| `npm run test:python`  | Python tests (picks the right interpreter)                     |
+| `npm run check`        | The local gate; `make check-full` adds E2E, lychee, shellcheck |
 
 ### Code Quality
 
@@ -62,14 +63,17 @@ Press `a` (Android), `i` (iOS), or `w` (Web) in the terminal, or scan the QR cod
 
 ### Makefile
 
-| Target                 | Description                      |
-| ---------------------- | -------------------------------- |
-| `make setup`           | `npm install --legacy-peer-deps` |
-| `make ministack`       | Start MiniStack DynamoDB         |
-| `make ministack-stop`  | Stop MiniStack                   |
-| `make test-e2e`        | Run E2E tests                    |
-| `make lint`            | Run all linters                  |
-| `make test`            | Full check (`npm run check`)     |
+| Target                | Description                                                |
+| --------------------- | ---------------------------------------------------------- |
+| `make setup`          | `make setup-python` + `npm install --legacy-peer-deps`     |
+| `make setup-python`   | Python toolchain into `./.venv` (or the active virtualenv) |
+| `make dev`            | `make setup` + `make ministack` — one-step local setup     |
+| `make ministack`      | Start MiniStack DynamoDB                                   |
+| `make ministack-stop` | Stop MiniStack                                             |
+| `make test-e2e`       | Run E2E tests                                              |
+| `make lint`           | Run all linters                                            |
+| `make test`           | `npm run check`                                            |
+| `make check-full`     | `npm run check` + E2E, lychee, shellcheck, vulture         |
 
 ### Backend Deployment
 
@@ -87,22 +91,28 @@ Monorepo (npm workspaces): `frontend/` (Expo/React Native) + `backend/` (AWS Lam
 - **Frontend**: Expo Router file-based routing, React Native Paper UI, TanStack Query, SQLite (native) / localStorage (web)
 - **Backend**: Node.js Lambda (news, sentiment, predictions) + Python Lambda (stock data via yfinance), DynamoDB single-table design, API Gateway
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the sentiment pipeline and prediction model.
-See [docs/API.md](docs/API.md) for endpoints, DynamoDB schema, and environment variables.
+### Documentation
+
+| Document                                     | Covers                                                               |
+| -------------------------------------------- | -------------------------------------------------------------------- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Sentiment pipeline, prediction model, per-subsystem design, file map |
+| [docs/API.md](docs/API.md)                   | Endpoints, DynamoDB schema, environment variables                    |
+| [CONTRIBUTING.md](CONTRIBUTING.md)           | Setup, the local gate, commit conventions, PR flow                   |
+| [CHANGELOG.md](CHANGELOG.md)                 | Release history                                                      |
 
 ## Tech Stack
 
-| Layer      | Technology                                                                   |
-| ---------- | ---------------------------------------------------------------------------- |
-| Core       | React Native 0.81.5, Expo ~54.0.23, TypeScript 5.9.2                         |
-| Navigation | Expo Router ~6.0.14 (file-based)                                             |
-| UI         | React Native Paper 5.14.5 (Material Design 3)                                |
-| State      | React Context + TanStack Query 5.90.7                                        |
-| Database   | Expo SQLite 16.0.9 (native) / localStorage (web)                             |
-| Backend    | AWS Lambda (Node.js 24.x, Python 3.13) + API Gateway + DynamoDB              |
-| APIs       | yfinance (stock data), Finnhub (news) via Lambda                             |
-| ML         | Browser-based ensemble logistic regression + three-signal sentiment pipeline |
-| Testing    | Jest ^30.3.0 + React Native Testing Library + pytest                         |
+| Layer      | Technology                                                                          |
+| ---------- | ----------------------------------------------------------------------------------- |
+| Core       | React Native 0.81.5, Expo ~54.0.23, TypeScript 5.9.2                                |
+| Navigation | Expo Router ~6.0.14 (file-based)                                                    |
+| UI         | React Native Paper 5.14.5 (Material Design 3)                                       |
+| State      | React Context + TanStack Query 5.91.2                                               |
+| Database   | Expo SQLite 16.0.9 (native) / localStorage (web)                                    |
+| Backend    | AWS Lambda (Node.js 24.x, Python 3.13) + API Gateway + DynamoDB                     |
+| APIs       | yfinance (stock data), Finnhub (news) via Lambda                                    |
+| ML         | Server-side logistic regression (walk-forward CV) + three-signal sentiment pipeline |
+| Testing    | Jest ^30.3.0 + React Native Testing Library + pytest                                |
 
 ## License
 

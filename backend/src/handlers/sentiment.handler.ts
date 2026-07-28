@@ -180,20 +180,21 @@ export async function getSentimentResults(
   endDate: string | null;
   dailySentiment: DailySentiment[];
   cached: boolean;
+  // Every horizon is optional — see the per-horizon suppression below.
   predictions?: {
-    nextDay: { direction: 'up' | 'down'; probability: number };
+    nextDay?: { direction: 'up' | 'down'; probability: number };
     twoWeek?: { direction: 'up' | 'down'; probability: number };
     oneMonth?: { direction: 'up' | 'down'; probability: number };
   };
 }> {
   logger.info('getSentimentResults called', { ticker, startDate, endDate });
 
-  // Fetch sentiments and articles in parallel for THIS single ticker. Both
-  // queries are required to render the response (sentiment scores joined with
-  // article metadata), so Promise.all is correct here — failure of either
-  // query should fail the request rather than degrade silently.
+  // Fetch sentiments (date-filtered) and articles in parallel for THIS single
+  // ticker. Both queries are required to render the response (sentiment scores
+  // joined with article metadata), so Promise.all is correct here — failure of
+  // either query should fail the request rather than degrade silently.
   const [allSentiments, allArticles] = await Promise.all([
-    SentimentCacheRepository.querySentimentsByTicker(ticker),
+    SentimentCacheRepository.querySentimentsByTicker(ticker, { startDate, endDate }),
     NewsCacheRepository.queryArticlesByTicker(ticker),
   ]);
   logger.info('Fetched sentiments and articles', {
@@ -234,17 +235,20 @@ export async function getSentimentResults(
     const latestAggregate = await DailySentimentAggregateRepository.getLatestDailyAggregate(
       ticker.toUpperCase(),
     );
-    if (
-      latestAggregate &&
-      latestAggregate.nextDayDirection &&
-      latestAggregate.nextDayProbability !== undefined
-    ) {
-      predictions = {
-        nextDay: {
-          direction: latestAggregate.nextDayDirection,
-          probability: latestAggregate.nextDayProbability,
-        },
-        // Only include twoWeek if both direction and probability are defined
+    if (latestAggregate) {
+      // Each horizon stands on its own. The 1-day horizon used to be guaranteed
+      // present, so gating the whole payload on it was harmless; it is now
+      // suppressed independently when it fails its CV floor, and gating on it
+      // would discard a 14-day and 30-day forecast the model DID validate.
+      const horizons = {
+        ...(latestAggregate.nextDayDirection && latestAggregate.nextDayProbability !== undefined
+          ? {
+              nextDay: {
+                direction: latestAggregate.nextDayDirection,
+                probability: latestAggregate.nextDayProbability,
+              },
+            }
+          : {}),
         ...(latestAggregate.twoWeekDirection && latestAggregate.twoWeekProbability !== undefined
           ? {
               twoWeek: {
@@ -253,7 +257,6 @@ export async function getSentimentResults(
               },
             }
           : {}),
-        // Only include oneMonth if both direction and probability are defined
         ...(latestAggregate.oneMonthDirection && latestAggregate.oneMonthProbability !== undefined
           ? {
               oneMonth: {
@@ -263,6 +266,10 @@ export async function getSentimentResults(
             }
           : {}),
       };
+
+      // Still undefined rather than {} when every horizon is withheld, so the
+      // client distinguishes "no forecast" from "a forecast with no horizons".
+      if (Object.keys(horizons).length > 0) predictions = horizons;
     }
   } catch (predError) {
     logger.error('Error fetching predictions', predError);
@@ -345,11 +352,11 @@ export const handleArticleSentimentRequest = withErrorHandling(
 
     logger.info('handleArticleSentimentRequest', { ticker, startDate, endDate });
 
-    // Fetch sentiments and articles for THIS single ticker. Both queries are
-    // required to join sentiment scores with article metadata; Promise.all is
-    // correct here.
+    // Fetch sentiments (date-filtered) and articles for THIS single ticker.
+    // Both queries are required to join sentiment scores with article
+    // metadata; Promise.all is correct here.
     const [allSentiments, allArticles] = await Promise.all([
-      SentimentCacheRepository.querySentimentsByTicker(ticker),
+      SentimentCacheRepository.querySentimentsByTicker(ticker, { startDate, endDate }),
       NewsCacheRepository.queryArticlesByTicker(ticker),
     ]);
 

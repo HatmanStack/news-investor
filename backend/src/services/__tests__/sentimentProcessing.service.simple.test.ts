@@ -46,6 +46,9 @@ jest.unstable_mockModule('../aspectAnalysis.service.js', () => ({
 }));
 jest.unstable_mockModule('../mlSentiment.service.js', () => ({
   getMlSentiment: jest.fn<(...args: unknown[]) => Promise<number>>().mockResolvedValue(0.5),
+  openMlCircuitGate: jest
+    .fn<(...args: unknown[]) => Promise<unknown>>()
+    .mockResolvedValue({ isOpen: () => false, markOpen: () => {} }),
 }));
 jest.unstable_mockModule('../signalScore.service.js', () => ({
   calculateSignalScoresBatch: jest.fn<(...args: unknown[]) => unknown[]>().mockReturnValue([]),

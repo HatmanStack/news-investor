@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# sync-leak-audit.sh — Simulate a sync locally and scan the output for pro-only references.
+# sync-leak-audit.sh — Stage a community tree locally and scan it for pro-only references.
 #
-# Catches leaks before they reach the community repo by replicating the sync
-# logic (rsync + exclusions + overlays) into a temp directory and scanning for
-# patterns that should never appear in the community edition.
+# Catches leaks before they reach the community repo: it asks .sync/sync.sh for
+# the exact tree the sync would publish, then scans that tree for patterns that
+# should never appear in the community edition.
+#
+# The staging is delegated rather than reimplemented. This script used to carry
+# its own copy of the rsync/overlay/removal logic under a comment asserting it
+# was "the same as sync.sh", and it was not: sync.sh had ten excludes this did
+# not, so the audit passed on a tree the sync would never produce. Two copies of
+# a rule cannot be kept in step by a comment. `sync.sh --stage-only` is now the
+# only implementation, and a change to the sync reaches this audit by
+# construction.
 #
 # Usage:
 #   ./scripts/sync-leak-audit.sh
@@ -16,6 +24,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG="$REPO_ROOT/.sync/config.json"
+SYNC="$REPO_ROOT/.sync/sync.sh"
 
 # ---------------------------------------------------------------------------
 # Prerequisites
@@ -23,121 +32,68 @@ CONFIG="$REPO_ROOT/.sync/config.json"
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Required command not found: $1" >&2; exit 1; }; }
 require_cmd jq
 require_cmd rsync
+# sync.sh runs .sync/verify-imports.mjs as part of staging. Named here so a
+# machine without node fails on this line rather than three steps in.
+require_cmd node
 
 if [[ ! -f "$CONFIG" ]]; then
   echo "Error: .sync/config.json not found at $CONFIG" >&2
   exit 1
 fi
 
+if [[ ! -x "$SYNC" ]]; then
+  echo "Error: .sync/sync.sh not found or not executable at $SYNC" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Temp directory with cleanup trap
 # ---------------------------------------------------------------------------
-TEMP_DIR=""
+TEMP_ROOT=""
 cleanup() {
-  if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
-    rm -rf "$TEMP_DIR"
+  if [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]]; then
+    rm -rf "$TEMP_ROOT"
   fi
 }
 trap cleanup EXIT
 
-TEMP_DIR="$(mktemp -d)"
-echo "==> Simulating sync into $TEMP_DIR"
+# A subdirectory, because --stage-only requires an empty-or-absent target and
+# mktemp -d hands back a directory that already exists.
+TEMP_ROOT="$(mktemp -d)"
+TEMP_DIR="$TEMP_ROOT/community"
 
 # ---------------------------------------------------------------------------
-# Parse config.json
+# Step 1: stage the community tree
+#
+# --stage-only performs sync.sh steps 2-5 and no git operation of any kind, so
+# it is safe to point at a temp directory. Its own integrity checks (excluded
+# path present, pro-only file at an unexpected path, credential-shaped string,
+# dangling relative import) run here too; this script's scans are additional,
+# not a replacement.
 # ---------------------------------------------------------------------------
-mapfile -t EXCLUDE_PATHS < <(jq -r '.exclude_paths[]' "$CONFIG")
-
-# Build rsync exclude list (same as sync.sh)
-RSYNC_EXCLUDES=(
-  --exclude '.git'
-  --exclude 'node_modules'
-  --exclude '.sync'
-  --exclude '__pycache__'
-  --exclude '.aws-sam'
-  --exclude '.venv'
-  --exclude '*.pyc'
-)
-for path in "${EXCLUDE_PATHS[@]}"; do
-  RSYNC_EXCLUDES+=( --exclude "$path" )
-done
+"$SYNC" --stage-only "$TEMP_DIR"
 
 # ---------------------------------------------------------------------------
-# Step 1: rsync private → temp (same as sync.sh Step 2)
+# Step 2: Scan for pro-only patterns
 # ---------------------------------------------------------------------------
-echo "==> Running rsync..."
-rsync -a "${RSYNC_EXCLUDES[@]}" "$REPO_ROOT/" "$TEMP_DIR/"
-
-# ---------------------------------------------------------------------------
-# Step 2: Apply overlay files (same as sync.sh Step 3)
-# ---------------------------------------------------------------------------
-echo "==> Applying overlay files..."
-jq -r '.overlay_mappings | to_entries[] | "\(.key)\t\(.value)"' "$CONFIG" | while IFS=$'\t' read -r src dst; do
-  src_path="$REPO_ROOT/$src"
-  dst_path="$TEMP_DIR/$dst"
-  if [[ -f "$src_path" ]]; then
-    mkdir -p "$(dirname "$dst_path")"
-    cp "$src_path" "$dst_path"
-  fi
-done
-
-# ---------------------------------------------------------------------------
-# Step 3: Remove excluded paths that rsync may have copied (same as sync.sh Step 4)
-# ---------------------------------------------------------------------------
-echo "==> Removing excluded paths..."
-mapfile -t OVERLAY_DESTS < <(jq -r '.overlay_mappings | to_entries[] | .value' "$CONFIG")
-for path in "${EXCLUDE_PATHS[@]}"; do
-  is_overlay=false
-  for dest in "${OVERLAY_DESTS[@]}"; do
-    if [[ "$path" == "$dest" ]]; then
-      is_overlay=true
-      break
-    fi
-  done
-  if [[ "$is_overlay" == true ]]; then
-    continue
-  fi
-  target="$TEMP_DIR/$path"
-  if [[ -e "$target" ]]; then
-    rm -rf "$target"
-  fi
-done
-
-# Clean tier subdirectories (same special case as sync.sh)
-find "$TEMP_DIR/frontend/src/features/tier" -mindepth 1 -not -name 'index.ts' -delete 2>/dev/null || true
-
-# ---------------------------------------------------------------------------
-# Step 4: Scan for pro-only patterns
-# ---------------------------------------------------------------------------
+echo ""
 echo "==> Scanning for pro-only references..."
 
-LEAKED_FILES=()
 LEAKED_CONTENT=()
 
-# --- File existence checks ---
-
-# Derive pro-only file/directory patterns from config.json exclude_paths.
-# Each exclude_path that should not appear in the community edition is checked.
-# We skip paths that are overlay destinations (overlays replace them intentionally).
-# OVERLAY_DESTS already populated at line 88 — reused here.
-for exc_path in "${EXCLUDE_PATHS[@]}"; do
-  # Skip overlay destinations — they get replaced, not removed
-  is_overlay=false
-  for dest in "${OVERLAY_DESTS[@]}"; do
-    if [[ "$exc_path" == "$dest" ]]; then
-      is_overlay=true
-      break
-    fi
-  done
-  if [[ "$is_overlay" == true ]]; then
-    continue
-  fi
-
-  target="$TEMP_DIR/$exc_path"
-  if [[ -e "$target" ]]; then
-    LEAKED_FILES+=("$exc_path")
-  fi
-done
+# There is deliberately no file-existence check here any more.
+#
+# This script used to re-test every exclude_paths entry against the tree with
+# `[[ -e ]]`, which was a fourth copy of a rule that sync.sh already applies
+# three times (rsync exclude, the Step 4 removal, the Step 5 verification) --
+# and it carried the same defect as the others: `[[ -e ]]` suppresses pathname
+# expansion, so a glob entry was reported clean without being looked at. Step 5
+# Check 1 has just run over this exact tree, glob-aware, as part of
+# --stage-only. A fourth literal copy adds no coverage and one more place to
+# get it wrong.
+#
+# What remains below is the part that is genuinely this script's own: content
+# patterns, which sync.sh does not scan for.
 
 # --- Content pattern checks ---
 
@@ -185,12 +141,42 @@ for entry in "${CONTENT_PATTERNS[@]}"; do
 
     # Strip temp dir prefix
     relative="${match_line#"$TEMP_DIR"/}"
+
+    # Skip CHANGELOG.md. These patterns exist to catch pro *source* and pro
+    # *configuration* reaching the community tree; a changelog is neither. It
+    # is a historical record of what shipped, and CLAUDE.md — the "Changelog"
+    # bullet under "Versioning & Releases", which reads "Tag pro-only features
+    # with **[Pro]**" — makes naming pro features in it the project convention
+    # precisely so community users can see what the pro edition offers. Naming
+    # a capability in prose is not publishing its implementation.
+    #
+    # The VITE_COGNITO_* hits are admin configuration key *names*, not values,
+    # for a workspace that is wholly excluded — the same judgement the
+    # EXPO_PUBLIC_ skips above already make, for a prefix this list never
+    # caught up with.
+    #
+    # Scoped to this one filename on purpose. Everything else that reaches the
+    # community tree stays under the audit, because it describes how the
+    # software works rather than what shipped. Note that "everything else"
+    # means the STAGED tree: README.md and CLAUDE.md are audited in their
+    # overlay form, since that is what the community edition receives -- a pro
+    # reference added to the pro README is invisible here, and correctly so,
+    # because it never syncs. Verified both ways: the same
+    # `docs/PRO_FEATURES_ROADMAP.md` reference passes in CHANGELOG.md, and
+    # fails in docs/FINNHUB_WEBHOOK.md and in .sync/overlays/README.md.
+    #
+    # Excluding CHANGELOG.md from the sync instead is not available —
+    # sync-public.yml reads it to build the community release notes.
+    # grep -rn emits "<path>:<line>:<text>", so compare the path field only.
+    if [[ "${relative%%:*}" == "CHANGELOG.md" ]]; then
+      continue
+    fi
     LEAKED_CONTENT+=("[$description] $relative")
   done <<< "$matches"
 done
 
 # ---------------------------------------------------------------------------
-# Step 5: Report results
+# Step 3: Report results
 # ---------------------------------------------------------------------------
 echo ""
 echo "=============================="
@@ -198,15 +184,6 @@ echo "  Sync Leak Audit Report"
 echo "=============================="
 
 HAS_LEAKS=false
-
-if [[ ${#LEAKED_FILES[@]} -gt 0 ]]; then
-  HAS_LEAKS=true
-  echo ""
-  echo "Leaked Files (${#LEAKED_FILES[@]}):"
-  for f in "${LEAKED_FILES[@]}"; do
-    echo "  - $f"
-  done
-fi
 
 if [[ ${#LEAKED_CONTENT[@]} -gt 0 ]]; then
   HAS_LEAKS=true

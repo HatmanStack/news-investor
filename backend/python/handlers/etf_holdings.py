@@ -5,6 +5,7 @@ Handles GET /etf-holdings requests.
 
 import os
 import re
+from typing import Any
 
 from services.etf_holdings_service import get_etf_holdings
 from typedefs import ApiGatewayEvent, ApiGatewayResponse
@@ -18,7 +19,10 @@ logger = get_structured_logger(__name__)
 _dynamodb = None
 
 
-def _get_table():
+# -> Any because boto3 ships no stubs and is scoped out in pyproject.toml's
+# overrides block. Annotating the return keeps disallow_untyped_defs honest
+# without claiming a precision the ecosystem does not offer.
+def _get_table() -> Any:
     """Get DynamoDB table resource (lazy initialization)."""
     global _dynamodb
     if _dynamodb is None:

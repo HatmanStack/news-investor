@@ -12,6 +12,7 @@ Parameters:
     Type: String
     Description: Alpha Vantage API key for historical news (optional fallback)
     Default: ''
+    NoEcho: true
 
   # SECURITY NOTE: Default '*' is intentional for this personal/demo app.
   # With no authentication, CORS provides no security benefit (nothing to protect
@@ -44,34 +45,6 @@ Parameters:
     MaxValue: 900
     Description: Timeout for stocks endpoint
 
-  NewsMemory:
-    Type: Number
-    Default: 512
-    MinValue: 128
-    MaxValue: 10240
-    Description: Memory for news endpoint (I/O bound)
-
-  NewsTimeout:
-    Type: Number
-    Default: 30
-    MinValue: 1
-    MaxValue: 900
-    Description: Timeout for news endpoint
-
-  SearchMemory:
-    Type: Number
-    Default: 256
-    MinValue: 128
-    MaxValue: 10240
-    Description: Memory for search endpoint (Lightweight)
-
-  SearchTimeout:
-    Type: Number
-    Default: 10
-    MinValue: 1
-    MaxValue: 900
-    Description: Timeout for search endpoint
-
   SentimentMemory:
     Type: Number
     Default: 1536
@@ -86,19 +59,35 @@ Parameters:
     MaxValue: 900
     Description: Timeout for sentiment endpoint
 
-  PredictMemory:
+  # Reserved concurrency is a bulkhead, and it cuts both ways: the value is
+  # simultaneously a guarantee to the function and a hard ceiling on it, and it
+  # is subtracted from the account's unreserved pool. The two values below sum
+  # to 75 against an account default limit of 1,000, of which AWS requires at
+  # least 100 stay unreserved.
+  ReactStocksReservedConcurrency:
     Type: Number
-    Default: 2048
-    MinValue: 128
-    MaxValue: 10240
-    Description: Memory for predict endpoint (ML Training)
-
-  PredictTimeout:
-    Type: Number
-    Default: 120
-    MinValue: 1
+    Default: 50
+    MinValue: 0
     MaxValue: 900
-    Description: Timeout for predict endpoint
+    Description: >-
+      Reserved concurrent executions for the Node API Lambda. Both a floor and
+      a ceiling: this many executions are guaranteed to it and it can never
+      exceed them. The value is subtracted from the account's unreserved pool,
+      so the sum of every reservation in the account must stay well below the
+      account concurrency limit (1,000 by default, and at least 100 must remain
+      unreserved). Setting this to 0 does not mean "unlimited" -- it disables
+      the function entirely, throttling every invocation.
+
+  PythonStocksReservedConcurrency:
+    Type: Number
+    Default: 25
+    MinValue: 0
+    MaxValue: 900
+    Description: >-
+      Reserved concurrent executions for the Python stocks Lambda. Same
+      semantics as ReactStocksReservedConcurrency: floor and ceiling at once,
+      subtracted from the account's unreserved pool, and 0 disables the
+      function rather than uncapping it.
 
   ThrottlingBurstLimit:
     Type: Number
@@ -109,6 +98,23 @@ Parameters:
     Type: Number
     Default: 25
     Description: API Gateway steady-state rate limit (requests/second)
+
+  DetailedApiMetrics:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: >-
+      Emit per-route CloudWatch metrics for every route on the HTTP API.
+      Default false because of what it costs, not because per-route data is
+      unwanted: API Gateway bills detailed metrics as CloudWatch custom
+      metrics, roughly six per route (Count, 4xx, 5xx, Latency,
+      IntegrationLatency, DataProcessed), and this API has 15 routes. At
+      $0.30 per metric per month that is about $27/month for a stack whose
+      whole cost posture is PAY_PER_REQUEST. Stage-level Count/4xx/5xx/Latency
+      are emitted free regardless, and ApiServerErrorAlarm uses them. Turn it
+      on while investigating, then turn it back off.
 
   AlarmEmail:
     Type: String
@@ -121,6 +127,9 @@ Parameters:
 
 Conditions:
   HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+  # DetailedMetricsEnabled is a Boolean property, so the string parameter is
+  # resolved through !If rather than passed through and relied on to coerce.
+  HasDetailedApiMetrics: !Equals [!Ref DetailedApiMetrics, 'true']
 
 Globals:
   Function:
@@ -202,6 +211,20 @@ Resources:
       Tags:
         Project: news-investor
 
+  # Access logs for the HTTP API. There were none at all, so a 5xx that never
+  # reached a Lambda — a routing miss or an integration timeout — left no
+  # record anywhere.
+  #
+  # HTTP APIs (AWS::ApiGatewayV2::*) deliver access logs through a
+  # service-linked role and do not need the account-level
+  # AWS::ApiGateway::Account CloudWatchRole that REST APIs require. This
+  # template declares no v1 API Gateway resource, so none is added.
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-api-access'
+      RetentionInDays: 14 # matches the explicit Lambda log groups
+
   # API Gateway Stage
   ReactStocksApiStage:
     Type: AWS::ApiGatewayV2::Stage
@@ -209,9 +232,17 @@ Resources:
       ApiId: !Ref ReactStocksApi
       StageName: $default
       AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        # Deliberately no headers, no query string and no body.
+        # $context.identity.sourceIp is the only caller-identifying field and
+        # is required to attribute abuse.
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","routeKey":"$context.routeKey","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength","integrationErrorMessage":"$context.integrationErrorMessage","responseLatency":"$context.responseLatency"}
       DefaultRouteSettings:
         ThrottlingBurstLimit: !Ref ThrottlingBurstLimit
         ThrottlingRateLimit: !Ref ThrottlingRateLimit
+        DetailedMetricsEnabled: !If [HasDetailedApiMetrics, true, false]
 
   # Lambda Integration (Node.js - news, sentiment, predict)
   ReactStocksIntegration:
@@ -370,6 +401,13 @@ Resources:
       MemorySize: !Ref StocksMemory
       Timeout: !Ref StocksTimeout
       Description: Stock data API using yfinance (replaces Tiingo)
+      # The "cost bounded by Lambda concurrency" claim below and in CLAUDE.md
+      # had nothing behind it: no function in this stack declared a
+      # reservation, so a spike or a runaway loop could consume the account's
+      # entire concurrency pool. Deliberately no ProvisionedConcurrency: it
+      # bills continuously whether or not traffic arrives, against a stack that
+      # is PAY_PER_REQUEST throughout.
+      ReservedConcurrentExecutions: !Ref PythonStocksReservedConcurrency
       Environment:
         Variables:
           ALLOWED_ORIGINS: !Ref AllowedOrigins
@@ -405,6 +443,10 @@ Resources:
       MemorySize: !Ref SentimentMemory
       Timeout: !Ref SentimentTimeout
       Description: Backend proxy for Finnhub news and ML services
+      # See PythonStocksFunction above for the bulkhead rationale. Note this
+      # function also self-invokes for predictions, so a reservation of N caps
+      # the request path and its prediction fan-out together.
+      ReservedConcurrentExecutions: !Ref ReactStocksReservedConcurrency
       Environment:
         Variables:
           FINNHUB_API_KEY: !Ref FinnhubApiKey
@@ -474,6 +516,13 @@ Resources:
           Value: news-investor
 
   # CloudWatch Alarms
+  #
+  # Every FunctionName dimension is !Ref <LogicalId>, which returns the
+  # function name for AWS::Serverless::Function. Rebuilding the name with
+  # !Sub '${AWS::StackName}-api' is correct only while the string and the
+  # FunctionName property stay in step: a dimension naming a function the stack
+  # does not create does not error, it produces an alarm parked in
+  # INSUFFICIENT_DATA that reads as coverage and provides none.
 
   # Without this every alarm in this stack is decorative: it transitions to
   # ALARM in the console and notifies nothing.
@@ -484,6 +533,40 @@ Resources:
       TopicArn: !Ref CostAnomalySNSTopic
       Protocol: email
       Endpoint: !Ref AlarmEmail
+  # The API-wide 5xx signal the stack did not have. Until now the only
+  # indication of a failing API was the Lambda Errors alarm on the -api
+  # function, which cannot see a failure that never reached a Lambda:
+  # a routing miss or an integration timeout.
+  #
+  # Uses the stage-level dimension set (ApiId, Stage), which API Gateway emits
+  # for free — DetailedApiMetrics only adds the per-route breakdown, and this
+  # alarm works whether or not it is on.
+  ApiServerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        The HTTP API is returning server errors across the stage. Check the
+        access log group for the failing routeKey and integrationErrorMessage;
+        a 5xx here that does not correspond to a Lambda Errors datapoint is an
+        API Gateway-side failure rather than a handler failure.
+      MetricName: 5xx
+      Namespace: AWS/ApiGateway
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref ReactStocksApi
+        - Name: Stage
+          Value: $default
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+      OKActions:
+        - !Ref CostAnomalySNSTopic
+
   LambdaInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -492,7 +575,7 @@ Resources:
       Namespace: AWS/Lambda
       Dimensions:
         - Name: FunctionName
-          Value: !Sub '${AWS::StackName}-api'
+          Value: !Ref ReactStocksFunction
       Statistic: Sum
       Period: 86400 # 1 day
       EvaluationPeriods: 1
@@ -549,7 +632,7 @@ Resources:
       Namespace: AWS/Lambda
       Dimensions:
         - Name: FunctionName
-          Value: !Sub '${AWS::StackName}-api'
+          Value: !Ref ReactStocksFunction
       Statistic: Average
       Period: 300 # 5 minutes
       EvaluationPeriods: 3
@@ -567,7 +650,7 @@ Resources:
       Namespace: AWS/Lambda
       Dimensions:
         - Name: FunctionName
-          Value: !Sub '${AWS::StackName}-api'
+          Value: !Ref ReactStocksFunction
       Statistic: Sum
       Period: 300 # 5 minutes
       EvaluationPeriods: 2
@@ -585,11 +668,161 @@ Resources:
       Namespace: AWS/Lambda
       Dimensions:
         - Name: FunctionName
-          Value: !Sub '${AWS::StackName}-api'
+          Value: !Ref ReactStocksFunction
       Statistic: Sum
       Period: 300 # 5 minutes
       EvaluationPeriods: 1
       Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  # ------------------------------------------------------------
+  # Per-function alarms for the other two Lambdas
+  # ------------------------------------------------------------
+  #
+  # The four alarms above watch ${StackName}-api and nothing else, so
+  # python-stocks and calibration were unwatched. Calibration is EventBridge
+  # scheduled with no caller to notice a failure.
+  #
+  # Thresholds are chosen so that the smallest real failure of that function
+  # crosses them. "> 10 errors in 5 minutes" is right for a function serving
+  # request traffic and unreachable for one invoked once a week: a calibration
+  # run that fails throws exactly one error.
+
+  PythonStocksErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        Python stocks Lambda errors exceeded threshold. Same shape as the Node
+        API alarm: this function serves public request traffic, so a single
+        500 is not worth waking someone for.
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PythonStocksFunction
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  CalibrationErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        Weekly signal calibration failed. Threshold 0: one run per week, so one
+        error is the whole run. A failure leaves publisher reliability scores
+        frozen at last week's values, which degrades silently.
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SignalCalibrationFunction
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  PythonStocksThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Python stocks Lambda throttled - requests are being rejected before they run'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PythonStocksFunction
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  CalibrationThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Signal calibration Lambda throttled - the weekly run was starved of concurrency'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SignalCalibrationFunction
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  PythonStocksDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        Python stocks Lambda average duration exceeded 10s. Sized against
+        StocksTimeout, whose default is 30s: Duration can never exceed the
+        configured timeout, so a threshold at or above it could not fire.
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PythonStocksFunction
+      Statistic: Average
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 3
+      Threshold: 10000 # 10s average against a 30s timeout
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref CostAnomalySNSTopic
+
+  # Calibration gets no low-watermark Invocations alarm. CloudWatch caps an
+  # alarm's total evaluation window at one day (EvaluationPeriods x Period <=
+  # 86400) and this rule fires every 168 hours, so such an alarm would be in
+  # ALARM six days out of seven. Its failure-to-invoke signal is the AWS/Events
+  # FailedInvocations alarm below, which counts attempts EventBridge could not
+  # deliver -- a case that produces no Lambda Errors datapoint at all, because
+  # the function never ran.
+  #
+  # What it does NOT cover: a rule that stops firing at all. A rule set
+  # State: DISABLED, or deleted outright, attempts no delivery, so it emits no
+  # FailedInvocations datapoint any more than it emits Invocations. With the
+  # weekly interval exceeding the evaluation cap, nothing in this stack detects
+  # "the schedule silently stopped existing".
+
+  WeeklyCalibrationFailedInvocationsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        EventBridge could not invoke the signal calibration Lambda. Check that
+        WeeklyCalibrationPermission still grants events.amazonaws.com
+        lambda:InvokeFunction on the function.
+      MetricName: FailedInvocations
+      Namespace: AWS/Events
+      Dimensions:
+        # !Ref on AWS::Events::Rule returns the rule name. This rule sets no
+        # Name, so the name is CloudFormation-generated and cannot be written
+        # out by hand.
+        - Name: RuleName
+          Value: !Ref WeeklyCalibrationSchedule
+      Statistic: Sum
+      Period: 300 # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 0
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:

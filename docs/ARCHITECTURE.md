@@ -2,22 +2,27 @@
 
 ## Overview
 
-Browser-based ensemble prediction model fed by a three-signal sentiment pipeline.
+Server-side prediction model fed by a three-signal sentiment pipeline. No model
+is trained in the browser: the frontend gathers and renders data and asks the
+backend for a forecast.
 
 ```text
-Backend (Lambda)                          Frontend (Browser)
-┌──────────────────────────┐              ┌─────────────────────────────┐
-│ Article Processing:      │              │ useSentimentData()          │
-│  1. Event Classification │──DynamoDB──▶ │  ├─ Fetch & align data      │
-│  2. Signal Score         │   cache      │  ├─ Extract 3 signals       │
-│  3. Aspect Analysis      │              │  └─ Call prediction engine  │
-│  4. ML Sentiment (API)   │              │                             │
-│  5. Daily Aggregation    │              │ generateBrowserPredictions()│
-└──────────────────────────┘              │  ├─ Build feature matrices  │
-                                          │  ├─ Train logistic reg + CV │
-                                          │  ├─ Ensemble blend          │
-                                          │  └─ Return predictions      │
-                                          └─────────────────────────────┘
+Frontend (Browser)                        Backend (Lambda)
+┌────────────────────────────┐            ┌───────────────────────────────┐
+│ useSentimentData()         │            │ Article Processing:           │
+│  ├─ Fetch & align data     │◀─DynamoDB──│  1. Event Classification      │
+│  ├─ Extract 3 signals      │   cache    │  2. Signal Score              │
+│  └─ POST /predict ─────────┼──────────▶ │  3. Aspect Analysis           │
+│                            │            │  4. ML Sentiment (API)        │
+│ PredictionSummaryCard      │            │  5. Daily Aggregation         │
+│  ├─ Renders the horizons   │            ├───────────────────────────────┤
+│  │   the backend served    │◀───────────│ Prediction pipeline:          │
+│  └─ PredictionDisclaimer   │ predictions│  1. Forward-looking labels    │
+└────────────────────────────┘            │  2. Scale-free feature vector │
+                                          │  3. Train logistic regression │
+                                          │  4. Walk-forward CV / horizon │
+                                          │  5. Serve, suppress, cache    │
+                                          └───────────────────────────────┘
 ```
 
 ## Sentiment Pipeline (Backend)
@@ -105,98 +110,121 @@ Guards against zero total weight (falls back to `undefined`).
 
 File: `backend/src/utils/sentiment.util.ts`
 
-## Prediction Model (Frontend)
+## Prediction Model (Backend)
 
-### Ensemble Architecture
+Predictions are produced by `POST /predict` and nowhere else. The pipeline trains
+one logistic regression per ticker, validates it **per horizon** with
+walk-forward cross-validation, and serves only the horizons that clear the
+validation floor. Trained weights are cached in DynamoDB so the cost amortises
+across callers.
 
-| Horizon         | Model                      | Features | Min Data               | Strategy                       |
-| --------------- | -------------------------- | -------- | ---------------------- | ------------------------------ |
-| NEXT (1 day)    | Full + Price-only ensemble | 8 + 4    | 25 labels              | Blend by sentimentAvailability |
-| WEEK (10 days)  | Price-only                 | 4        | 10 independent samples | Subsampled every 10th          |
-| MONTH (21 days) | Price-only                 | 4        | 10 independent samples | Subsampled every 21st          |
+Hyperparameters are deliberately not restated here — read `MODEL_CONFIG` in
+`backend/src/types/prediction.types.ts`, which carries the current values and the
+reasoning for each.
 
-WEEK/MONTH use price-only because too few independent samples exist for sentiment features (overfit risk).
+### Labels
 
-### Feature Matrices
+`backend/src/services/featureEngineering.ts` labels day _i_ for horizon _h_ by
+comparing `close[i+h]` against `close[i]` against a ±`labelThreshold` band:
+`1` (up), `0` (down), or `null` — inside the noise band, or the outcome is not
+known yet. Labels are **per horizon**, so the three horizons carry different
+information.
 
-**Full model (8 features):**
+The last _h_ rows of any series necessarily carry `null` for horizon _h_.
+`prepare_training_data` (`backend/src/services/preprocessing.ts`) drops
+unlabelled rows per horizon, so each horizon trains on a different row count.
 
-| Index | Feature                | Source                            |
-| ----- | ---------------------- | --------------------------------- |
-| 0     | price_ratio_5d         | close[i] / close[i-5]             |
-| 1     | price_ratio_10d        | close[i] / close[i-10]            |
-| 2     | volume                 | Normalized volume                 |
-| 3     | event_impact           | Ordinal 0-1 from event type       |
-| 4     | aspect_score           | Daily avg aspect score            |
-| 5     | ml_score               | Daily avg ML score (0 if null)    |
-| 6     | sentiment_availability | % of days with ML data            |
-| 7     | volatility             | Rolling 10-day std dev of returns |
+### Feature Vector
 
-**Price-only model (4 features):**
+`buildBaseFeatureVector` in `backend/src/services/preprocessing.ts` is the single
+source of truth for feature order. Training and inference both go through it, so
+they cannot silently disagree about the layout.
 
-| Index | Feature         |
-| ----- | --------------- |
-| 0     | price_ratio_5d  |
-| 1     | price_ratio_10d |
-| 2     | volume          |
-| 3     | volatility      |
+| Group                  | Features                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| Price / volume (5)     | `intraday_range`, `overnight_gap`, `return_1d`, `return_5d`, `volume_ratio`                       |
+| Availability (1)       | `lookback_available`                                                                              |
+| Event one-hot (6)      | `event_earnings`, `event_ma`, `event_guidance`, `event_analyst`, `event_product`, `event_general` |
+| Sentiment (2)          | `aspect_score`, `ml_score`                                                                        |
+| Sentiment availability | `aspect_available`, `ml_available`                                                                |
 
-File: `frontend/src/ml/prediction/preprocessing.ts`
+The horizon is appended as one further feature at both training and inference,
+giving `MODEL_CONFIG.inputDim`.
 
-### Labels (Abnormal Returns)
+No absolute `open` / `high` / `low` / `close` / `volume` level appears, by design:
+keeping same-day open and close lets a linear model reconstruct the same-day
+return, and absolute levels are not comparable across a window in which the price
+drifts. The raw OHLCV values are still carried on `DailyFeatures` because the
+derived features are computed from them, and `mlSemantics.test.ts` enforces their
+exclusion from the vector structurally rather than by comment.
 
-Binary labels based on trend-relative performance, not raw direction:
+The availability flags are load-bearing rather than cosmetic: `0` is a valid
+neutral sentiment score, so without them a no-coverage day is indistinguishable
+from a heavily covered but neutral one.
 
-```text
-For each day i (starting from TREND_WINDOW=20):
-  expectedReturn = avgDailyReturn(trailing 20 days) * horizon
-  actualReturn = (close[i+horizon] - close[i]) / close[i]
-  label = 1 if actualReturn < expectedReturn else 0
-```
+### Training
 
-- 0 = outperformed recent trend
-- 1 = underperformed recent trend
+`backend/src/services/mlModel.ts` runs full-batch gradient descent on a
+class-weighted binary cross-entropy objective. It is not Adam — there is no
+momentum, no per-parameter scaling and no optimiser state.
 
-### Logistic Regression
+Weight initialisation is seeded from the ticker (`hashStringToSeed`), not from
+the clock, so retraining a ticker on the same data produces the same model. The
+resulting direction is cached for 24 hours, so two trainings on the same data
+must not disagree.
 
-Custom implementation matching scikit-learn behavior.
+`trainModel` returns `trainingAccuracy`, named to make clear it is a fit
+statistic and not a generalization estimate. It applies **no** accuracy gate.
 
-| Parameter          | Value                                       |
-| ------------------ | ------------------------------------------- |
-| Max iterations     | 2000                                        |
-| Learning rate      | 0.005                                       |
-| Regularization (C) | 1.0                                         |
-| Class weight       | balanced                                    |
-| Sample weights     | Exponential decay (halfLife = max(10, n/4)) |
-| Cross-validation   | k-fold, k = min(8, len(y))                  |
+### Validation and Suppression
 
-File: `frontend/src/ml/prediction/model.ts`
+`walkForwardValidate` runs an expanding-window CV per horizon on the
+**unnormalized** matrix — the scaler is fitted inside each fold on that fold's
+training slice, so no test-fold statistics leak into training. An embargo of
+`h - 1` rows separates the training slice from the test slice, because two rows
+whose label windows overlap share price movement.
 
-### Ensemble Blend (NEXT Horizon)
+`backend/src/services/pipeline.ts` holds the only accuracy gate in the pipeline.
+A horizon is **suppressed** when its mean walk-forward accuracy falls below
+`MIN_CV_ACCURACY`, or when it had too few rows to validate at all. A suppressed
+horizon is absent from the response — not filled in with a placeholder. If no
+horizon clears the floor, the pipeline returns nothing and the handler reports
+insufficient data.
 
-```text
-prediction = fullModel * sentimentAvailability + priceModel * (1 - sentimentAvailability)
-```
+A figure the model cannot stand behind is withheld rather than rendered, so
+seeing fewer than three horizons is normal rather than a fault. On a 90-day
+history window the 30-day horizon is suppressed by arithmetic rather than by
+luck: its embargo is 29 rows, so a fold needs 20 + 29 + 5 = 54 rows and that
+window yields roughly 30.
 
-`sentimentAvailability` = fraction of days where `mlScore !== null` (0 to 1).
-When no ML data exists, price-only model gets 100% weight.
+### Model Cache
 
-### F-Test Diagnostics
+Trained weights, the scaler, and the per-horizon CV accuracies are stored at
+`MODEL#{ticker}` / `WEIGHTS#d{days}` and reused for 24 hours. The training window
+is part of the sort key, so a model trained on one window is never served for
+another.
 
-ANOVA F-statistics logged for each feature vs binary labels (NEXT horizon only).
-Handles edge cases: `msw=0 && msb>0` → F=Infinity, p=0 (perfect separation).
+Three guards reject a cached model rather than serving it: it is older than the
+cache TTL; its weight-vector length does not match `MODEL_CONFIG.inputDim`,
+meaning the feature layout changed and the weights would misalign; or it carries
+no per-horizon CV accuracies, meaning it predates the per-horizon gate.
 
-File: `frontend/src/ml/prediction/prediction.service.ts`
+Files: `backend/src/handlers/prediction.handler.ts`,
+`backend/src/services/pipeline.ts`, `backend/src/services/featureEngineering.ts`,
+`backend/src/services/preprocessing.ts`, `backend/src/services/mlModel.ts`,
+`backend/src/types/prediction.types.ts`,
+`frontend/src/components/sentiment/PredictionSummaryCard.tsx`,
+`frontend/src/components/common/PredictionDisclaimer.tsx`
 
 ## Data Requirements
 
-| Constant                | Value   | Reason                                         |
-| ----------------------- | ------- | ---------------------------------------------- |
-| MIN_STOCK_DATA          | 46 days | TREND_WINDOW(20) + horizon(1) + MIN_LABELS(25) |
-| MIN_SENTIMENT_DATA      | 25 days | Minimum for model training                     |
-| MIN_LABELS_NEXT         | 25      | Minimum label count for 1-day horizon          |
-| MIN_INDEPENDENT_SAMPLES | 10      | For WEEK/MONTH subsampled horizons             |
-| TREND_WINDOW            | 20 days | Rolling baseline for abnormal return           |
+| Constant                   | Value   | Defined in                               | Reason                                                                |
+| -------------------------- | ------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| `MIN_SENTIMENT_DATA`       | 25 days | `frontend/src/constants/ml.constants.ts` | Below this the frontend does not spend a round trip asking to predict |
+| `MIN_DAYS_FOR_PREDICTIONS` | 29 days | `backend/src/constants/ml.constants.ts`  | News-cache backfill target before predictions are worth attempting    |
+| `MIN_CV_ACCURACY`          | 0.45    | `backend/src/services/pipeline.ts`       | Walk-forward CV floor a horizon must clear to be served               |
+| `CV_DEFAULTS.minTrainSize` | 20 rows | `backend/src/services/mlModel.ts`        | Rows the first fold trains on after the embargo is deducted           |
+| `CV_DEFAULTS.stepSize`     | 5 rows  | `backend/src/services/mlModel.ts`        | Fold step for the expanding window                                    |
 
 ## Sentiment Velocity
 
@@ -281,7 +309,6 @@ Files: `frontend/src/hooks/useDailyHistory.ts`, `frontend/src/components/heatmap
 
 The following features are available in [NewsInvestor Pro](https://github.com/HatmanStack/news-investor-pro):
 
-- **Model Diagnostics** — ML prediction feature importance percentages per horizon
 - **Comparative Sentiment** — Stock sentiment percentile ranking vs sector ETF top 10 holdings
 - **Email Reports** — Personalized HTML email digests via SES (on-demand + weekly scheduled)
 - **Stock Notes** — Per-stock notes with cloud sync (DynamoDB primary, local SQLite fallback)
@@ -313,24 +340,23 @@ frontend/src/
 │       └── HeatmapLegend.tsx          # Color band legend
 ├── services/api/backendClient.ts      # Shared axios client
 ├── ml/prediction/
-│   ├── prediction.service.ts          # Ensemble orchestration, F-test diagnostics
-│   ├── preprocessing.ts               # Feature matrices (8-feat, 4-feat), labels
-│   ├── model.ts                       # Logistic regression + gradient descent
-│   ├── cross-validation.ts            # K-fold CV
-│   ├── scaler.ts                      # StandardScaler (z-score normalization)
-│   └── types.ts                       # PredictionInput, PredictionOutput, etc.
+│   └── types.ts                       # Diagnostics view types only — no browser model
 └── ml/sentiment/
     ├── analyzer.ts                    # Browser-side AFINN sentiment (offline)
     └── lexicon.ts                     # Financial domain terms
 
 backend/src/
-├── handlers/prediction.handler.ts     # Prediction endpoint
+├── handlers/prediction.handler.ts     # POST /predict — the only predictor
 ├── services/
 │   ├── sentimentProcessing.service.ts # Article pipeline orchestration
 │   ├── eventClassification.service.ts # Event type classifier
 │   ├── aspectAnalysis.service.ts      # Aspect detection + scoring
 │   ├── mlSentiment.service.ts         # External ML model API client
-│   └── signalScore.service.ts         # Reliability weight calculation
+│   ├── signalScore.service.ts         # Reliability weight calculation
+│   ├── pipeline.ts                    # Prediction pipeline: cache, CV gate, suppression
+│   ├── featureEngineering.ts          # Daily aggregation + forward-looking per-horizon labels
+│   ├── preprocessing.ts               # Feature vector, training matrix, scaler
+│   └── mlModel.ts                     # Logistic regression + walk-forward CV
 ├── utils/sentiment.util.ts            # Daily aggregation (signal-weighted)
 └── ml/sentiment/analyzer.ts           # AFINN + financial lexicon (server-side)
 

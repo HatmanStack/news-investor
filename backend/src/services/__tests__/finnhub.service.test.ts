@@ -245,7 +245,9 @@ describe('FinnhubService', () => {
 
       try {
         await expect(fetchCompanyNews(TICKER, FROM, TO, API_KEY)).rejects.toThrow();
-        expect(mockRecordFailure).toHaveBeenCalledWith(0, 3, 60000, 'finnhub');
+        // No caller-supplied count: the repository increments atomically and
+        // reads the new value back from the write.
+        expect(mockRecordFailure).toHaveBeenCalledWith(3, 60000, 'finnhub');
       } finally {
         globalThis.setTimeout = origSetTimeout;
       }

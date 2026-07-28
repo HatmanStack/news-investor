@@ -26,6 +26,6 @@
   },
   "ignore": [".sync/**"],
   "ignoreDependencies": ["babel-preset-expo"],
-  "ignoreBinaries": ["jest", "lychee", "uvx", "eslint", "expo", "tsc"],
+  "ignoreBinaries": ["jest", "lychee", "uv", "uvx", "eslint", "expo", "tsc"],
   "ignoreExportsUsedInFile": true
 }

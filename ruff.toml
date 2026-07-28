@@ -1,0 +1,37 @@
+# Root ruff configuration.
+#
+# It exists for one reason: to keep autofix out of .sync/overlays.
+#
+# Python code in this repo lives under backend/python, backend/python_tests,
+# backend/services/ml and backend/scripts, and the first two resolve to
+# backend/python/pyproject.toml, which is closer and therefore wins. This file
+# is what any path with no nearer config lands on -- including anything under
+# .sync/overlays.
+#
+# Why the exclusion. Overlay files are hand-written artifacts whose exact
+# content IS the deliverable: an overlay exists precisely because the community
+# edition needs something different from what the pro source says. lint-staged
+# runs `uvx ruff check --fix` over every staged *.py in the repository, so a
+# Python overlay would be rewritten by a tool that has no idea it is looking at
+# a parity stub. Measured with ruff 0.16.0 on a two-line re-export stub:
+#
+#   with `# noqa: F401` on each import
+#     I001 rewrote the import block into a parenthesised group (1 fixed)
+#
+#   without the noqa
+#     F401 DELETED both re-exports (2 fixed); the file was left as a bare
+#     docstring, and the community import surface silently lost both names
+#
+# The second is the one that matters. A parity stub's whole job is to export
+# names it does not itself use, which is indistinguishable from dead code to
+# any linter, and "2 fixed" reads like success.
+#
+# There are no Python overlays today. This is here so that adding the first one
+# is not also the day someone discovers this. scripts/check-overlay-autofix-safety.sh
+# asserts it end to end rather than trusting the file to still be here.
+extend-exclude = [".sync/overlays"]
+
+# Ruff lints paths passed explicitly on the command line even when they match an
+# exclusion, unless this is set. lint-staged passes explicit paths, so without
+# it the exclusion above would do nothing in the one place that matters.
+force-exclude = true

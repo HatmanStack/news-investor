@@ -9,7 +9,7 @@ import functools
 import logging
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 
@@ -163,7 +163,9 @@ def fetch_symbol_metadata(ticker: str) -> YahooInfo:
 
         name = info.get("shortName") or info.get("longName") or ticker
         logger.info(f"[YFinanceService] Fetched metadata for {ticker}: {name}")
-        return info
+        # yfinance is unstubbed; .info is a plain dict at runtime and YahooInfo
+        # is total=False, so this asserts shape without asserting presence.
+        return cast("YahooInfo", info)
 
     except APIError:
         raise
@@ -217,7 +219,8 @@ def search_tickers(query: str) -> list[YahooSearchQuote]:
         quotes = data.get("quotes", [])
 
         logger.info(f"[YFinanceService] Found {len(quotes)} results for query: {query}")
-        return quotes
+        # response.json() is Any; YahooSearchQuote is total=False.
+        return cast("list[YahooSearchQuote]", quotes)
 
     except requests.exceptions.HTTPError as e:
         # e.response is Optional on HTTPError; narrow once rather than

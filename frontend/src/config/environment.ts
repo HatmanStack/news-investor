@@ -8,6 +8,30 @@
  */
 
 /**
+ * Thrown by {@link validateEnvironment} when a required variable is missing.
+ *
+ * A type rather than a message, because the caller used to discriminate this
+ * case with `error.message.includes('Environment Configuration Error')`. That
+ * string is a display detail: rewording the message, or translating it, silently
+ * turned a fatal misconfiguration into a non-fatal one.
+ *
+ * `missing` carries variable *names* only. The values are the configuration —
+ * printing them into an on-screen error is how a URL or a key ends up in a
+ * screenshot — mirroring the backend's redaction convention.
+ */
+export class EnvironmentConfigError extends Error {
+  readonly missing: readonly string[];
+
+  constructor(missing: readonly string[], message: string) {
+    super(message);
+    this.name = 'EnvironmentConfigError';
+    this.missing = missing;
+    // Required for `instanceof` to survive the ES5 target's class downlevelling.
+    Object.setPrototypeOf(this, EnvironmentConfigError.prototype);
+  }
+}
+
+/**
  * Environment configuration object
  */
 export const Environment = {
@@ -28,20 +52,20 @@ export const Environment = {
 
 /**
  * Validate required environment variables
- * @throws Error if required variables are missing
+ * @throws {EnvironmentConfigError} if required variables are missing
  */
 export function validateEnvironment(): void {
-  const errors: string[] = [];
+  const missing: string[] = [];
 
   if (!Environment.BACKEND_URL) {
-    errors.push('EXPO_PUBLIC_BACKEND_URL is not set. Add it to your .env file.');
+    missing.push('EXPO_PUBLIC_BACKEND_URL');
   }
 
-  if (errors.length > 0) {
+  if (missing.length > 0) {
     const errorMessage = [
       '❌ Environment Configuration Error:',
       '',
-      ...errors,
+      ...missing.map((name) => `${name} is not set. Add it to your .env file.`),
       '',
       '📝 Setup Instructions:',
       '1. Copy .env.example to .env',
@@ -51,6 +75,6 @@ export function validateEnvironment(): void {
       'See README.md "Environment Setup" section for details.',
     ].join('\n');
 
-    throw new Error(errorMessage);
+    throw new EnvironmentConfigError(missing, errorMessage);
   }
 }

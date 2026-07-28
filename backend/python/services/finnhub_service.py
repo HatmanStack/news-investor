@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, cast
 
 import requests
 
@@ -114,7 +114,8 @@ def search_tickers_finnhub(query: str) -> list[dict[str, Any]]:
     results = data.get("result", [])
 
     logger.info(f"[FinnhubService] Found {len(results)} results for: {query}")
-    return results
+    # _finnhub_get returns the decoded JSON body, which is Any.
+    return cast(list[dict[str, Any]], results)
 
 
 def fetch_earnings_finnhub(ticker: str, from_date: str, to_date: str) -> list[dict[str, Any]]:

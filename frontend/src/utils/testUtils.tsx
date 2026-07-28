@@ -32,11 +32,20 @@ export const createTestWrapper = () => {
       queries: {
         // Disable retries in tests for faster failures
         retry: false,
+        // Hooks that set their own `retry` override the line above — query-level
+        // options win — so the backoff has to be neutralised separately or those
+        // tests wait out a real 1s delay and need a multi-second waitFor
+        // deadline, which is a timer that outlives the test.
+        retryDelay: 0,
         // Disable garbage collection time in tests (v5 renamed from cacheTime)
-        gcTime: 0,
+        gcTime: Infinity,
       },
       mutations: {
         retry: false,
+        // Mutations inherit the five-minute default gcTime, which schedules a
+        // setTimeout per settled mutation and keeps the Jest worker alive past
+        // the run. Infinity skips the timer entirely.
+        gcTime: Infinity,
       },
     },
   });

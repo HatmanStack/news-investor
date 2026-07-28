@@ -44,7 +44,8 @@ jest.unstable_mockModule('../../utils/metrics.util.js', () => ({
 }));
 
 // Dynamic import after mocks are registered
-const { getMlSentiment } = await import('../mlSentiment.service.js');
+const { getMlSentiment, openMlCircuitGate } = await import('../mlSentiment.service.js');
+const { mapWithConcurrency } = await import('../../utils/concurrency.util.js');
 
 // --- Helpers ---
 
@@ -418,6 +419,130 @@ describe('MlSentimentService', () => {
       expect(fetchFn).toHaveBeenCalledTimes(3);
       expect(mockRecordSuccess).toHaveBeenCalled();
       jest.useRealTimers();
+    });
+  });
+  describe('batch-scoped circuit gate', () => {
+    const BATCH = 100;
+
+    it('reads the circuit once for a 100-article batch, not once per article', async () => {
+      // getMlSentiment used to call getCircuitState itself, and it runs per
+      // article under mapWithConcurrency: 100 reads of the single DynamoDB item
+      // CIRCUIT#mlsentiment / STATE, which caps near 1,000 WCU as one item.
+      mockFetchResponse(200, validSentimentResponse());
+
+      const gate = await openMlCircuitGate();
+      const results = await mapWithConcurrency(
+        Array.from({ length: BATCH }, (_, i) => `article ${i}`),
+        (text) => getMlSentiment(text, 'AAPL', gate),
+        10,
+      );
+
+      expect(results).toHaveLength(BATCH);
+      expect(results.every((r) => r === 0.75)).toBe(true);
+      expect(mockGetCircuitState).toHaveBeenCalledTimes(1);
+    });
+
+    it('still reads per call when no gate is supplied', async () => {
+      // One-off callers keep the old behaviour; the hoist is opt-in.
+      mockFetchResponse(200, validSentimentResponse());
+
+      await getMlSentiment('a', 'AAPL');
+      await getMlSentiment('b', 'AAPL');
+
+      expect(mockGetCircuitState).toHaveBeenCalledTimes(2);
+    });
+
+    it('short-circuits the whole batch when the gate opens at the start', async () => {
+      mockGetCircuitState.mockResolvedValue(openCircuit());
+      const fetchFn = mockFetchResponse(200, validSentimentResponse());
+
+      const gate = await openMlCircuitGate();
+      const results = await mapWithConcurrency(
+        Array.from({ length: 10 }, (_, i) => `article ${i}`),
+        (text) => getMlSentiment(text, 'AAPL', gate),
+        10,
+      );
+
+      expect(results.every((r) => r === null)).toBe(true);
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(mockGetCircuitState).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops the remaining articles when the breaker trips mid-batch', async () => {
+      // Hoisting the *read* must not hoist the *decision*. The first article
+      // fails and the repository reports the circuit now open; the gate latches
+      // and every article a worker picks up afterwards is skipped without a
+      // further read and without another HTTP call.
+      let call = 0;
+      const fetchFn = jest.fn(() => {
+        call += 1;
+        if (call === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 400, // non-retryable, so one attempt records one failure
+            statusText: 'Bad Request',
+            json: () => Promise.resolve({}),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(validSentimentResponse()),
+        } as Response);
+      });
+      global.fetch = fetchFn as unknown as typeof global.fetch;
+      mockRecordFailure.mockResolvedValue({ isOpen: true, openUntil: Date.now() + 60000 });
+
+      const gate = await openMlCircuitGate();
+      // Concurrency 1 so the ordering is deterministic: article 0 trips it,
+      // articles 1..9 must all be refused.
+      const results = await mapWithConcurrency(
+        Array.from({ length: 10 }, (_, i) => `article ${i}`),
+        (text) => getMlSentiment(text, 'AAPL', gate),
+        1,
+      );
+
+      expect(results).toEqual(Array.from({ length: 10 }, () => null));
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      expect(mockRecordFailure).toHaveBeenCalledTimes(1);
+      expect(mockGetCircuitState).toHaveBeenCalledTimes(1);
+      expect(gate.isOpen()).toBe(true);
+    });
+
+    it('keeps the batch running when a failure does not trip the breaker', async () => {
+      // The mirror of the test above: a sub-threshold failure must not latch.
+      let call = 0;
+      const fetchFn = jest.fn(() => {
+        call += 1;
+        if (call === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            json: () => Promise.resolve({}),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(validSentimentResponse()),
+        } as Response);
+      });
+      global.fetch = fetchFn as unknown as typeof global.fetch;
+      mockRecordFailure.mockResolvedValue({ isOpen: false, openUntil: 0 });
+
+      const gate = await openMlCircuitGate();
+      const results = await mapWithConcurrency(
+        Array.from({ length: 5 }, (_, i) => `article ${i}`),
+        (text) => getMlSentiment(text, 'AAPL', gate),
+        1,
+      );
+
+      expect(results[0]).toBeNull();
+      expect(results.slice(1)).toEqual([0.75, 0.75, 0.75, 0.75]);
+      expect(gate.isOpen()).toBe(false);
     });
   });
 });

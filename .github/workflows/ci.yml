@@ -3,12 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '.sync/**'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '.sync/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -17,21 +17,36 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       AWS_DEFAULT_REGION: us-east-1
       FINNHUB_API_KEY: test
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Read-only job: nothing here performs an authenticated git
+          # operation, so the checkout token should not linger in
+          # .git/config for the rest of the run.
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
 
       - name: Install Node dependencies
         run: npm ci
+
+      # `npm run check` starts with format:check, so this edition's CI should
+      # too. It was absent, and an overlay that was unformatted in the pro
+      # repository — where .prettierignore exempted the whole overlay tree —
+      # landed here at an ordinary path and made `npm run check` fail for
+      # anyone who ran it. Both sides are covered now: the exemption is gone
+      # there, and the gate runs here.
+      - name: Format check
+        run: npx prettier --check .
 
       - name: Frontend type check
         run: npx tsc --noEmit
@@ -44,7 +59,7 @@ jobs:
         run: |
           if [ -f frontend/coverage/coverage-summary.json ]; then
             node -e "const c=require('./frontend/coverage/coverage-summary.json').total; \
-              console.log('Frontend coverage (threshold 45/55/55/56 br/fn/ln/st):'); \
+              console.log('Frontend coverage (threshold 49/57/55/55 br/fn/ln/st):'); \
               console.log('  Branches:   '+c.branches.pct+'%'); \
               console.log('  Functions:  '+c.functions.pct+'%'); \
               console.log('  Lines:      '+c.lines.pct+'%'); \
@@ -61,7 +76,7 @@ jobs:
         run: |
           if [ -f backend/coverage/coverage-summary.json ]; then
             node -e "const c=require('./backend/coverage/coverage-summary.json').total; \
-              console.log('Backend coverage (threshold 63/75/71/70 br/fn/ln/st):'); \
+              console.log('Backend coverage (threshold 76/91/87/87 br/fn/ln/st):'); \
               console.log('  Branches:   '+c.branches.pct+'%'); \
               console.log('  Functions:  '+c.functions.pct+'%'); \
               console.log('  Lines:      '+c.lines.pct+'%'); \
@@ -74,11 +89,30 @@ jobs:
           pip install -r backend/python/requirements-dev.txt
           PYTHONPATH=backend/python pytest backend/python_tests --maxfail=1 -v
 
+      # backend/python/pyproject.toml and backend/services/ml/mypy.ini both sync
+      # to this edition, so the strictness they declare is enforced here too.
+      # mypy resolves config from the working directory only, hence two runs
+      # rather than one invocation with two paths -- and the two trees each
+      # carry a top-level __init__.py, so a single run fails with "Duplicate
+      # module named __main__".
+      - name: Type check Python stocks Lambda
+        run: mypy .
+        working-directory: backend/python
+      - name: Type check ML service
+        run: mypy .
+        working-directory: backend/services/ml
+
+      # scripts/check-console-calls.sh is not in .sync/config.json
+      # exclude_paths, so both the script and its baseline sync here. The gate
+      # CONTRIBUTING promises should therefore exist in this edition too.
+      - name: Console-call budget
+        run: ./scripts/check-console-calls.sh
+
       - name: Markdownlint
         run: npm run lint:docs
 
       - name: Lychee link check
-        uses: lycheeverse/lychee-action@f81112d0d2814ded911bd23e3beaa9dda9093915 # v2.0.2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.0.2
         with:
           args: '--no-progress --max-concurrency 8 *.md docs/**/*.md'
           fail: true

@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { Slot } from 'expo-router';
 import Head from 'expo-router/head';
 import { PaperProvider, Portal } from 'react-native-paper';
@@ -28,6 +28,18 @@ import { colors } from '../src/theme/colors';
 // Logging
 import { logger } from '../src/utils/logger';
 
+// Configuration. Imported statically, both of them.
+//
+// `EnvironmentConfigError` has to be a value import — the catch block
+// discriminates with `instanceof` — and once the module is in the static graph
+// there is nothing left for `await import()` to defer, so `validateEnvironment`
+// comes with it. It also makes the check reachable from a test: under the
+// project's jest transform a dynamic `import()` raises
+// ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG, so the validation step could
+// never actually run there. `../src/database` stays dynamic; it is
+// platform-specific and genuinely worth deferring.
+import { EnvironmentConfigError, validateEnvironment } from '../src/config/environment';
+
 // Error Boundary
 import { ErrorBoundary } from '../src/components/common/ErrorBoundary';
 
@@ -50,6 +62,7 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
+  const [fatalError, setFatalError] = useState<EnvironmentConfigError | null>(null);
   const [fontsLoaded] = useFonts({
     Inter_500Medium,
     Inter_700Bold,
@@ -59,29 +72,63 @@ export default function RootLayout() {
     async function initialize() {
       try {
         // Validate environment configuration
-        const { validateEnvironment } = await import('../src/config/environment');
         validateEnvironment();
 
         // Initialize database - platform-specific implementation
         const { initializeDatabase } = await import('../src/database');
         await initializeDatabase();
-
-        setIsReady(true);
       } catch (error) {
         logger.error('App', 'Initialization error', error);
 
-        // Re-throw validation errors - app cannot start with invalid config
-        if (error instanceof Error && error.message.includes('Environment Configuration Error')) {
-          throw error; // Halt initialization for config errors
+        // A fatal configuration error becomes state, not a re-throw. This runs
+        // inside an async function invoked fire-and-forget, so a throw here is an
+        // unhandled rejection, not something ErrorBoundary can see —
+        // ErrorBoundary catches render-phase errors only. The previous code
+        // re-threw, skipped setIsReady, and left the layout rendering an
+        // unconditional spinner forever: a misconfigured environment produced an
+        // infinite spinner and an unhandled rejection instead of the error screen
+        // the comment intended.
+        if (error instanceof EnvironmentConfigError) {
+          setFatalError(error);
         }
-
-        // For non-critical errors (DB init, etc.), continue
+        // Non-fatal errors (DB init, etc.) fall through and the app continues.
+      } finally {
+        // Every terminating path marks the app ready, so the spinner cannot
+        // outlive initialisation whatever happens above.
         setIsReady(true);
       }
     }
 
-    initialize();
+    // The call site needs its own catch: initialize() is not awaited, and
+    // anything unanticipated escaping the block above — including the dynamic
+    // import in the catch itself — would otherwise be an unhandled rejection
+    // with the spinner still on screen.
+    initialize().catch((error: unknown) => {
+      logger.error('App', 'Initialization failed unexpectedly', error);
+      setIsReady(true);
+    });
   }, []);
+
+  if (fatalError) {
+    return (
+      <View style={styles.loadingContainer}>
+        <View style={styles.errorCard}>
+          <Text style={styles.errorTitle}>Configuration error</Text>
+          <Text style={styles.errorBody}>
+            {`NewsInvestor cannot start because required configuration is missing:`}
+          </Text>
+          {fatalError.missing.map((name) => (
+            <Text key={name} style={styles.errorItem}>
+              {`\u2022 ${name}`}
+            </Text>
+          ))}
+          <Text style={styles.errorHint}>
+            {`Copy .env.example to .env, set the variables above, and restart. See the Environment Setup section of the README.`}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (!isReady || !fontsLoaded) {
     return (
@@ -161,5 +208,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.background,
+  },
+  errorCard: {
+    maxWidth: 480,
+    paddingHorizontal: 24,
+  },
+  errorTitle: {
+    color: colors.error,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  errorBody: {
+    color: colors.text,
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  // Names only, never values: the values are the configuration, and an
+  // on-screen error is one screenshot away from being shared.
+  errorItem: {
+    color: colors.text,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  errorHint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    marginTop: 12,
   },
 });

@@ -161,7 +161,10 @@ def analyze_sentiment(text: str) -> dict:
     }
 
 
-def get_model_info() -> dict[str, str]:
+# `loaded` is a bool, not a string: HealthResponse.model_loaded is typed bool
+# and the endpoint has always emitted JSON `true`. The annotation said
+# dict[str, str], which nothing checked until this service came under mypy.
+def get_model_info() -> dict[str, str | bool]:
     """Get information about the model configuration."""
     return {
         "model_type": "onnx",

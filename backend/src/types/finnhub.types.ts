@@ -55,8 +55,10 @@ export interface FinnhubInsiderTransaction {
   symbol: string;
 }
 
-// ============================================================
-// Insider Role Classification
-// ============================================================
-
-export type InsiderRole = 'CEO' | 'CFO' | 'COO' | 'VP' | 'Director' | 'Owner10Pct' | 'Other';
+// InsiderRole was declared here and imported by nothing. It is deleted rather
+// than wired up, because it never matched the implementation it named:
+// classifyInsiderRole() in insiderProcessing.service.ts returns 'President',
+// 'SVP', 'EVP' and '10% Owner', none of which this union contained, and the
+// union's 'Owner10Pct' is a spelling that function never produces. Annotating
+// the classifier with it would not have compiled. A type that has never once
+// described its subject is not documentation.

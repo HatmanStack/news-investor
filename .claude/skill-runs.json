@@ -124,5 +124,17 @@
     "date": "2026-05-03",
     "plan": "2026-05-03-audit-news-investor-pro",
     "verdict": "VERIFIED"
+  },
+  {
+    "skill": "audit",
+    "date": "2026-07-26",
+    "plan": "2026-07-26-audit-news-investor-pro",
+    "audits": ["health", "eval", "docs"]
+  },
+  {
+    "skill": "pipeline",
+    "date": "2026-07-27",
+    "plan": "2026-07-26-audit-news-investor-pro",
+    "verdict": "VERIFIED"
   }
 ]

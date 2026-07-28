@@ -1,14 +1,31 @@
 services:
   ministack:
-    # High-performance drop-in replacement for MiniStack
-    image: nahuelnucera/ministack
+    # DynamoDB-only local stack; drop-in replacement for LocalStack.
+    #
+    # Pinned by digest. This was `nahuelnucera/ministack` with no tag and no
+    # digest -- the only unpinned dependency in a repo that SHA-pins every
+    # GitHub Action -- and it is a regression of a fixed finding: 980995d pinned
+    # LocalStack to 4.4.0 in response to a prior audit, e0e61cb silently dropped
+    # the pin during a rename to ministack/ministack, and 93d5a38 renamed it
+    # again to this account still unpinned.
+    #
+    # Digest resolved 2026-07-27 from tag `latest`, image version label 1.4.7,
+    # image created 2026-07-26. Keep this in step with the same digest in
+    # .github/workflows/ci.yml's e2e-tests service block -- Dependabot's docker
+    # ecosystem reads this file but does not update a workflow service image.
+    image: nahuelnucera/ministack@sha256:0e9f5965f2fab26199b2dd8c7cc087bec440f68ffdcb3b25e662a67f901a019d
     ports:
       - '4566:4566'
     environment:
       - SERVICES=dynamodb
       - DEBUG=0
     volumes:
-      - './backend/ministack-init:/etc/ministack/init/ready.d'
+      # Both sides of this mount were broken by a blind LocalStack -> MiniStack
+      # find/replace. The host side pointed at ./backend/ministack-init, which
+      # does not exist. The container side pointed at /etc/ministack/init/ready.d,
+      # which the image never reads: app.py:2035 collects ready.d scripts from
+      # /docker-entrypoint-initaws.d/ready.d and /etc/localstack/init/ready.d only.
+      - './backend/localstack-init:/etc/localstack/init/ready.d'
       - ministack-data:/var/lib/ministack
 volumes:
   ministack-data:

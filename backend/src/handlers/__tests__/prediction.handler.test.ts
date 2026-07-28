@@ -11,8 +11,13 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 // Declare mock functions
 const mockRunPredictionPipeline =
   jest.fn<() => Promise<Array<{ horizon: number; direction: string; probability: number }>>>();
-const mockPutDailyAggregate = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+const mockPutDailyAggregate = jest
+  .fn<(...args: unknown[]) => Promise<void>>()
+  .mockResolvedValue(undefined);
 const mockGetDailyAggregate = jest.fn<() => Promise<null>>().mockResolvedValue(null);
+const mockUpsertDailyPredictions = jest
+  .fn<(...args: unknown[]) => Promise<void>>()
+  .mockResolvedValue(undefined);
 
 // Mock dependencies using unstable_mockModule for ESM compatibility
 jest.unstable_mockModule('../../services/pipeline', () => ({
@@ -21,6 +26,7 @@ jest.unstable_mockModule('../../services/pipeline', () => ({
 jest.unstable_mockModule('../../repositories/dailySentimentAggregate.repository', () => ({
   putDailyAggregate: mockPutDailyAggregate,
   getDailyAggregate: mockGetDailyAggregate,
+  upsertDailyPredictions: mockUpsertDailyPredictions,
 }));
 jest.unstable_mockModule('../../utils/logger.util.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -127,6 +133,61 @@ describe('Prediction Handler', () => {
       expect(body.predictions.nextDay).toEqual({ direction: 'up', probability: 0.7 });
       expect(body.predictions.twoWeek).toEqual({ direction: 'down', probability: 0.4 });
       expect(body.predictions.oneMonth).toEqual({ direction: 'up', probability: 0.6 });
+    });
+  });
+
+  describe('Suppressed Horizons', () => {
+    it('omits a horizon the pipeline did not return rather than inventing one', async () => {
+      // The behaviour this replaces: any missing horizon became
+      // { direction: 'down', probability: 0.5 } -- a fabricated bearish coin
+      // flip presented to the user as a real forecast.
+      mockRunPredictionPipeline.mockResolvedValue([
+        { horizon: 1, direction: 'up', probability: 0.7 },
+        { horizon: 14, direction: 'down', probability: 0.62 },
+      ]);
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      const response = await predictionHandler(event);
+      const body = JSON.parse(response.body);
+
+      expect(body.predictions.nextDay).toEqual({ direction: 'up', probability: 0.7 });
+      expect(body.predictions.twoWeek).toEqual({ direction: 'down', probability: 0.62 });
+      expect('oneMonth' in body.predictions).toBe(false);
+    });
+
+    it('does not persist a direction for a suppressed horizon', async () => {
+      mockRunPredictionPipeline.mockResolvedValue([
+        { horizon: 1, direction: 'up', probability: 0.7 },
+      ]);
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      await predictionHandler(event);
+
+      const written = mockUpsertDailyPredictions.mock.calls[0]![2] as Record<string, unknown>;
+      expect(written.nextDayDirection).toBe('up');
+      expect(written.twoWeekDirection).toBeUndefined();
+      expect(written.oneMonthDirection).toBeUndefined();
+    });
+
+    it('returns an empty predictions object when the pipeline withholds everything', async () => {
+      // runPredictionPipeline returns [] when no horizon clears the CV floor.
+      mockRunPredictionPipeline.mockResolvedValue([]);
+
+      const event = createAPIGatewayEvent({
+        body: JSON.stringify({ ticker: 'AAPL', days: 90 }),
+      });
+
+      const response = await predictionHandler(event);
+      const body = JSON.parse(response.body);
+
+      expect(response.statusCode).toBe(200);
+      expect(body.predictions).toEqual({});
     });
   });
 

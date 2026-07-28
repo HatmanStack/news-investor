@@ -29,6 +29,7 @@ const EntityPrefix = {
   PUBLISHER: 'PUBLISHER', // Publisher reliability scores
   SOCIAL: 'SOCIAL', // Social sentiment data (Reddit/X)
   TOKEN: 'TOKEN', // OAuth token cache
+  MODEL: 'MODEL', // Cached ML model weights
 } as const;
 
 /**
@@ -42,6 +43,7 @@ export const SortKeyPrefix = {
   SNAP: 'SNAP',
   RELIABILITY: 'RELIABILITY',
   OAUTH: 'OAUTH',
+  WEIGHTS: 'WEIGHTS',
 } as const;
 
 // ============================================================
@@ -255,7 +257,12 @@ export type DailySentimentData = Omit<
 
 /**
  * Cached ML model weights item
- * PK: MODEL#AAPL, SK: WEIGHTS#latest
+ * PK: MODEL#AAPL, SK: WEIGHTS#d90
+ *
+ * The sort key carries the history window the model was trained on. Free and
+ * pro request different windows (getDataRetentionDays), and a single
+ * WEIGHTS#latest key meant whichever tier trained first served the other for
+ * 24 hours.
  */
 export interface ModelCacheItem extends BaseTableItem {
   entityType: 'MODEL';
@@ -265,7 +272,23 @@ export interface ModelCacheItem extends BaseTableItem {
   scalerMean: number[];
   scalerStd: number[];
   sampleCount: number;
+  /** Training-set accuracy. A fit statistic, kept for diagnostics only — the
+   * serve/withhold decision uses accuracyByHorizon. */
   accuracy: number;
+  /**
+   * Walk-forward CV accuracy per horizon, keyed by horizon in days as a
+   * string (DynamoDB map keys are strings). Only horizons that cleared the CV
+   * floor appear; a horizon that failed or could not be validated is absent
+   * and must not be served from this item.
+   *
+   * Optional in the type because items written before this field existed do
+   * not carry it. Readers must treat its absence as stale rather than assuming
+   * all horizons are valid — see getCachedModel. That check is deliberately
+   * independent of the weights-length guard: the two happen to coincide this
+   * cycle because inputDim also changed, and the code must not depend on that
+   * coincidence.
+   */
+  accuracyByHorizon?: Record<string, number>;
   trainedAt: string;
 }
 
@@ -512,11 +535,20 @@ export function makeDailyPK(ticker: string): string {
 }
 
 export function makeModelPK(ticker: string): string {
-  return `MODEL#${ticker.toUpperCase()}`;
+  return `${EntityPrefix.MODEL}#${ticker.toUpperCase()}`;
 }
 
-export function makeWeightsSK(): string {
-  return 'WEIGHTS#latest';
+/**
+ * Sort key for a cached model, carrying the history window it was trained on.
+ *
+ * Keyed on the actual `days` value rather than on tier: two tiers that happen
+ * to share a window should share a model, and adding a third tier should not
+ * need a code change here.
+ *
+ * @param days Number of history days the model was trained on.
+ */
+export function makeWeightsSK(days: number): string {
+  return `${SortKeyPrefix.WEIGHTS}#d${days}`;
 }
 
 export function makeCircuitPK(serviceName: string): string {

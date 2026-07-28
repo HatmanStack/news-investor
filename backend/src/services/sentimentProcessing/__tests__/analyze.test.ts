@@ -30,8 +30,10 @@ jest.unstable_mockModule('../../eventClassification.service.js', () => ({
 jest.unstable_mockModule('../../aspectAnalysis.service.js', () => ({
   analyzeAspects: mockAnalyzeAspects,
 }));
+const mockOpenMlCircuitGate = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.unstable_mockModule('../../mlSentiment.service.js', () => ({
   getMlSentiment: mockGetMlSentiment,
+  openMlCircuitGate: mockOpenMlCircuitGate,
 }));
 jest.unstable_mockModule('../../signalScore.service.js', () => ({
   calculateSignalScoresBatch: mockCalculateSignalScoresBatch,
@@ -75,6 +77,7 @@ function makeArticle(hash: string, publisher = 'Reuters') {
 describe('analyzeArticles', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOpenMlCircuitGate.mockResolvedValue({ isOpen: () => false, markOpen: () => {} });
     mockClassifyEvent.mockResolvedValue({ eventType: 'GENERAL' });
     mockAnalyzeAspects.mockResolvedValue({ overallScore: 0.4, breakdown: {} });
     mockCalculateSignalScoresBatch.mockReturnValue(new Map([[0, { score: 0.6 }]]));

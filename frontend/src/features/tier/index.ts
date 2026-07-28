@@ -28,30 +28,18 @@ export interface TierInfo {
 
 const TIER_VALUE: TierInfo = {
   tier: 'free',
-  features: {
-    advanced_charting: true,
-    comparative_sentiment: true,
-    email_reports: true,
-    extended_date_range: true,
-    materiality_heatmap: true,
-    model_diagnostics: true,
-    portfolio_analytics: true,
-    watchlist_sync: true,
-    portfolio_export: true,
-    real_time_alerts: true,
-    chart_annotations: true,
-    multi_ticker_comparison: true,
-    prediction_alerts: true,
-    sector_sentiment: true,
-    backtesting: true,
-    portfolio_risk: true,
-    social_sentiment: true,
-    insider_data: true,
-  },
+  // Empty on purpose. This used to be a hardcoded map of feature names, which
+  // nothing read — `isFeatureEnabled` below answers unconditionally — and which
+  // had drifted anyway: it listed two flags that do not exist and omitted five
+  // that do. Dead data that reads as authoritative is worse than no data, and a
+  // map nothing consults will simply drift again.
+  features: {},
   quotas: {} as Record<string, never>,
   usage: {} as Record<string, never>,
   loading: false,
   error: null,
+  // Correct for this edition: there is no tier system here and every feature is
+  // genuinely available. Do not "fix" this to match the pro default.
   isFeatureEnabled: () => true,
 };
 
