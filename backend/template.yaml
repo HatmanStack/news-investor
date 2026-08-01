@@ -125,8 +125,22 @@ Parameters:
       console and tell nobody. AWS sends a confirmation email that must be
       accepted before any notification is delivered.
 
+  EnableAlarms:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      Whether to create the CloudWatch alarms. CloudWatch bills per alarm that
+      exists, not per alarm that fires, and there is no paused state: disabling
+      an alarm's actions silences it while still charging for it. Setting this
+      to 'false' on an existing stack deletes the alarms, because
+      CloudFormation deletes a resource whose Condition stops being met;
+      setting it back to 'true' recreates them. The default is 'true' so that a
+      deploy which says nothing about alarms keeps them.
+
 Conditions:
   HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+  AlarmsEnabled: !Equals [!Ref EnableAlarms, 'true']
   # DetailedMetricsEnabled is a Boolean property, so the string parameter is
   # resolved through !If rather than passed through and relied on to coerce.
   HasDetailedApiMetrics: !Equals [!Ref DetailedApiMetrics, 'true']
@@ -543,6 +557,7 @@ Resources:
   # alarm works whether or not it is on.
   ApiServerErrorAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: >-
         The HTTP API is returning server errors across the stage. Check the
@@ -569,6 +584,7 @@ Resources:
 
   LambdaInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Lambda invocations exceeded expected threshold'
       MetricName: Invocations
@@ -587,6 +603,7 @@ Resources:
 
   DynamoDBReadUnitsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'DynamoDB read units exceeded expected threshold'
       MetricName: ConsumedReadCapacityUnits
@@ -607,6 +624,7 @@ Resources:
 
   DynamoDBWriteThrottleAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'DynamoDB write throttle events detected - batch writes may lose data'
       MetricName: WriteThrottleEvents
@@ -626,6 +644,7 @@ Resources:
 
   LambdaDurationAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Lambda average duration exceeded threshold - potential cold starts or performance issues'
       MetricName: Duration
@@ -644,6 +663,7 @@ Resources:
 
   LambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Lambda errors exceeded threshold'
       MetricName: Errors
@@ -662,6 +682,7 @@ Resources:
 
   LambdaThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Lambda throttles detected - consider increasing concurrency'
       MetricName: Throttles
@@ -693,6 +714,7 @@ Resources:
 
   PythonStocksErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: >-
         Python stocks Lambda errors exceeded threshold. Same shape as the Node
@@ -714,6 +736,7 @@ Resources:
 
   CalibrationErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: >-
         Weekly signal calibration failed. Threshold 0: one run per week, so one
@@ -735,6 +758,7 @@ Resources:
 
   PythonStocksThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Python stocks Lambda throttled - requests are being rejected before they run'
       MetricName: Throttles
@@ -753,6 +777,7 @@ Resources:
 
   CalibrationThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: 'Signal calibration Lambda throttled - the weekly run was starved of concurrency'
       MetricName: Throttles
@@ -771,6 +796,7 @@ Resources:
 
   PythonStocksDurationAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: >-
         Python stocks Lambda average duration exceeded 10s. Sized against
@@ -806,6 +832,7 @@ Resources:
 
   WeeklyCalibrationFailedInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: AlarmsEnabled
     Properties:
       AlarmDescription: >-
         EventBridge could not invoke the signal calibration Lambda. Check that

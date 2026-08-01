@@ -132,6 +132,12 @@ resolve STRIPE_PRICE_ID_MONTHLY "Stripe Monthly Price ID"  false
 resolve PUBLIC_WEB_URL          "Public Web URL"           false
 resolve ALARM_EMAIL             "Alarm Email"              false
 
+# Defaults to 'true' so that omitting it from .env.deploy keeps the alarms.
+# CloudWatch bills per alarm that exists rather than per alarm that fires, and
+# there is no paused state, so 'false' is the only setting that stops the
+# charge. Flipping it deletes or recreates the alarms on the next deploy.
+resolve ENABLE_ALARMS           "Enable CloudWatch Alarms" false "true"
+
 # Persist only what we resolved; everything else in the file is untouched.
 upsert_env AWS_REGION      "$AWS_REGION"
 upsert_env STACK_NAME      "$STACK_NAME"
@@ -303,6 +309,7 @@ add_param StripeWebhookSecret  "$STRIPE_WEBHOOK_SECRET"
 add_param StripePriceIdMonthly "$STRIPE_PRICE_ID_MONTHLY"
 add_param PublicWebUrl         "$PUBLIC_WEB_URL"
 add_param AlarmEmail           "$ALARM_EMAIL"
+add_param EnableAlarms         "$ENABLE_ALARMS"
 
 sam deploy \
     --stack-name "$STACK_NAME" \
