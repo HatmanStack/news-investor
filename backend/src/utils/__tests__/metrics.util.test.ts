@@ -52,16 +52,29 @@ describe('logMetric', () => {
   });
 
   it('should include dimensions as top-level keys and in Dimensions array', () => {
-    logMetric('WithDims', 1, MetricUnit.Count, { Endpoint: '/test', Ticker: 'AAPL' });
+    logMetric('WithDims', 1, MetricUnit.Count, { Endpoint: '/test' });
 
     const emf = lastEmf();
     expect(emf.Endpoint).toBe('/test');
-    expect(emf.Ticker).toBe('AAPL');
 
     const cwArr = (emf._aws as { CloudWatchMetrics: { Dimensions: string[][] }[] })
       .CloudWatchMetrics;
     expect(cwArr[0]!.Dimensions[0]).toContain('Endpoint');
-    expect(cwArr[0]!.Dimensions[0]).toContain('Ticker');
+  });
+
+  it('should emit properties as top-level keys but NOT as billable dimensions', () => {
+    logMetric('WithProps', 1, MetricUnit.Count, { Endpoint: '/test' }, { Ticker: 'AAPL' });
+
+    const emf = lastEmf();
+    // Still queryable in Logs Insights.
+    expect(emf.Ticker).toBe('AAPL');
+
+    // But absent from Dimensions, so it creates no custom metric series.
+    // A ticker here is a per-entity dimension and costs $0.30/mo per ticker.
+    const cwArr = (emf._aws as { CloudWatchMetrics: { Dimensions: string[][] }[] })
+      .CloudWatchMetrics;
+    expect(cwArr[0]!.Dimensions[0]).toContain('Endpoint');
+    expect(cwArr[0]!.Dimensions[0]).not.toContain('Ticker');
   });
 
   it('should handle empty dimensions', () => {
@@ -99,6 +112,17 @@ describe('logMetrics', () => {
     ).CloudWatchMetrics;
     expect(cwArr[0]!.Metrics[0]!.Unit).toBe('None');
   });
+
+  it('should emit shared properties as keys but NOT as billable dimensions', () => {
+    logMetrics([{ name: 'MetricA', value: 10 }], { Service: 'test' }, { Ticker: 'AAPL' });
+
+    const emf = lastEmf();
+    expect(emf.Ticker).toBe('AAPL');
+
+    const cwArr = (emf._aws as { CloudWatchMetrics: { Dimensions: string[][] }[] })
+      .CloudWatchMetrics;
+    expect(cwArr[0]!.Dimensions[0]).toEqual(['Service']);
+  });
 });
 
 describe('logLambdaStartStatus', () => {
@@ -130,6 +154,17 @@ describe('logMlSentimentCall', () => {
     expect(emf.Success).toBe('true');
     expect(emf.CacheHit).toBe('false');
     expect(emf.Service).toBe('MlSentiment');
+  });
+
+  it('should not put Ticker in Dimensions (503 tickers = 503 billable series)', () => {
+    logMlSentimentCall('AAPL', 450, true, false);
+
+    const cwArr = (lastEmf()._aws as { CloudWatchMetrics: { Dimensions: string[][] }[] })
+      .CloudWatchMetrics;
+    expect(cwArr[0]!.Dimensions[0]).not.toContain('Ticker');
+    expect(cwArr[0]!.Dimensions[0]).toEqual(
+      expect.arrayContaining(['Success', 'CacheHit', 'Service']),
+    );
   });
 
   it('should set Success=false and CacheHit=true when appropriate', () => {

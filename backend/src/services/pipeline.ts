@@ -115,7 +115,7 @@ async function getCachedModel(
     logger.warn(`Failed to read model cache for ${ticker}`, {
       error: error instanceof Error ? error.message : String(error),
     });
-    logMetric('ModelCacheError', 1, MetricUnit.Count, { Ticker: ticker, Operation: 'read' });
+    logMetric('ModelCacheError', 1, MetricUnit.Count, { Operation: 'read' }, { Ticker: ticker });
     return null;
   }
 }
@@ -164,7 +164,7 @@ async function cacheModel(
     logger.warn(`Failed to cache model for ${ticker}`, {
       error: error instanceof Error ? error.message : String(error),
     });
-    logMetric('ModelCacheError', 1, MetricUnit.Count, { Ticker: ticker, Operation: 'write' });
+    logMetric('ModelCacheError', 1, MetricUnit.Count, { Operation: 'write' }, { Ticker: ticker });
   }
 }
 

@@ -131,7 +131,8 @@ export async function fetchNewsWithCache(
           { name: 'CachedArticleCount', value: cachedInRange.length, unit: MetricUnit.Count },
           { name: 'ApiCallCount', value: 0, unit: MetricUnit.Count },
         ],
-        { Endpoint: 'news', Ticker: ticker, CacheHit: 'true' },
+        { Endpoint: 'news', CacheHit: 'true' },
+        { Ticker: ticker },
       );
 
       const sortedCached = cachedInRange.sort((a, b) =>
@@ -248,7 +249,8 @@ export async function fetchNewsWithCache(
         { name: 'DuplicateArticleCount', value: duplicateCount, unit: MetricUnit.Count },
         { name: 'ApiCallCount', value: apiCallCount, unit: MetricUnit.Count },
       ],
-      { Endpoint: 'news', Ticker: ticker, CacheHit: 'false' },
+      { Endpoint: 'news', CacheHit: 'false' },
+      { Ticker: ticker },
     );
 
     if (newArticles.length > 0) {

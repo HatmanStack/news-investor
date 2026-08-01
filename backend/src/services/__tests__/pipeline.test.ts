@@ -131,7 +131,8 @@ describe('pipeline service — model cache error metric', () => {
       'ModelCacheError',
       1,
       'Count',
-      expect.objectContaining({ Ticker: 'AAPL', Operation: 'read' }),
+      { Operation: 'read' },
+      { Ticker: 'AAPL' },
     );
   });
 
@@ -154,7 +155,8 @@ describe('pipeline service — model cache error metric', () => {
       'ModelCacheError',
       1,
       'Count',
-      expect.objectContaining({ Ticker: 'AAPL', Operation: 'write' }),
+      { Operation: 'write' },
+      { Ticker: 'AAPL' },
     );
   });
 

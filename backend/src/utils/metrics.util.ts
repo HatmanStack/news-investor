@@ -43,16 +43,23 @@ const NAMESPACE = 'ReactStocks';
  * @param name - Metric name (e.g., 'CacheHitRate')
  * @param value - Metric value (e.g., 95.5)
  * @param unit - Metric unit (e.g., MetricUnit.Percent)
- * @param dimensions - Key-value pairs for filtering (e.g., { Endpoint: 'stocks', Ticker: 'AAPL' })
+ * @param dimensions - Low-cardinality key-value pairs to slice the metric by (e.g., { Endpoint: 'stocks' })
+ * @param properties - High-cardinality context (e.g., { Ticker: 'AAPL' }). See the note below.
+ *
+ * Dimensions are billable: CloudWatch creates one custom metric per distinct
+ * dimension-value combination. Anything with per-entity cardinality (ticker,
+ * user id, request id) must go in `properties`, which lands in the log event
+ * and stays queryable in Logs Insights without creating a billable series.
  *
  * @example
- * logMetric('CacheHitRate', 95.5, MetricUnit.Percent, { Endpoint: 'stocks', Ticker: 'AAPL' });
+ * logMetric('CacheHitRate', 95.5, MetricUnit.Percent, { Endpoint: 'stocks' }, { Ticker: 'AAPL' });
  */
 export function logMetric(
   name: string,
   value: number,
   unit: MetricUnit = MetricUnit.None,
   dimensions: Record<string, string> = {},
+  properties: Record<string, string> = {},
 ): void {
   const timestamp = Date.now();
 
@@ -86,6 +93,12 @@ export function logMetric(
     emf[key] = val;
   });
 
+  // Add properties. Same shape in the payload as dimensions, but absent from
+  // the Dimensions array above, so they cost nothing.
+  Object.entries(properties).forEach(([key, val]) => {
+    emf[key] = val;
+  });
+
   // Output as JSON to be parsed by Lambda
   console.log(JSON.stringify(emf));
 }
@@ -95,13 +108,14 @@ export function logMetric(
  * More efficient than multiple logMetric calls
  *
  * @param metrics - Array of metric definitions
- * @param dimensions - Shared dimensions for all metrics
+ * @param dimensions - Shared low-cardinality dimensions for all metrics (billable)
+ * @param properties - Shared high-cardinality context (free). See logMetric.
  *
  * @example
  * logMetrics([
  *   { name: 'CacheHitRate', value: 95.5, unit: MetricUnit.Percent },
  *   { name: 'RequestDuration', value: 150, unit: MetricUnit.Milliseconds }
- * ], { Endpoint: 'stocks', Ticker: 'AAPL' });
+ * ], { Endpoint: 'stocks' }, { Ticker: 'AAPL' });
  */
 export function logMetrics(
   metrics: {
@@ -110,6 +124,7 @@ export function logMetrics(
     unit?: MetricUnit;
   }[],
   dimensions: Record<string, string> = {},
+  properties: Record<string, string> = {},
 ): void {
   const timestamp = Date.now();
 
@@ -138,6 +153,11 @@ export function logMetrics(
 
   // Add dimension values
   Object.entries(dimensions).forEach(([key, val]) => {
+    emf[key] = val;
+  });
+
+  // Add properties. Present in the payload, absent from Dimensions, so free.
+  Object.entries(properties).forEach(([key, val]) => {
     emf[key] = val;
   });
 
@@ -178,11 +198,11 @@ export function logMlSentimentCall(
       { name: 'MlSentimentDuration', value: durationMs, unit: MetricUnit.Milliseconds },
     ],
     {
-      Ticker: ticker,
       Success: success ? 'true' : 'false',
       CacheHit: cacheHit ? 'true' : 'false',
       Service: 'MlSentiment',
     },
+    { Ticker: ticker },
   );
 }
 
@@ -209,9 +229,9 @@ export function logMlSentimentCacheHitRate(ticker: string, hits: number, misses:
       { name: 'MlSentimentCacheHitRate', value: hitRate, unit: MetricUnit.Percent },
     ],
     {
-      Ticker: ticker,
       Service: 'MlSentiment',
     },
+    { Ticker: ticker },
   );
 }
 
@@ -243,10 +263,10 @@ export function logMlSentimentFallback(
       { name: 'MlSentimentFallbackRate', value: fallbackRate, unit: MetricUnit.Percent },
     ],
     {
-      Ticker: ticker,
       Service: 'MlSentiment',
       FallbackReason: reason,
     },
+    { Ticker: ticker },
   );
 }
 

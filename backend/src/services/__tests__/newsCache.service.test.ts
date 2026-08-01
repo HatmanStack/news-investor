@@ -168,7 +168,8 @@ describe('newsCacheService', () => {
           expect.objectContaining({ name: 'CachedArticleCount', value: 3 }),
           expect.objectContaining({ name: 'ApiCallCount', value: 0 }),
         ]),
-        expect.objectContaining({ CacheHit: 'true', Ticker: TICKER }),
+        { Endpoint: 'news', CacheHit: 'true' },
+        { Ticker: TICKER },
       );
     });
 
@@ -322,7 +323,8 @@ describe('newsCacheService', () => {
 
       expect(mockLogMetrics).toHaveBeenCalledWith(
         expect.arrayContaining([expect.objectContaining({ name: 'ApiCallCount', value: 1 })]),
-        expect.objectContaining({ CacheHit: 'false' }),
+        { Endpoint: 'news', CacheHit: 'false' },
+        { Ticker: TICKER },
       );
     });
   });
