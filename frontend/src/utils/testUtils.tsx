@@ -6,6 +6,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { theme } from '../theme/theme';
 
 /**
@@ -52,9 +53,11 @@ export const createTestWrapper = () => {
 
   // Return wrapper component
   const TestWrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      <PaperProvider theme={theme}>{children}</PaperProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView>
+      <QueryClientProvider client={queryClient}>
+        <PaperProvider theme={theme}>{children}</PaperProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
   TestWrapper.displayName = 'TestWrapper';
   return TestWrapper;

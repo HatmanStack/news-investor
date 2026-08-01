@@ -23,6 +23,9 @@ module.exports = {
   useAnimatedProps: () => [{}, noop, noop],
   useDerivedValue: (fn: Function) => ({ value: fn() }),
   useAnimatedGestureHandler: () => ({}),
+  // ReanimatedSwipeable (gesture-handler 3) measures its own row through these.
+  useAnimatedRef: () => ({ current: null }),
+  measure: () => null,
   useAnimatedScrollHandler: () => noop,
   useAnimatedReaction: noop,
   withTiming: identity,

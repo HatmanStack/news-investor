@@ -8,7 +8,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { PortfolioDetails } from '@/types/database.types';
 import { AnimatedCard } from '@/components/common';
 import { useLayoutDensity } from '@/hooks';

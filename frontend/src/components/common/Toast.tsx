@@ -334,7 +334,11 @@ const styles = StyleSheet.create({
     }),
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     ...Platform.select({
       web: {
         backdropFilter: 'blur(16px)',

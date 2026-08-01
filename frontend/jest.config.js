@@ -10,7 +10,7 @@ module.exports = {
   rootDir: '.',
   roots: ['<rootDir>/src', '<rootDir>/app'],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-reanimated|react-native-worklets)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-reanimated|react-native-worklets|react-native-paper-dates|color|color-string|color-convert|color-name)',
   ],
   // `app/**` is a test root (see `roots` above) and screen tests exist and run,
   // but it was absent here — so every Expo Router screen, including the 404-line
@@ -33,7 +33,9 @@ module.exports = {
   // ratchet, which carries its own update procedure in its header.
   // Numbers and provenance: ./jest.coverage-thresholds.json.
   coverageThreshold: { global: thresholds.global },
-  setupFiles: ['<rootDir>/jest.setup.js'],
+  // gesture-handler 3 talks to a native module that only exists once its own
+  // jest setup installs the mock -- ReanimatedSwipeable calls into it on mount.
+  setupFiles: ['react-native-gesture-handler/jestSetup', '<rootDir>/jest.setup.js'],
   setupFilesAfterEnv: ['@testing-library/react-native/build/matchers/extend-expect'],
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/', '/__fixtures__/'],
   moduleNameMapper: {
@@ -47,9 +49,11 @@ module.exports = {
     'react-native-worklets$': '<rootDir>/__mocks__/react-native-worklets.ts',
     'react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.ts',
     'lightweight-charts$': '<rootDir>/__mocks__/lightweight-charts.ts',
-    // react-test-renderer removed from deps (RN 0.81+ deprecates it), but RNTL
-    // still needs it internally — use jest-expo's vendored copy
-    '^react-test-renderer$': '<rootDir>/../node_modules/jest-expo/node_modules/react-test-renderer',
+    // RNTL needs react-test-renderer internally and refuses to load unless it
+    // matches react exactly, so resolve the copy this workspace declares rather
+    // than a fixed path -- npm hoists it to the root or nests it per workspace
+    // depending on what else in the tree wants a different version.
+    '^react-test-renderer$': require.resolve('react-test-renderer'),
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };
