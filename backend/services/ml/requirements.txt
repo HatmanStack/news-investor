@@ -12,9 +12,9 @@
 # upgrade over what an unpinned build would have produced the same day.
 #
 # Maintained by Dependabot (pip ecosystem, directory /backend/services/ml).
-onnxruntime==1.28.0
+onnxruntime==1.29.0
 tokenizers==0.23.1
-boto3==1.43.68
+boto3==1.43.73
 fastapi==0.141.1
 pydantic==2.13.4
 mangum==0.21.0
