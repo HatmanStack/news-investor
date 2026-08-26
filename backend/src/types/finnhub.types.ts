@@ -3,6 +3,8 @@
  * Documentation: https://finnhub.io/docs/api
  */
 
+import type { EodhdSentiment } from './eodhd.types';
+
 export interface FinnhubNewsArticle {
   category: string; // News category
   datetime: number; // Published time in UNIX timestamp
@@ -13,6 +15,13 @@ export interface FinnhubNewsArticle {
   source: string; // News source
   summary: string; // News summary
   url: string; // URL of the original article
+  /**
+   * Provider-computed sentiment, present only on articles fetched via EODHD.
+   * This interface is the internal normalized article shape — every provider
+   * maps to it at its service edge (see eodhd.service.ts) — so the optional
+   * field lives here rather than on a parallel type. Finnhub never sets it.
+   */
+  providerSentiment?: EodhdSentiment;
 }
 
 // ============================================================

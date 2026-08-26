@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.util.js';
 import { transformFinnhubToCache, transformCacheToFinnhub } from '../utils/cacheTransform.util';
 import { generateArticleHash } from '../utils/hash.util';
 import { fetchCompanyNews } from './finnhub.service';
+import { fetchCompanyNewsEodhd } from './eodhd.service';
 import { fetchAlphaVantageNews } from './alphavantage.service';
 import {
   queryArticlesByTicker,
@@ -30,7 +31,29 @@ export interface NewsCacheResult {
   cached: boolean;
   newArticlesCount: number;
   cachedArticlesCount: number;
-  source?: 'finnhub' | 'alphavantage' | 'cache';
+  source?: 'finnhub' | 'eodhd' | 'alphavantage' | 'cache';
+}
+
+/**
+ * Fetch news from the configured provider.
+ *
+ * EODHD (full article bodies) when EODHD_API_KEY is set, Finnhub (145-char
+ * summaries) otherwise. Key presence is the whole switch: no separate flag to
+ * drift out of sync with the credential it depends on, and a deploy without
+ * the key behaves exactly as before the provider existed. See
+ * docs/plans/2026-08-25-eodhd-full-text/plan.md ADR 2.
+ */
+async function fetchFromProvider(
+  ticker: string,
+  from: string,
+  to: string,
+  finnhubApiKey: string,
+): Promise<{ articles: FinnhubNewsArticle[]; provider: 'finnhub' | 'eodhd' }> {
+  const eodhdKey = process.env.EODHD_API_KEY;
+  if (eodhdKey) {
+    return { articles: await fetchCompanyNewsEodhd(ticker, from, to, eodhdKey), provider: 'eodhd' };
+  }
+  return { articles: await fetchCompanyNews(ticker, from, to, finnhubApiKey), provider: 'finnhub' };
 }
 
 /**
@@ -148,11 +171,12 @@ export async function fetchNewsWithCache(
       };
     }
 
-    // Tier 3: Cache miss — fetch from Finnhub
+    // Tier 3: Cache miss — fetch from the configured provider
     logger.info(`Cache miss for ${ticker}, fetching from API`);
     let apiCallCount = 1;
-    let apiArticles = await fetchCompanyNews(ticker, from, to, apiKey);
-    let newsSource: 'finnhub' | 'alphavantage' = 'finnhub';
+    const fetched = await fetchFromProvider(ticker, from, to, apiKey);
+    let apiArticles = fetched.articles;
+    let newsSource: 'finnhub' | 'eodhd' | 'alphavantage' = fetched.provider;
 
     const finnhubUniqueDays = new Set(
       apiArticles.map((a) => {
@@ -161,7 +185,7 @@ export async function fetchNewsWithCache(
       }),
     ).size;
 
-    logger.info(`Finnhub returned ${apiArticles.length} articles`, {
+    logger.info(`${newsSource} returned ${apiArticles.length} articles`, {
       uniqueDays: finnhubUniqueDays,
     });
 
@@ -276,14 +300,14 @@ export async function fetchNewsWithCache(
       error: error instanceof Error ? error.message : String(error),
     });
 
-    const apiArticles = await fetchCompanyNews(ticker, from, to, apiKey);
+    const { articles: apiArticles, provider } = await fetchFromProvider(ticker, from, to, apiKey);
 
     return {
       data: apiArticles,
       cached: false,
       newArticlesCount: apiArticles.length,
       cachedArticlesCount: 0,
-      source: 'finnhub',
+      source: provider,
     };
   }
 }

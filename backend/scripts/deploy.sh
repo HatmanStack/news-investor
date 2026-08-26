@@ -122,6 +122,7 @@ resolve ALLOWED_ORIGINS      "Allowed Origins"   true  "*"
 
 # Optional — blank is a valid, meaningful configuration for all of these.
 resolve FINNHUB_WEBHOOK_SECRET  "Finnhub Webhook Secret"   false
+resolve EODHD_API_KEY           "EODHD API Key"            false
 resolve ALPHA_VANTAGE_API_KEY   "Alpha Vantage API Key"    false
 resolve SES_FROM_EMAIL          "SES From Email"           false
 resolve REDDIT_CLIENT_ID        "Reddit Client ID"         false
@@ -297,6 +298,7 @@ add_param() {
 
 PARAM_OVERRIDES=()
 add_param FinnhubApiKey        "$FINNHUB_API_KEY"
+add_param EodhdApiKey          "$EODHD_API_KEY"
 add_param FinnhubWebhookSecret "$FINNHUB_WEBHOOK_SECRET"
 add_param AlphaVantageApiKey   "$ALPHA_VANTAGE_API_KEY"
 add_param AllowedOrigins       "$ALLOWED_ORIGINS"

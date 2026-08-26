@@ -9,6 +9,7 @@ import { logError, hasStatusCode, sanitizeErrorMessage } from '../utils/error.ut
 import { logMetrics, MetricUnit } from '../utils/metrics.util';
 import { newsRequestSchema, parseQueryParams } from '../utils/schemas.util';
 import { fetchNewsWithCache } from '../services/newsCache.service';
+import { truncateBody } from '../utils/truncation.util';
 
 // Re-export for backward compatibility with tests/consumers
 export { fetchNewsWithCache as handleNewsWithCache } from '../services/newsCache.service';
@@ -49,7 +50,19 @@ export async function handleNewsRequest(
       Cached: String(result.cached),
     });
 
-    return successResponse(result.data, 200, {
+    // /news is a list feed and browser-sentiment input, not a reading
+    // surface: no frontend component renders its summary as article text.
+    // With EODHD the cached summary is the full article body (~4KB median),
+    // which is a paid feature — the tier-gated reading surface is
+    // /sentiment/articles. Capping here for every caller closes the paywall
+    // hole without importing tier.service into this handler, which would
+    // force a community overlay for a file that otherwise syncs as-is.
+    const previewData = result.data.map((article) => ({
+      ...article,
+      summary: truncateBody(article.summary || '', false),
+    }));
+
+    return successResponse(previewData, 200, {
       _meta: {
         cached: result.cached,
         source: result.source,

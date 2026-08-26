@@ -7,13 +7,14 @@
  * 3. Alpha Vantage fallback for historical data
  */
 
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
 const mockQueryArticlesByTicker = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockBatchPutArticles = jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockBatchCheckExistence =
   jest.fn<(...args: unknown[]) => Promise<{ found: Set<string>; complete: boolean }>>();
 const mockFetchCompanyNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
+const mockFetchCompanyNewsEodhd = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockFetchAlphaVantageNews = jest.fn<(...args: unknown[]) => Promise<unknown[]>>();
 const mockGenerateArticleHash = jest.fn<(url: string) => string>();
 const mockTransformFinnhubToCache = jest.fn();
@@ -27,6 +28,9 @@ jest.unstable_mockModule('../../repositories/newsCache.repository', () => ({
 }));
 jest.unstable_mockModule('../finnhub.service', () => ({
   fetchCompanyNews: mockFetchCompanyNews,
+}));
+jest.unstable_mockModule('../eodhd.service', () => ({
+  fetchCompanyNewsEodhd: mockFetchCompanyNewsEodhd,
 }));
 jest.unstable_mockModule('../alphavantage.service', () => ({
   fetchAlphaVantageNews: mockFetchAlphaVantageNews,
@@ -104,6 +108,10 @@ const ALPHA_KEY = 'av_test';
 describe('newsCacheService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Provider selection reads this; keep the Finnhub default for every test
+    // that doesn't opt in to EODHD explicitly.
+    delete process.env.EODHD_API_KEY;
 
     // Default implementations
     mockGenerateArticleHash.mockImplementation((url: string) => `hash_${url}`);
@@ -332,6 +340,59 @@ describe('newsCacheService', () => {
   // ---------------------------------------------------------------
   // Alpha Vantage fallback
   // ---------------------------------------------------------------
+
+  describe('provider selection (EODHD_API_KEY)', () => {
+    afterEach(() => {
+      delete process.env.EODHD_API_KEY;
+    });
+
+    it('fetches from EODHD when the key is set, without touching Finnhub', async () => {
+      process.env.EODHD_API_KEY = 'eodhd_test';
+      const articles = [makeFinnhubArticle('2025-01-14', 1)];
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNewsEodhd.mockResolvedValue(articles);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY);
+
+      expect(result.source).toBe('eodhd');
+      expect(result.data).toEqual(articles);
+      expect(mockFetchCompanyNewsEodhd).toHaveBeenCalledWith(
+        TICKER,
+        '2025-01-13',
+        '2025-01-17',
+        'eodhd_test',
+      );
+      expect(mockFetchCompanyNews).not.toHaveBeenCalled();
+    });
+
+    it('uses EODHD in the cache-bypass fallback path too', async () => {
+      process.env.EODHD_API_KEY = 'eodhd_test';
+      const articles = [makeFinnhubArticle('2025-01-14', 1)];
+
+      // Cache read failure forces the complete-fallback branch
+      mockQueryArticlesByTicker.mockRejectedValue(new Error('dynamo down'));
+      mockFetchCompanyNewsEodhd.mockResolvedValue(articles);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY);
+
+      expect(result.source).toBe('eodhd');
+      expect(result.cached).toBe(false);
+      expect(mockFetchCompanyNews).not.toHaveBeenCalled();
+    });
+
+    it('falls back to Finnhub when the key is absent', async () => {
+      const articles = [makeFinnhubArticle('2025-01-14', 1)];
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue(articles);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY);
+
+      expect(result.source).toBe('finnhub');
+      expect(mockFetchCompanyNewsEodhd).not.toHaveBeenCalled();
+    });
+  });
 
   describe('Alpha Vantage fallback', () => {
     it('calls Alpha Vantage when historical data insufficient and key provided', async () => {

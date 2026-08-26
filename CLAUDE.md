@@ -164,8 +164,13 @@ Backend `.env.deploy`:
 
 ```dotenv
 FINNHUB_API_KEY=your_key
+# EODHD_API_KEY=your_eodhd_token   # presence alone switches news to EODHD full-text — leave commented until the key is real
 ALLOWED_ORIGINS=*
 ```
+
+`EODHD_API_KEY` is optional and is the entire provider switch: when set, news
+fetching uses EODHD full article bodies instead of Finnhub summaries
+(~145 chars). Finnhub stays required either way.
 
 Full list with all optional variables: [docs/API.md — Environment Variables](docs/API.md#environment-variables)
 

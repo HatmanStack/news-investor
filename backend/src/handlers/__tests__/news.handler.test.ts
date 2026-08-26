@@ -162,6 +162,55 @@ describe('News Handler', () => {
       expect(body._meta.cached).toBe(false);
       expect(body._meta.source).toBe('finnhub');
     });
+
+    it('caps article summaries to a preview for every caller', async () => {
+      // With EODHD the cached summary is the full article body — a paid
+      // feature served tier-gated by /sentiment/articles. /news is a list
+      // feed; it must never carry the full text.
+      const longSummary = 'word '.repeat(200).trim(); // ~1000 chars
+      mockFetchNewsWithCache.mockResolvedValue({
+        data: [
+          {
+            category: 'company',
+            datetime: 1756100000,
+            headline: 'Long',
+            id: 0,
+            image: '',
+            related: 'AAPL',
+            source: 'finance.yahoo.com',
+            summary: longSummary,
+            url: 'https://a',
+          },
+          {
+            category: 'company',
+            datetime: 1756100001,
+            headline: 'Short',
+            id: 0,
+            image: '',
+            related: 'AAPL',
+            source: 'finance.yahoo.com',
+            summary: 'Brief note.',
+            url: 'https://b',
+          },
+        ],
+        cached: true,
+        source: 'cache',
+        newArticlesCount: 0,
+        cachedArticlesCount: 2,
+      });
+
+      const event = createAPIGatewayEvent({
+        queryStringParameters: { ticker: 'AAPL', from: '2025-01-01', to: '2025-01-31' },
+      });
+
+      const response = await handleNewsRequest(event);
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data[0].summary.length).toBeLessThanOrEqual(201); // 200 + ellipsis
+      expect(body.data[0].summary.endsWith('…')).toBe(true);
+      expect(body.data[1].summary).toBe('Brief note.');
+    });
   });
 
   describe('Error Handling', () => {

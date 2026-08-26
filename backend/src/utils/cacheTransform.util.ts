@@ -33,6 +33,9 @@ export function transformFinnhubToCache(
       date,
       publisher: finnhubArticle.source,
       imageUrl: finnhubArticle.image,
+      ...(finnhubArticle.providerSentiment
+        ? { providerSentiment: finnhubArticle.providerSentiment }
+        : {}),
     },
     fetchedAt: Date.now(),
   };
@@ -57,5 +60,8 @@ export function transformCacheToFinnhub(cacheItem: NewsCacheItem): FinnhubNewsAr
     source: cacheItem.article.publisher || '',
     summary: cacheItem.article.description || '',
     url: cacheItem.article.url,
+    ...(cacheItem.article.providerSentiment
+      ? { providerSentiment: cacheItem.article.providerSentiment }
+      : {}),
   };
 }

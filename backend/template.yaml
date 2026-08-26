@@ -8,6 +8,14 @@ Parameters:
     Description: Finnhub API key for news data
     NoEcho: true
 
+  # Optional. When set, news fetching switches from Finnhub summaries to EODHD
+  # full article bodies; selection is key presence alone (newsCache.service.ts).
+  EodhdApiKey:
+    Type: String
+    Description: EODHD API token for full-text news (optional; empty keeps Finnhub as the news provider)
+    Default: ''
+    NoEcho: true
+
   AlphaVantageApiKey:
     Type: String
     Description: Alpha Vantage API key for historical news (optional fallback)
@@ -464,6 +472,7 @@ Resources:
       Environment:
         Variables:
           FINNHUB_API_KEY: !Ref FinnhubApiKey
+          EODHD_API_KEY: !Ref EodhdApiKey
           ALPHA_VANTAGE_API_KEY: !Ref AlphaVantageApiKey
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           DYNAMODB_TABLE_NAME: !Ref ReactStocksTable

@@ -99,6 +99,18 @@ describe('cacheTransform.util', () => {
       expect(result.fetchedAt).toBeGreaterThanOrEqual(before);
       expect(result.fetchedAt).toBeLessThanOrEqual(after);
     });
+
+    it('passes providerSentiment through and omits it when absent', () => {
+      const sentiment = { polarity: 0.4, neg: 0.1, neu: 0.6, pos: 0.3 };
+      const withSentiment = transformFinnhubToCache('AAPL', {
+        ...baseFinnhubArticle,
+        providerSentiment: sentiment,
+      });
+      expect(withSentiment.article.providerSentiment).toEqual(sentiment);
+
+      const withoutSentiment = transformFinnhubToCache('AAPL', baseFinnhubArticle);
+      expect(withoutSentiment.article).not.toHaveProperty('providerSentiment');
+    });
   });
 
   describe('transformCacheToFinnhub', () => {

@@ -14,6 +14,7 @@ import {
 } from '../utils/dynamodb.util.js';
 import { makeNewsPK, makeHashSK, SortKeyPrefix } from '../types/dynamodb.types.js';
 import type { NewsCacheItem } from '../types/dynamodb.types.js';
+import type { EodhdSentiment } from '../types/eodhd.types.js';
 import { calculateTTLByDataType } from '../utils/cache.util.js';
 import { logger } from '../utils/logger.util.js';
 
@@ -27,6 +28,12 @@ export interface NewsArticle {
   date: string;
   publisher?: string;
   imageUrl?: string;
+  /**
+   * Provider-computed sentiment (EODHD only). Persisted before the NEWS#
+   * roll-off because it cannot be re-derived once the item expires; not yet
+   * consumed by scoring (plan.md ADR 5).
+   */
+  providerSentiment?: EodhdSentiment;
 }
 
 /**
@@ -297,6 +304,9 @@ function transformFromLegacy(item: Omit<LegacyNewsCacheItem, 'ttl'>): NewsCacheI
     source: item.article.publisher || '',
     url: item.article.url,
     publishedAt: item.article.date,
+    ...(item.article.providerSentiment
+      ? { providerSentiment: item.article.providerSentiment }
+      : {}),
     ttl: calculateTTLByDataType('news'),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -316,6 +326,7 @@ function transformToLegacy(item: NewsCacheItem): LegacyNewsCacheItem {
       description: item.summary,
       date: item.publishedAt,
       publisher: item.source,
+      ...(item.providerSentiment ? { providerSentiment: item.providerSentiment } : {}),
     },
     ttl: item.ttl || 0,
     fetchedAt: new Date(item.createdAt).getTime(),

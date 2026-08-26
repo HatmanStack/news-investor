@@ -25,6 +25,13 @@ recorded here, and the 2026-07-26 audit remediation cycle.
 
 ### Added
 
+- EODHD full-text news provider (`EODHD_API_KEY`). When the key is set, news
+  fetching switches from Finnhub's ~145-char summaries to EODHD's full article
+  bodies (measured median ~4KB), the provider's per-article sentiment is
+  persisted alongside each cached article, and the ingestion sweep paces at
+  150 ms instead of 1100 ms. `/news` now serves a bounded preview of the
+  article text to every caller; the full body remains served tier-gated by
+  `/sentiment/articles`. Without the key, behavior is unchanged (Finnhub).
 - **[Pro]** Scheduled ingestion sweep (`SweepFunction`). Walks the S&P ticker universe each weekday at 22:00 UTC, after the US close, fetching news and queueing sentiment analysis. The app now accumulates coverage on its own instead of only holding what someone happened to look at. Tickers that produce nothing for three consecutive sweeps drop to a weekly re-probe rather than being abandoned.
 - **[Pro]** Finnhub webhook ingestion (`POST /webhooks/finnhub`). News events push sentiment analysis within minutes of publication instead of waiting for the next sweep. Authenticated by a shared secret; without `FINNHUB_WEBHOOK_SECRET` the endpoint refuses every event rather than accepting unauthenticated input.
 - **[Pro]** Server-side entitlement enforcement on every endpoint that returns pro data — notes, watchlist, annotations, alerts, reports, track record, peer and sector sentiment, social sentiment, portfolio risk and export. Previously several of these returned pro data to any signed-in caller; the paid tier now means something at the API, not only in the UI.

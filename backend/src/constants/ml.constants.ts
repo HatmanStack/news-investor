@@ -136,6 +136,7 @@ export const ALPHAVANTAGE_COOLDOWN_MS = 1_800_000;
 export const CIRCUIT_SERVICE_FINNHUB = 'finnhub';
 export const CIRCUIT_SERVICE_ALPHAVANTAGE = 'alphavantage';
 export const CIRCUIT_SERVICE_REDDIT = 'reddit';
+export const CIRCUIT_SERVICE_EODHD = 'eodhd';
 
 // ============================================================
 // Reddit API Configuration

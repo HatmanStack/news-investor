@@ -108,10 +108,18 @@ export interface NewsCacheItem extends BaseTableItem {
   ticker: string;
   articleHash: string;
   headline: string;
+  /**
+   * The text we hold for the article. Finnhub-sourced items carry its
+   * ~145-char summary; EODHD-sourced items carry the full article body
+   * (median ~4KB). Same field on purpose — every consumer treats it as
+   * "the article text" (docs/plans/2026-08-25-eodhd-full-text/plan.md ADR 3).
+   */
   summary: string;
   source: string;
   url: string;
   publishedAt: string;
+  /** Provider-computed sentiment (EODHD only); opaque passthrough. */
+  providerSentiment?: import('./eodhd.types.js').EodhdSentiment;
 }
 
 /**
