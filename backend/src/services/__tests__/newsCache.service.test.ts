@@ -366,6 +366,52 @@ describe('newsCacheService', () => {
       expect(mockFetchCompanyNews).not.toHaveBeenCalled();
     });
 
+    it('does not re-call the provider when the provider itself fails', async () => {
+      process.env.EODHD_API_KEY = 'eodhd_test';
+      // The AAPL 2026-08-26 defect: the whole-function catch treated a
+      // provider failure as a cache failure and ran the provider a second
+      // time — four attempts and 44s for a request that normally answers in
+      // under a second. The failure must propagate after ONE round.
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNewsEodhd.mockRejectedValue(new Error('This operation was aborted'));
+
+      await expect(fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY)).rejects.toThrow(
+        'This operation was aborted',
+      );
+
+      expect(mockFetchCompanyNewsEodhd).toHaveBeenCalledTimes(1);
+    });
+
+    it('still serves from the provider when the CACHE READ fails', async () => {
+      // The fallback's actual purpose, preserved.
+      process.env.EODHD_API_KEY = 'eodhd_test';
+      const articles = [makeFinnhubArticle('2025-01-14', 1)];
+      mockQueryArticlesByTicker.mockRejectedValue(new Error('dynamo down'));
+      mockFetchCompanyNewsEodhd.mockResolvedValue(articles);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY);
+
+      expect(result.source).toBe('eodhd');
+      expect(result.data).toEqual(articles);
+      expect(mockFetchCompanyNewsEodhd).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the fetched articles when the duplicate check fails', async () => {
+      // The dedup read used to be covered by the whole-function catch. Losing
+      // an already-paid-for provider fetch over it would waste the articles
+      // and the API call both.
+      process.env.EODHD_API_KEY = 'eodhd_test';
+      const articles = [makeFinnhubArticle('2025-01-14', 1)];
+      mockQueryArticlesByTicker.mockResolvedValue([makeCacheItem('2025-01-14', 9)]);
+      mockBatchCheckExistence.mockRejectedValue(new Error('throttled'));
+      mockFetchCompanyNewsEodhd.mockResolvedValue(articles);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-13', '2025-01-17', API_KEY);
+
+      expect(result.data).toEqual(articles);
+      expect(mockFetchCompanyNewsEodhd).toHaveBeenCalledTimes(1);
+    });
+
     it('uses EODHD in the cache-bypass fallback path too', async () => {
       process.env.EODHD_API_KEY = 'eodhd_test';
       const articles = [makeFinnhubArticle('2025-01-14', 1)];

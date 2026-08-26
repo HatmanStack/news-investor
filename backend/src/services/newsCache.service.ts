@@ -85,7 +85,23 @@ async function filterNewArticles(
   }
 
   const hashes = articlesWithHashes.map((a) => a.hash);
-  const { found: existingHashes } = await batchCheckExistence(ticker, hashes);
+
+  // Degrade to "treat every article as new" rather than throwing. The caller
+  // has already paid for the provider fetch, and losing it over a dedup read
+  // would waste both the articles and the API call. Re-writing a row that
+  // already exists is harmless — batchPutArticles is keyed by article hash,
+  // so a duplicate put overwrites itself. (Previously the whole-function
+  // catch absorbed this, at the cost of re-calling the provider.)
+  let existingHashes: Set<string>;
+  try {
+    ({ found: existingHashes } = await batchCheckExistence(ticker, hashes));
+  } catch (error) {
+    logger.warn('Duplicate check failed, treating all articles as new', {
+      ticker,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    existingHashes = new Set();
+  }
 
   const newArticles = articlesWithHashes.filter(({ hash }) => !existingHashes.has(hash));
   const duplicateCount = articlesWithHashes.length - newArticles.length;
@@ -104,10 +120,37 @@ export async function fetchNewsWithCache(
   apiKey: string,
   alphaVantageKey?: string,
 ): Promise<NewsCacheResult> {
+  // Tier 1: Check DynamoDB cache.
+  //
+  // Scoped narrowly on purpose. This used to sit inside a try whose catch
+  // wrapped the WHOLE function, including the provider fetch below — so a
+  // provider failure fell into a handler that called the provider again.
+  // AAPL on 2026-08-26 shows the cost: two attempts on the main path, two
+  // more from the fallback, four 10s timeouts and 44s spent on a request
+  // that normally answers in 0.6s, and four calls against the API quota for
+  // a failure a second round could never fix. The fallback exists for one
+  // case — the cache read itself is unavailable — so it now covers exactly
+  // that, and a provider failure propagates to the caller once.
+  let cachedItems: Awaited<ReturnType<typeof queryArticlesByTicker>>;
   try {
-    // Tier 1: Check DynamoDB cache
-    const cachedItems = await queryArticlesByTicker(ticker);
+    cachedItems = await queryArticlesByTicker(ticker);
+  } catch (error) {
+    logger.warn('Cache read failed, serving directly from the provider', {
+      ticker,
+      error: error instanceof Error ? error.message : String(error),
+    });
 
+    const { articles, provider } = await fetchFromProvider(ticker, from, to, apiKey);
+    return {
+      data: articles,
+      cached: false,
+      newArticlesCount: articles.length,
+      cachedArticlesCount: 0,
+      source: provider,
+    };
+  }
+
+  {
     const cachedInRange = cachedItems.filter((item) => {
       return item.article.date >= from && item.article.date <= to;
     });
@@ -294,20 +337,6 @@ export async function fetchNewsWithCache(
       newArticlesCount: newArticles.length,
       cachedArticlesCount: cachedInRange.length,
       source: newsSource,
-    };
-  } catch (error) {
-    logger.warn('Cache check failed, falling back to API', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    const { articles: apiArticles, provider } = await fetchFromProvider(ticker, from, to, apiKey);
-
-    return {
-      data: apiArticles,
-      cached: false,
-      newArticlesCount: apiArticles.length,
-      cachedArticlesCount: 0,
-      source: provider,
     };
   }
 }
