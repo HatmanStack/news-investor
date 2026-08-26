@@ -43,13 +43,22 @@ export function transformLambdaToLocal(
   return sorted.map((day) => {
     const isLatest = day.date === latestDate;
 
+    // Canonical day score: transformer first, aspect second, AFINN word-ratio
+    // last (legacy data only). The displayed number and its POS/NEG label are
+    // derived from the SAME value — previously the label came from the AFINN
+    // ratio while other surfaces showed the aspect score, which could render
+    // a day as positive (+1 word ratio) against a strongly negative aspect
+    // score (ADBE 2026-08-14: +1 vs −0.76). Matches the backend's
+    // canonicalDailyScore precedence.
+    const canonicalScore = day.avgMlScore ?? day.avgAspectScore ?? day.sentimentScore;
+
     const record: CombinedWordDetails = {
       date: day.date,
       ticker,
       positive: day.positiveCount,
       negative: day.negativeCount,
-      sentimentNumber: day.sentimentScore,
-      sentiment: classifySentiment(day.sentimentScore),
+      sentimentNumber: canonicalScore,
+      sentiment: classifySentiment(canonicalScore),
       nextDay: 0,
       twoWks: 0,
       oneMnth: 0,

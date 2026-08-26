@@ -6,12 +6,35 @@ import { describe, it, expect } from '@jest/globals';
 import {
   classifySentiment,
   aggregateDailySentiment,
+  canonicalDailyScore,
   SENTIMENT_THRESHOLDS,
 } from '../sentiment.util';
 import type { SentimentCacheItem } from '../../types/sentiment.types';
 import type { NewsCacheItem } from '../../repositories/newsCache.repository';
 
 describe('Sentiment Utility Functions', () => {
+  describe('canonicalDailyScore', () => {
+    it('prefers the transformer score over everything', () => {
+      expect(
+        canonicalDailyScore({ avgMlScore: -0.9, avgAspectScore: 0.5, sentimentScore: 1 }),
+      ).toBe(-0.9);
+    });
+
+    it('falls back to the aspect score, then the legacy word ratio', () => {
+      expect(canonicalDailyScore({ avgAspectScore: -0.76, sentimentScore: 1 })).toBe(-0.76);
+      expect(canonicalDailyScore({ sentimentScore: 1 })).toBe(1);
+    });
+
+    it('treats null and undefined alike and defaults to 0', () => {
+      expect(canonicalDailyScore({ avgMlScore: null, avgAspectScore: null })).toBe(0);
+      expect(canonicalDailyScore({})).toBe(0);
+    });
+
+    it('a transformer score of 0 is a real score, not an absence', () => {
+      expect(canonicalDailyScore({ avgMlScore: 0, avgAspectScore: 0.8 })).toBe(0);
+    });
+  });
+
   describe('classifySentiment', () => {
     it('should classify positive sentiment above threshold', () => {
       expect(classifySentiment(0.5)).toBe('POS');

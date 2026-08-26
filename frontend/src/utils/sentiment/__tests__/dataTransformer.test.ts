@@ -66,10 +66,39 @@ describe('dataTransformer', () => {
       expect(result[0].ticker).toBe('AAPL');
       expect(result[0].positive).toBe(5);
       expect(result[0].negative).toBe(2);
-      expect(result[0].sentimentNumber).toBe(0.4);
+      // Canonical precedence: the transformer score leads when present
+      expect(result[0].sentimentNumber).toBe(0.5);
       expect(result[0].sentiment).toBe('POS');
       expect(result[0].avgAspectScore).toBe(0.3);
       expect(result[0].avgMlScore).toBe(0.5);
+    });
+
+    it('derives the displayed number and label from the same canonical score', () => {
+      // The ADBE 2026-08-14 shape: AFINN word ratio +1, aspect −0.76, no
+      // transformer score. The label and the number must both come from the
+      // aspect score — previously the label was computed from the AFINN ratio
+      // while other surfaces displayed the aspect score.
+      const input = [
+        makeDailySentiment({ sentimentScore: 1, avgAspectScore: -0.76, avgMlScore: undefined }),
+      ];
+      const result = transformLambdaToLocal(input, 'ADBE');
+
+      expect(result[0].sentimentNumber).toBe(-0.76);
+      expect(result[0].sentiment).toBe('NEG');
+    });
+
+    it('falls back to the legacy word ratio only when no three-signal score exists', () => {
+      const input = [
+        makeDailySentiment({
+          sentimentScore: 0.4,
+          avgAspectScore: undefined,
+          avgMlScore: undefined,
+        }),
+      ];
+      const result = transformLambdaToLocal(input, 'AAPL');
+
+      expect(result[0].sentimentNumber).toBe(0.4);
+      expect(result[0].sentiment).toBe('POS');
     });
 
     it('sorts records by date ascending', () => {

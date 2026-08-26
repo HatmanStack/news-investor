@@ -25,6 +25,36 @@ export const SENTIMENT_THRESHOLDS = {
 export type { DailySentiment } from '../types/sentiment.types.js';
 
 /**
+ * The canonical score for a ticker-day, used wherever ONE number stands for
+ * the day's sentiment: transformer first, aspect second, AFINN last.
+ *
+ * This precedence is a product decision, made once and applied everywhere
+ * (trending ranks, daily history, peer and sector averages, the frontend's
+ * displayed classification):
+ *
+ * - `avgMlScore` (DistilFinBERT over material events) is the signal the
+ *   product actually sells; when the day had a material event, that event IS
+ *   the day's story, so its score leads even though it averages fewer
+ *   articles.
+ * - `avgAspectScore` (rule-based aspect detection, signal-weighted across all
+ *   articles) is the dense fallback for days with no material events.
+ * - The AFINN word-count ratio is legacy-only: it disagreed with the aspect
+ *   score in sign often enough to render a red day with a +1 score (ADBE
+ *   2026-08-14: AFINN +1, aspect −0.76). No surface should classify from it
+ *   when either three-signal score exists.
+ *
+ * `??` treats null and undefined alike, so this accepts both the backend's
+ * optional fields and the frontend's nullable ones.
+ */
+export function canonicalDailyScore(day: {
+  avgMlScore?: number | null;
+  avgAspectScore?: number | null;
+  sentimentScore?: number | null;
+}): number {
+  return day.avgMlScore ?? day.avgAspectScore ?? day.sentimentScore ?? 0;
+}
+
+/**
  * Classify sentiment score based on thresholds
  *
  * @param sentimentScore - Score from -1 to 1

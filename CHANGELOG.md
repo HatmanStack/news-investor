@@ -25,6 +25,13 @@ recorded here, and the 2026-07-26 audit remediation cycle.
 
 ### Added
 
+- **[Pro]** Scheduled prediction snapshots (`SnapshotFunction`). Weekdays at
+  23:30 UTC, every ticker analyzed that day gets its predictions recorded as
+  `PRED#` snapshots — previously the only writer was `POST /predict` on user
+  views, so a full table scan found zero snapshots and the accuracy track
+  record (which needs ~90 days of resolved outcomes) could never start. Also
+  ships the previously missing `backend/scripts/warm-cache.ts`, the one-time
+  `HIST#` price-spine seeder `package.json` already declared.
 - EODHD full-text news provider (`EODHD_API_KEY`). When the key is set, news
   fetching switches from Finnhub's ~145-char summaries to EODHD's full article
   bodies (measured median ~4KB), the provider's per-article sentiment is
@@ -45,6 +52,19 @@ recorded here, and the 2026-07-26 audit remediation cycle.
 - `make setup-python`, `make check-full` and `make sync-check`. `make setup` now installs the Python toolchain, so a fresh clone can run the Python tests without hunting for the missing step.
 
 ### Changed
+
+- Trending now ranks on the transformer sentiment score where both days have
+  one (aspect fallback, like-for-like so a delta never measures a scale
+  switch), and a ticker-day needs at least 5 articles to enter the feed —
+  thin coverage produced lattice-extreme scores that the |delta| sort
+  actively favoured. A day when nothing clears the floor keeps the previous
+  feed instead of publishing an empty one.
+- One canonical day score everywhere (`canonicalDailyScore`: transformer →
+  aspect → legacy word ratio). The displayed sentiment label and number now
+  derive from the same value; previously the label came from the AFINN word
+  ratio while other surfaces showed the aspect score, which could render a
+  day positive at +1 against a −0.76 aspect score. Peer and sector averages
+  and the daily-history endpoint follow the same precedence.
 
 - **The three prediction horizons now carry different information.** The 1-day, 2-week and 1-month forecasts were previously computed from the same label and were arithmetically the same number presented three ways. Each horizon is now labelled by its own forward return and validated separately.
 - **A horizon the model cannot stand behind is now withheld rather than shown.** Previously a horizon that could not be validated was filled in with a downward coin flip and recorded against the published accuracy. If you see fewer than three horizons, that is the model declining to guess. On the free tier's 90-day history window the 1-month horizon is routinely absent, because 90 days does not contain enough resolved 30-day outcomes to validate one; the pro tier's 365-day window does.

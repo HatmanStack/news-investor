@@ -13,10 +13,27 @@ import {
 } from '../repositories/trending.repository.js';
 import { makeDailyPK, makeDateSK } from '../types/dynamodb.types.js';
 import type { DailySentimentItem } from '../types/dynamodb.types.js';
+import { canonicalDailyScore } from '../utils/sentiment.util.js';
 import { logger } from '../utils/logger.util.js';
 
 /** How many movers the feed publishes. */
 const TOP_N = 10;
+
+/**
+ * Minimum articles a ticker-day needs before it may enter the feed.
+ *
+ * Thin coverage produces lattice-extreme scores — one strongly-worded article
+ * IS the day's average — and because ranking sorts on |delta| from zero, the
+ * feed otherwise favours precisely the least-covered tickers. Five mirrors
+ * the sweep's COVERAGE_MIN_ARTICLES, but is deliberately a local constant:
+ * sweep.service is pro-only and excluded from the community sync, while this
+ * file ships to both editions.
+ *
+ * An aggregate without an articleCount (pre-field historical rows) is
+ * ineligible rather than assumed covered — the feed should only rank days it
+ * can vouch for.
+ */
+export const TRENDING_MIN_ARTICLES = 5;
 
 /** batchGetItemsSingleTable accepts at most 100 keys per call. */
 const BATCH_GET_MAX_KEYS = 100;
@@ -68,6 +85,36 @@ function mergeTopN(leaders: TrendingDelta[], page: TrendingDelta[]): TrendingDel
   const merged = leaders.concat(page);
   merged.sort((a, b) => Math.abs(b.sentimentDelta) - Math.abs(a.sentimentDelta));
   return merged.slice(0, TOP_N);
+}
+
+/**
+ * Today's and yesterday's scores on a single scale, so the delta measures
+ * sentiment movement rather than a scale change.
+ *
+ * The canonical precedence (canonicalDailyScore: transformer first, aspect
+ * fallback) is right for a single day, but a delta needs both days on the
+ * SAME scale: avgMlScore exists only on material-event days, so ml-today
+ * minus aspect-yesterday would rank a ticker for the scale switch itself.
+ *
+ * - Both days have a transformer score → transformer delta.
+ * - Otherwise → aspect delta (dense, present on any covered day).
+ * - No yesterday aggregate at all → today's canonical score against zero,
+ *   the pre-existing new-ticker behavior, now bounded by the article floor.
+ */
+function pairedDayScores(
+  today: DailySentimentItem,
+  yesterday: DailySentimentItem | undefined,
+): { todayScore: number; yesterdayScore: number } {
+  if (today.avgMlScore !== undefined && yesterday?.avgMlScore !== undefined) {
+    return { todayScore: today.avgMlScore, yesterdayScore: yesterday.avgMlScore };
+  }
+  if (yesterday === undefined) {
+    return { todayScore: canonicalDailyScore(today), yesterdayScore: 0 };
+  }
+  return {
+    todayScore: today.avgAspectScore ?? 0,
+    yesterdayScore: yesterday.avgAspectScore ?? 0,
+  };
 }
 
 /**
@@ -151,18 +198,22 @@ export async function recomputeTrending(): Promise<void> {
 
     tickersSeen += page.items.length;
 
+    // Eligibility gate before the yesterday lookup: an ineligible ticker
+    // costs nothing further, and the batch get only fetches days that can
+    // actually rank.
+    const eligible = page.items.filter((item) => (item.articleCount ?? 0) >= TRENDING_MIN_ARTICLES);
+    if (eligible.length === 0) continue;
+
     const yesterdayByTicker = await fetchYesterdayByTicker(
-      page.items.map((item) => item.ticker),
+      eligible.map((item) => item.ticker),
       yesterday,
     );
 
-    const pageDeltas: TrendingDelta[] = page.items.map((item) => {
-      const todayScore = item.avgAspectScore ?? 0;
-      // When no yesterday data exists, yesterdayScore defaults to 0. This means
-      // newly tracked tickers with no prior history will have delta = currentScore - 0,
-      // causing them to rank highly in the trending feed until they accumulate at
-      // least 2 days of data. This is acceptable behavior but worth being aware of.
-      const yesterdayScore = yesterdayByTicker.get(item.ticker)?.avgAspectScore ?? 0;
+    const pageDeltas: TrendingDelta[] = eligible.map((item) => {
+      const { todayScore, yesterdayScore } = pairedDayScores(
+        item,
+        yesterdayByTicker.get(item.ticker),
+      );
       const delta = todayScore - yesterdayScore;
 
       return {
@@ -178,6 +229,19 @@ export async function recomputeTrending(): Promise<void> {
 
   if (tickersSeen === 0) {
     logger.info('No daily aggregates for today, skipping trending computation');
+    return;
+  }
+
+  // Aggregates existed but none cleared the article floor. Publishing an
+  // empty top-10 would overwrite the last real feed with a blank; leaving the
+  // previous record standing is the same posture as the no-data return above.
+  // Info, not warn: early in a sweep's drain this is the normal state, and
+  // the corrective recomputeTrendingIfStale pass fills it in as counts land.
+  if (leaders.length === 0) {
+    logger.info('No ticker cleared the trending article floor; keeping the previous feed', {
+      tickersSeen,
+      minArticles: TRENDING_MIN_ARTICLES,
+    });
     return;
   }
 

@@ -15,7 +15,7 @@ import * as NewsCacheRepository from '../repositories/newsCache.repository.js';
 import * as DailySentimentAggregateRepository from '../repositories/dailySentimentAggregate.repository.js';
 import { generateJobId } from '../utils/job.util.js';
 import { successResponse, errorResponse, type APIGatewayResponse } from '../utils/response.util.js';
-import { aggregateDailySentiment } from '../utils/sentiment.util.js';
+import { aggregateDailySentiment, canonicalDailyScore } from '../utils/sentiment.util.js';
 import { logMlSentimentCacheHitRate } from '../utils/metrics.util.js';
 import { validateDateFormat, validateTicker } from '../utils/validation.util.js';
 import { sentimentRequestSchema, parseBody } from '../utils/schemas.util.js';
@@ -493,7 +493,8 @@ export const handleDailyHistoryRequest = withErrorHandling(
 
     const result = dailyData.map((d) => ({
       date: d.date,
-      sentimentScore: d.avgAspectScore ?? d.avgMlScore ?? 0,
+      // Canonical precedence (transformer first) — see canonicalDailyScore.
+      sentimentScore: canonicalDailyScore(d),
       materialEventCount: d.materialEventCount ?? 0,
       eventCounts: d.eventCounts,
       avgSignalScore: d.avgSignalScore,
