@@ -1,4 +1,4 @@
-.PHONY: setup setup-python test check-full test-e2e lint ministack ministack-stop dev build-admin deploy-admin deploy-admin-amplify deploy-web deploy-landing sync-check
+.PHONY: setup setup-python test check-full test-e2e lint ministack ministack-stop dev build-admin deploy-admin deploy-web deploy-landing sync-check
 
 setup: setup-python
 	npm install --legacy-peer-deps
@@ -95,9 +95,6 @@ deploy-web:
 # collision.
 deploy-landing:
 	bash -c 'set -euo pipefail; set -a; . backend/.env.deploy; set +a; ./backend/scripts/amplify-release.sh landing webapp WEB_AMPLIFY_APP_ID'
-
-deploy-admin-amplify:
-	./admin/scripts/deploy-admin-amplify.sh
 
 deploy-admin:
 	cd admin && npm run deploy
