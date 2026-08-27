@@ -98,11 +98,22 @@ resolve() {
     fi
 
     if [ "$INTERACTIVE" = true ]; then
-        local shown="${current:-<not set>}"
+        local shown="${current:-<not set>}" secret=false
         case "$var" in
-            *KEY|*SECRET) [ -n "$current" ] && shown="<hidden>" ;;
+            *KEY|*SECRET|*PASSWORD)
+                secret=true
+                [ -n "$current" ] && shown="<hidden>"
+                ;;
         esac
-        read -r -p "$prompt [$shown]: " input
+        if [ "$secret" = true ]; then
+            # -s so a pasted or typed credential never echoes to the
+            # terminal (or into a scrollback/screen-share). Empty input
+            # still means "keep the current value / stay disabled".
+            read -r -s -p "$prompt [$shown]: " input
+            echo
+        else
+            read -r -p "$prompt [$shown]: " input
+        fi
         [ -n "$input" ] && current="$input"
     fi
 

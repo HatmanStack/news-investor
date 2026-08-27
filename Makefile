@@ -1,4 +1,4 @@
-.PHONY: setup setup-python test check-full test-e2e lint ministack ministack-stop dev build-admin deploy-admin sync-check
+.PHONY: setup setup-python test check-full test-e2e lint ministack ministack-stop dev build-admin deploy-admin deploy-admin-amplify deploy-web deploy-landing sync-check
 
 setup: setup-python
 	npm install --legacy-peer-deps
@@ -25,7 +25,7 @@ test:
 #   - vulture is a Python tool `npm run hygiene` skips gracefully when absent
 # CI runs all four. This target is how you run them before opening a PR.
 check-full: test
-	shellcheck --severity=warning scripts/*.sh backend/scripts/*.sh admin/scripts/*.sh .sync/*.sh backend/localstack-init/*.sh
+	shellcheck --severity=warning scripts/*.sh backend/scripts/*.sh admin/scripts/*.sh frontend/scripts/*.sh .sync/*.sh backend/localstack-init/*.sh
 	npm run hygiene
 	npm run lint:docs:links
 	$(MAKE) ministack
@@ -83,6 +83,21 @@ dev: setup ministack  ## One-step local development setup
 
 build-admin:
 	cd admin && npm run build
+
+deploy-web:
+	./frontend/scripts/deploy-web.sh
+
+# The hand-built landing page — the web app's first deployment, live before
+# the Expo web build exists. Shares the webapp/ prefix and the web Amplify
+# app with deploy-web ON PURPOSE: landing and the Expo export are alternative
+# artifacts for the same site, and whichever deploys later replaces the
+# other. That is the intended lifecycle (landing first, app later), not a
+# collision.
+deploy-landing:
+	bash -c 'set -euo pipefail; set -a; . backend/.env.deploy; set +a; ./backend/scripts/amplify-release.sh landing webapp WEB_AMPLIFY_APP_ID'
+
+deploy-admin-amplify:
+	./admin/scripts/deploy-admin-amplify.sh
 
 deploy-admin:
 	cd admin && npm run deploy

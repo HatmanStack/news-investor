@@ -49,11 +49,13 @@ function makeDailyItem(
     ticker,
     date,
     avgAspectScore,
-    // Eligible by default so the pre-existing ranking tests keep exercising
-    // ranking; the article-floor tests override this explicitly.
-    articleCount: extra?.articleCount ?? 10,
     ...(extra?.avgMlScore !== undefined ? { avgMlScore: extra.avgMlScore } : {}),
-    eventCounts: {},
+    // Eligibility is derived from eventCounts, never from an articleCount
+    // attribute — nothing writes that attribute to a DAILY# row, and a
+    // fixture that sets it tests a field production never populates. Ten
+    // GENERAL events by default so the ranking tests stay eligible; the
+    // floor tests set their own count.
+    eventCounts: { GENERAL: extra?.articleCount ?? 10 },
     createdAt: '2025-11-01T00:00:00.000Z',
     updatedAt: '2025-11-01T00:00:00.000Z',
   };
@@ -126,7 +128,7 @@ describe('TrendingService', () => {
     const thin = makeDailyItem('THIN', '2025-11-02', 0.9, { articleCount: 4 });
     const uncounted = {
       ...makeDailyItem('OLD', '2025-11-02', 0.9),
-      articleCount: undefined,
+      eventCounts: {},
     };
     servePages([[eligible, thin, uncounted]]);
     serveYesterdayFor([eligible], 0.1);

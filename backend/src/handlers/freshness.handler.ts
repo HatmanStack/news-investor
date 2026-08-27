@@ -10,6 +10,7 @@ import { successResponse, errorResponse, type APIGatewayResponse } from '../util
 import { withErrorHandling } from '../utils/handler.util.js';
 import { validateTicker } from '../utils/validation.util.js';
 import { getLatestDailyAggregatesForTickers } from '../repositories/dailySentimentAggregate.repository.js';
+import { dailyArticleCount } from '../utils/sentiment.util.js';
 
 const MAX_TICKERS = 100;
 
@@ -57,7 +58,7 @@ export const handleFreshnessRequest = withErrorHandling(
         return { ticker, lastUpdated: null, articleCount: 0 };
       }
 
-      const articleCount = Object.values(data.eventCounts).reduce((sum, v) => sum + v, 0);
+      const articleCount = dailyArticleCount(data);
 
       return {
         ticker,

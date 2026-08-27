@@ -13,7 +13,7 @@ import {
 } from '../repositories/trending.repository.js';
 import { makeDailyPK, makeDateSK } from '../types/dynamodb.types.js';
 import type { DailySentimentItem } from '../types/dynamodb.types.js';
-import { canonicalDailyScore } from '../utils/sentiment.util.js';
+import { canonicalDailyScore, dailyArticleCount } from '../utils/sentiment.util.js';
 import { logger } from '../utils/logger.util.js';
 
 /** How many movers the feed publishes. */
@@ -29,9 +29,11 @@ const TOP_N = 10;
  * sweep.service is pro-only and excluded from the community sync, while this
  * file ships to both editions.
  *
- * An aggregate without an articleCount (pre-field historical rows) is
- * ineligible rather than assumed covered — the feed should only rank days it
- * can vouch for.
+ * The count is derived from eventCounts by dailyArticleCount, NOT read from
+ * the DAILY# `articleCount` attribute — nothing writes that attribute, so
+ * gating on it rejected the entire universe and froze the feed. A day with
+ * no event buckets at all counts as zero and stays ineligible: the feed
+ * should only rank days it can vouch for.
  */
 export const TRENDING_MIN_ARTICLES = 5;
 
@@ -201,7 +203,7 @@ export async function recomputeTrending(): Promise<void> {
     // Eligibility gate before the yesterday lookup: an ineligible ticker
     // costs nothing further, and the batch get only fetches days that can
     // actually rank.
-    const eligible = page.items.filter((item) => (item.articleCount ?? 0) >= TRENDING_MIN_ARTICLES);
+    const eligible = page.items.filter((item) => dailyArticleCount(item) >= TRENDING_MIN_ARTICLES);
     if (eligible.length === 0) continue;
 
     const yesterdayByTicker = await fetchYesterdayByTicker(

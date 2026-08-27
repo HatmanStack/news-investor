@@ -25,6 +25,30 @@ export const SENTIMENT_THRESHOLDS = {
 export type { DailySentiment } from '../types/sentiment.types.js';
 
 /**
+ * How many articles a ticker-day actually analysed.
+ *
+ * Derived from `eventCounts` rather than read from an `articleCount`
+ * attribute, because nothing writes that attribute to a DAILY# row: the
+ * sentiment pipeline's storage contract is `DailySentimentFields`
+ * (dailySentimentAggregate.repository.ts), whose whitelist covers
+ * eventCounts, the average scores and materialEventCount — and not
+ * articleCount. Every DAILY# row written by the worker therefore has
+ * `articleCount: null`, and a consumer gating on it rejects the entire
+ * universe.
+ *
+ * The derivation is exact rather than approximate: aggregateDailySentiment
+ * increments exactly one event bucket per analysed article, so the buckets
+ * sum to the article count. Verified against production on 2026-08-26 —
+ * DAILY#AAPL summed to 33 against 33 articlesProcessed.
+ *
+ * freshness.handler has computed it this way since it was written; this is
+ * that logic, shared.
+ */
+export function dailyArticleCount(day: { eventCounts?: Record<string, number> }): number {
+  return Object.values(day.eventCounts ?? {}).reduce((sum, v) => sum + (v ?? 0), 0);
+}
+
+/**
  * The canonical score for a ticker-day, used wherever ONE number stands for
  * the day's sentiment: transformer first, aspect second, AFINN last.
  *
