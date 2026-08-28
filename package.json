@@ -6,7 +6,8 @@
   "workspaces": [
     "frontend",
     "backend",
-    "admin"
+    "admin",
+    "web"
   ],
   "scripts": {
     "start": "cd frontend && expo start",

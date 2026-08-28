@@ -12,7 +12,8 @@
     "test:coverage": "jest --coverage",
     "lint": "expo lint && tsc --noEmit",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "serve:web": "node scripts/serve-web.mjs"
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",
