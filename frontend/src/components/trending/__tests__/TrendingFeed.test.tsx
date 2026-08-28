@@ -83,6 +83,39 @@ describe('TrendingFeed', () => {
     expect(queryByText('Trending')).toBeNull();
   });
 
+  it('renders nothing when the payload has no tickers field at all', () => {
+    // THE incident payload. GET /sentiment/trending answered a bare `{}`
+    // when the newest TRENDING# row was a lease stub, and the previous
+    // guard — `!data || data.tickers.length === 0` — passed the `!data`
+    // check on `{}` and then threw on `.length` of undefined. Because this
+    // component renders inside a FlatList's ListEmptyComponent on the home
+    // screen, that throw reached the root ErrorBoundary and replaced the
+    // ENTIRE app with "Oops! Something went wrong", on web and native.
+    //
+    // The existing "data is empty" case above could never have caught it:
+    // `{ tickers: [] }` has the field, so the buggy guard passed. Only a
+    // payload missing the field reproduces the crash.
+    mockUseTrending.mockReturnValue({
+      data: {} as never,
+      isLoading: false,
+      error: null,
+    });
+
+    const { queryByText } = render(<TrendingFeed onSelectTicker={onSelectTicker} />);
+    expect(queryByText('Trending')).toBeNull();
+  });
+
+  it('renders nothing when tickers is present but not an array', () => {
+    mockUseTrending.mockReturnValue({
+      data: { tickers: null, date: null } as never,
+      isLoading: false,
+      error: null,
+    });
+
+    const { queryByText } = render(<TrendingFeed onSelectTicker={onSelectTicker} />);
+    expect(queryByText('Trending')).toBeNull();
+  });
+
   it('renders nothing while loading', () => {
     mockUseTrending.mockReturnValue({
       data: undefined,

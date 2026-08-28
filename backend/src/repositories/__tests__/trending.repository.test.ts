@@ -112,7 +112,6 @@ describe('TrendingRepository', () => {
       expect(result!.tickers).toHaveLength(1);
       expect(mockQueryItems).toHaveBeenCalledWith('TRENDING#daily', {
         skPrefix: 'DATE#',
-        limit: 1,
         scanIndexForward: false,
       });
     });
@@ -168,6 +167,62 @@ describe('TrendingRepository', () => {
       await expect(claimTrendingRecompute('2025-11-01', '2025-11-01T09:50:00.000Z')).resolves.toBe(
         false,
       );
+    });
+  });
+
+  describe('getLatestTrending lease-stub filtering', () => {
+    it('skips a lease-only stub and returns the real feed behind it', async () => {
+      // claimTrendingRecompute upserts recomputeLeaseAt onto the same PK/SK,
+      // so a claim whose recompute wrote nothing leaves a stub with no
+      // tickers. It sorts newest; the published feed sits behind it.
+      mockQueryItems.mockResolvedValue([
+        { pk: 'TRENDING#daily', sk: 'DATE#2026-08-27', recomputeLeaseAt: '2026-08-27T22:00:00Z' },
+        {
+          pk: 'TRENDING#daily',
+          sk: 'DATE#2026-08-26',
+          date: '2026-08-26',
+          tickers: [{ ticker: 'NVDA' }],
+        },
+      ]);
+
+      const result = await getLatestTrending();
+
+      expect(result?.date).toBe('2026-08-26');
+      expect(result?.tickers).toHaveLength(1);
+    });
+
+    it('finds a published feed behind many consecutive stubs', async () => {
+      // Any fixed cap would be a bet on how many consecutive days claimed a
+      // recompute that published nothing. Six stubs is past the old limit
+      // of five; the real feed must still be found.
+      const stubs = Array.from({ length: 6 }, (_, i) => ({
+        pk: 'TRENDING#daily',
+        sk: `DATE#2026-08-2${7 - i}`,
+        recomputeLeaseAt: '2026-08-27T22:00:00Z',
+      }));
+      mockQueryItems.mockResolvedValue([
+        ...stubs,
+        {
+          pk: 'TRENDING#daily',
+          sk: 'DATE#2026-08-20',
+          date: '2026-08-20',
+          tickers: [{ ticker: 'KO' }],
+        },
+      ]);
+
+      const result = await getLatestTrending();
+
+      expect(result?.date).toBe('2026-08-20');
+    });
+
+    it('returns null when every item is a stub, never a partial object', async () => {
+      // Returning the stub made the handler emit `{}`, which crashed the web
+      // app's home screen via TrendingFeed reading .tickers.length.
+      mockQueryItems.mockResolvedValue([
+        { pk: 'TRENDING#daily', sk: 'DATE#2026-08-27', recomputeLeaseAt: '2026-08-27T22:00:00Z' },
+      ]);
+
+      expect(await getLatestTrending()).toBeNull();
     });
   });
 });

@@ -126,15 +126,28 @@ export async function getLatestTrending(): Promise<TrendingItem | null> {
   try {
     const items = await queryItems<TrendingItem>(makeTrendingPK(), {
       skPrefix: `${SortKeyPrefix.DATE}#`,
-      limit: 1,
+      // Unlimited, deliberately. The newest item can be a lease stub, so a
+      // limit would return stubs and hide the published feed behind them —
+      // and ANY fixed cap is just a bet on how many consecutive days claimed
+      // a recompute that then published nothing. The partition is bounded
+      // instead by TRENDING_TTL_SECONDS: one item per date, seven days, so
+      // this reads single digits of rows.
       scanIndexForward: false,
     });
 
-    if (items.length === 0) {
-      return null;
-    }
-
-    return items[0]!;
+    // A lease-only item is NOT a trending record. claimTrendingRecompute
+    // upserts `recomputeLeaseAt` onto this same PK/SK, so a claim whose
+    // recompute then wrote nothing (no candidates cleared the floor) leaves
+    // a stub carrying no `tickers` and no `date`. It sorts newest, wins this
+    // query, and the handler serialised it as `{}` — which crashed the web
+    // app's home screen outright, because TrendingFeed read `.tickers.length`
+    // off it and the throw reached the root ErrorBoundary.
+    //
+    // Filtering here rather than at the handler keeps every caller honest:
+    // getLatestTrending's contract is "the newest published feed, or null",
+    // and a stub is not a published feed.
+    const published = items.find((item) => Array.isArray(item.tickers));
+    return published ?? null;
   } catch (error) {
     logger.error('Error getting latest trending', error);
     throw error;

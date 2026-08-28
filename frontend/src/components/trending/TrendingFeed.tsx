@@ -17,8 +17,18 @@ interface TrendingFeedProps {
 export function TrendingFeed({ onSelectTicker }: TrendingFeedProps) {
   const { data, isLoading, error } = useTrending();
 
-  // Graceful collapse: render nothing on loading, error, or empty data
-  if (isLoading || error || !data || data.tickers.length === 0) {
+  // Graceful collapse: render nothing on loading, error, or empty data.
+  //
+  // `data?.tickers?.length`, not `data.tickers.length`: `!data` passes for
+  // any object, so a payload that is truthy but shaped differently — the API
+  // has returned a bare `{}` when the trending record was a lease stub —
+  // threw on `.length` of undefined. This component renders inside a
+  // FlatList's ListEmptyComponent on the home screen, so that throw reached
+  // the root ErrorBoundary and replaced the ENTIRE app with "Oops!
+  // Something went wrong", on web and native alike. A feed that collapses
+  // when it has nothing to show must also collapse when it cannot
+  // understand what it was given.
+  if (isLoading || error || !data?.tickers?.length) {
     return null;
   }
 

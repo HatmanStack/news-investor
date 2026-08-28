@@ -14,7 +14,7 @@
 # Maintained by Dependabot (pip ecosystem, directory /backend/services/ml).
 onnxruntime==1.29.0
 tokenizers==0.23.1
-boto3==1.43.73
+boto3==1.43.79
 fastapi==0.141.1
 pydantic==2.13.4
-mangum==0.21.0
+mangum==0.22.0

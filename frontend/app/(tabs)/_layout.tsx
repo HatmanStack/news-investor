@@ -37,7 +37,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="stock"
+        // The route is "stock/[ticker]", not "stock": the stock/ directory
+        // holds no layout or index of its own, so expo-router names the
+        // route by its deepest segment. Declared as "stock" this entry
+        // matched nothing, href:null never applied, and the raw dynamic
+        // route appeared in the tab bar labelled "stock/[ticker]" — tapping
+        // it navigated to /stock/undefined with no ticker to load.
+        name="stock/[ticker]"
         options={{
           title: '[ticker]',
           href: null, // Hidden from tab bar by default
