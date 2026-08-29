@@ -47,10 +47,17 @@ describe('cacheTransform.util', () => {
             date: '2024-01-01',
             publisher: 'Reuters',
             imageUrl: 'https://example.com/img.jpg',
+            related: 'AAPL,MSFT',
           },
         }),
       );
       expect(result.fetchedAt).toEqual(expect.any(Number));
+    });
+
+    it('omits related from the cache article when the source article has none', () => {
+      const result = transformFinnhubToCache('AAPL', { ...baseFinnhubArticle, related: '' });
+
+      expect(result.article).not.toHaveProperty('related');
     });
 
     it('generates hash from URL when no precomputed hash provided', () => {
@@ -178,6 +185,15 @@ describe('cacheTransform.util', () => {
     it('defaults related to empty string', () => {
       const result = transformCacheToFinnhub(baseCacheItem as unknown as NewsCacheItem);
       expect(result.related).toBe('');
+    });
+
+    it('restores the persisted related field when present on the cache item', () => {
+      const cacheItemWithRelated = {
+        ...baseCacheItem,
+        article: { ...baseCacheItem.article, related: 'AAPL.US,PYPL.US' },
+      };
+      const result = transformCacheToFinnhub(cacheItemWithRelated as unknown as NewsCacheItem);
+      expect(result.related).toBe('AAPL.US,PYPL.US');
     });
 
     it('handles missing optional fields with empty strings', () => {

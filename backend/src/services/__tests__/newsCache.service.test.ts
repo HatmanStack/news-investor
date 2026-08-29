@@ -67,7 +67,7 @@ const { fetchNewsWithCache } = await import('../newsCache.service.js');
 
 // --- Helpers ---
 
-function makeCacheItem(date: string, id: number) {
+function makeCacheItem(date: string, id: number, over: Record<string, unknown> = {}) {
   return {
     article: {
       date,
@@ -75,6 +75,7 @@ function makeCacheItem(date: string, id: number) {
       url: `https://test.com/${id}`,
       source: 'test',
       summary: 'summary',
+      ...over,
     },
   };
 }
@@ -88,6 +89,10 @@ function makeFinnhubArticle(dateStr: string, id: number) {
     source: 'finnhub',
     summary: 'summary',
   };
+}
+
+function makeArticleWithRelated(dateStr: string, id: number, related: string) {
+  return { ...makeFinnhubArticle(dateStr, id), related };
 }
 
 function makeAlphaArticle(dateStr: string, id: number) {
@@ -338,6 +343,118 @@ describe('newsCacheService', () => {
   });
 
   // ---------------------------------------------------------------
+  // Ticker relevance filtering (article misattribution)
+  //
+  // EODHD tags an article with every ticker it mentions in any capacity,
+  // including a company's own foreign cross-listings alongside genuinely
+  // unrelated companies, and the provider fetch was never checked against
+  // that before storing an article under the requested ticker. See
+  // filterTickerSpecificArticles in newsCache.service.ts for the mechanism
+  // and MASS_ROUNDUP_OTHER_TICKER_THRESHOLD for what it can and can't catch.
+  // ---------------------------------------------------------------
+
+  describe('ticker relevance filtering', () => {
+    it('drops a mass-roundup article tagged with far more companies than the requested ticker', async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      // AAPL plus 12 distinct other .US tickers -- well past the threshold,
+      // modeled on live "Stocks That Explain Today's Market"-style roundups.
+      const others = Array.from({ length: 12 }, (_, i) => `SYM${i}.US`).join(',');
+      const roundup = makeArticleWithRelated('2025-01-14', 1, `AAPL.US,${others}`);
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([roundup]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([]);
+      expect(result.newArticlesCount).toBe(0);
+      expect(mockBatchPutArticles).not.toHaveBeenCalled();
+    });
+
+    it('keeps a genuinely relevant article that also names several other companies', async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      // Modeled on a real live example ("Apple hikes streaming price as
+      // industry raises rates...") -- AAPL plus a handful of competitors
+      // named for comparison, well under the mass-roundup threshold.
+      const article = makeArticleWithRelated(
+        '2025-01-14',
+        1,
+        'AAPL.US,CMCSA.US,DIS.US,NFLX.US,WBD.US',
+      );
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([article]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([article]);
+      expect(result.newArticlesCount).toBe(1);
+    });
+
+    it('drops an article whose related list omits the requested ticker entirely', async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      // Defensive invariant: we queried BY this ticker, so it should always
+      // be present. A provider result that fails this should not be stored
+      // under a ticker it never claimed to be about.
+      const article = makeArticleWithRelated('2025-01-14', 1, 'MSFT.US,GOOGL.US');
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([article]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([]);
+    });
+
+    it('keeps an article with no related field at all (Finnhub default shape)', async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      const article = makeFinnhubArticle('2025-01-14', 1);
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([article]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([article]);
+    });
+
+    it("treats Finnhub's single-symbol echo as a no-op (nothing to filter on)", async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      // Verified live: Finnhub's `related` is just the requested symbol,
+      // regardless of what the article covers -- one entry, so both checks
+      // in filterTickerSpecificArticles fall through to "keep".
+      const article = makeArticleWithRelated('2025-01-14', 1, 'AAPL');
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([article]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([article]);
+    });
+
+    it('applies the same filter on the cache-read-failure fallback path', async () => {
+      const from = '2025-01-13';
+      const to = '2025-01-17';
+      const others = Array.from({ length: 12 }, (_, i) => `SYM${i}.US`).join(',');
+      const roundup = makeArticleWithRelated('2025-01-14', 1, `AAPL.US,${others}`);
+
+      mockQueryArticlesByTicker.mockRejectedValue(new Error('DynamoDB timeout'));
+      mockFetchCompanyNews.mockResolvedValue([roundup]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY);
+
+      expect(result.data).toEqual([]);
+      expect(result.newArticlesCount).toBe(0);
+    });
+  });
+
+  // ---------------------------------------------------------------
   // Alpha Vantage fallback
   // ---------------------------------------------------------------
 
@@ -440,6 +557,175 @@ describe('newsCacheService', () => {
     });
   });
 
+  describe('a single tag naming another company', () => {
+    it('drops an article whose only tag is a different ticker', async () => {
+      /*
+       * The length<=1 short-circuit skipped the same-ticker check entirely, so
+       * the rule contradicted itself: [MSFT.US, AAPL.US, ...] missing our
+       * ticker was dropped, while [MSFT.US] alone was kept.
+       */
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([
+        { ...makeFinnhubArticle('2025-01-05', 1), related: 'MSFT.US' },
+        { ...makeFinnhubArticle('2025-01-06', 2), related: `${TICKER}.US` },
+      ]);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      const urls = (result.data as Array<{ url: string }>).map((a) => a.url);
+      expect(urls).toContain('https://finnhub.com/2');
+      expect(urls).not.toContain('https://finnhub.com/1');
+    });
+
+    it("keeps Finnhub's bare-symbol echo, which is not exchange-qualified", async () => {
+      /*
+       * Load-bearing: Finnhub echoes "AAPL" while EODHD tags "AAPL.US".
+       * Requiring only the qualified form drops every Finnhub article — the
+       * naive version of the fix above did exactly that.
+       */
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([
+        { ...makeFinnhubArticle('2025-01-05', 3), related: TICKER },
+      ]);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      expect((result.data as Array<{ url: string }>).map((a) => a.url)).toContain(
+        'https://finnhub.com/3',
+      );
+    });
+  });
+
+  describe('roundups written in the bare-symbol form', () => {
+    it('counts bare peer symbols toward the mass-roundup limit', async () => {
+      /*
+       * The peer count looked only at `.US`-suffixed symbols while the
+       * same-ticker check accepted the bare form. A Finnhub-shaped list like
+       * [AAPL, MSFT, GOOGL, …] therefore scored zero other companies and
+       * passed however long it was.
+       */
+      const bareRoundup = [TICKER, ...Array.from({ length: 12 }, (_, i) => `PEER${i}`)].join(',');
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([
+        { ...makeFinnhubArticle('2025-01-05', 70), related: bareRoundup },
+        { ...makeFinnhubArticle('2025-01-06', 71), related: `${TICKER},PEER0` },
+      ]);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      const urls = (result.data as Array<{ url: string }>).map((a) => a.url);
+      expect(urls).toContain('https://finnhub.com/71');
+      expect(urls).not.toContain('https://finnhub.com/70');
+    });
+
+    it("still does not count the ticker's own cross-listings as peers", async () => {
+      /*
+       * Load-bearing: a single-subject story carries ten of these, which is
+       * why the guard counts US-listed companies rather than symbols. They all
+       * carry a non-US suffix, so "bare or .US" admits exactly the US listings.
+       */
+      const crossListed = [
+        `${TICKER}.US`,
+        `${TICKER}.BA`,
+        `${TICKER}.MX`,
+        'APC.DU',
+        'APC.F',
+        'APC.XETRA',
+        `${TICKER}.SN`,
+        `${TICKER}.VI`,
+        'PEER0.US',
+      ].join(',');
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([
+        { ...makeFinnhubArticle('2025-01-05', 72), related: crossListed },
+      ]);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      expect((result.data as Array<{ url: string }>).map((a) => a.url)).toContain(
+        'https://finnhub.com/72',
+      );
+    });
+  });
+
+  describe('cache-hit rows are filtered on read', () => {
+    /*
+     * The filter ran on write only, so every row already in the cache was
+     * served unchecked on every hit. A mis-attributed article could sit there
+     * indefinitely and be returned forever — the defect the filter exists to
+     * stop.
+     *
+     * Both tests need enough cached days to actually take the cache-hit
+     * branch; too few and the coverage ratio sends the request to the provider
+     * instead, and the assertions pass for a reason unrelated to the cache.
+     */
+    const denseDays = Array.from(
+      { length: 10 },
+      (_, i) => `2025-01-${String(i + 1).padStart(2, '0')}`,
+    );
+
+    it('does not serve a mis-attributed row that is already cached', async () => {
+      const roundupRelated = [
+        `${TICKER}.US`,
+        ...Array.from({ length: 12 }, (_, i) => `X${i}.US`),
+      ].join(',');
+      mockQueryArticlesByTicker.mockResolvedValue([
+        ...denseDays.map((d, i) => makeCacheItem(d, 810 + i, { related: `${TICKER}.US,PEER.US` })),
+        makeCacheItem('2025-01-05', 800, { related: roundupRelated }),
+      ]);
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      const urls = (result.data as Array<{ url: string }>).map((a) => a.url);
+
+      // Served from cache, not the provider — otherwise this proves nothing.
+      expect(result.source).toBe('cache');
+      expect(urls).toContain('https://test.com/810');
+      expect(urls).not.toContain('https://test.com/800');
+    });
+
+    it('keeps a legacy row stored before related was persisted', async () => {
+      // Nothing can be judged about a row with no tags without re-fetching,
+      // and dropping every historical row would empty the cache.
+      mockQueryArticlesByTicker.mockResolvedValue(
+        denseDays.map((d, i) => makeCacheItem(d, 820 + i)),
+      );
+
+      const result = await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY);
+      expect(result.source).toBe('cache');
+      expect((result.data as Array<{ url: string }>).map((a) => a.url)).toContain(
+        'https://test.com/820',
+      );
+    });
+  });
+
+  describe('historical coverage counts only relevant rows', () => {
+    it('still backfills when the cache is mostly mis-attributed', async () => {
+      /*
+       * `totalCachedDays` decides whether the Alpha Vantage backfill runs, and
+       * it read the RAW cache while only the in-range slice was filtered. So
+       * 30-odd mis-attributed rows on distinct dates made the ticker look
+       * well-covered and suppressed the backfill — the rows that are not about
+       * this company were standing in for the history that is missing because
+       * of them.
+       */
+      const roundup = [`${TICKER}.US`, ...Array.from({ length: 12 }, (_, i) => `X${i}.US`)].join(
+        ',',
+      );
+      const misattributed = Array.from({ length: 35 }, (_, i) =>
+        makeCacheItem(`2024-11-${String((i % 28) + 1).padStart(2, '0')}`, 900 + i, {
+          related: roundup,
+        }),
+      );
+
+      mockQueryArticlesByTicker.mockResolvedValue(misattributed);
+      mockFetchCompanyNews.mockResolvedValue([makeFinnhubArticle('2025-01-05', 1)]);
+      mockFetchAlphaVantageNews.mockResolvedValue([]);
+
+      await fetchNewsWithCache(TICKER, '2025-01-01', '2025-01-10', API_KEY, ALPHA_KEY);
+
+      // 35 rows on 28 distinct dates would clear MIN_DAYS_FOR_PREDICTIONS if
+      // counted raw; none of them is about this ticker, so the backfill must
+      // still run.
+      expect(mockFetchAlphaVantageNews).toHaveBeenCalled();
+    });
+  });
+
   describe('Alpha Vantage fallback', () => {
     it('calls Alpha Vantage when historical data insufficient and key provided', async () => {
       // Empty cache + Finnhub returns articles on only a few days (< 14)
@@ -464,6 +750,54 @@ describe('newsCacheService', () => {
       );
       // Alpha Vantage has more unique days in range -> source is alphavantage
       expect(result.source).toBe('alphavantage');
+    });
+
+    it('applies the mis-attribution filter to Alpha Vantage articles too', async () => {
+      /*
+       * The filter was applied to the primary provider and the cache-read
+       * fallback but not to this path, on either the caching or the selection
+       * side. That left the guard silently absent for exactly the
+       * thin-coverage tickers that fall through to Alpha Vantage — the case
+       * where a mass roundup is most likely to be all there is.
+       */
+      const from = '2025-01-01';
+      const to = '2025-01-10';
+      const roundup = {
+        ...makeAlphaArticle('2025-01-02', 900),
+        related: [`${TICKER}.US`, ...Array.from({ length: 12 }, (_, i) => `OTHER${i}.US`)].join(
+          ',',
+        ),
+      };
+      /*
+       * Three focused days against Finnhub's one, so Alpha Vantage still wins
+       * the unique-day comparison AFTER the roundup is filtered out. With a
+       * single focused article the filtered set ties Finnhub and the selection
+       * keeps Finnhub, so the returned-articles assertion below would be
+       * testing the wrong branch.
+       */
+      const focused = [901, 902, 903].map((id, i) => ({
+        ...makeAlphaArticle(`2025-01-0${i + 2}`, id),
+        related: [`${TICKER}.US`, 'PEER.US'].join(','),
+      }));
+
+      mockQueryArticlesByTicker.mockResolvedValue([]);
+      mockFetchCompanyNews.mockResolvedValue([makeFinnhubArticle('2025-01-05', 1)]);
+      mockFetchAlphaVantageNews.mockResolvedValue([roundup, ...focused]);
+
+      const result = await fetchNewsWithCache(TICKER, from, to, API_KEY, ALPHA_KEY);
+
+      // Caching and selection are separate paths through this branch, and the
+      // original defect was in both. Asserting only the writes would pass a
+      // regression that stored the filtered set and returned the unfiltered
+      // one — the article would still reach the reader.
+      const cached = mockBatchPutArticles.mock.calls.flatMap((call) => call[0] as unknown[]);
+      const cachedUrls = cached.map((c) => (c as { article: { url: string } }).article.url);
+      expect(cachedUrls).toContain('https://alpha.com/901');
+      expect(cachedUrls).not.toContain('https://alpha.com/900');
+
+      const returnedUrls = (result.data as Array<{ url: string }>).map((a) => a.url);
+      expect(returnedUrls).toContain('https://alpha.com/901');
+      expect(returnedUrls).not.toContain('https://alpha.com/900');
     });
 
     it('uses Alpha Vantage articles when they have more unique days than Finnhub', async () => {

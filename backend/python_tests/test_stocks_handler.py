@@ -29,7 +29,9 @@ class TestStocksHandlerValidation:
 
     def test_returns_400_when_ticker_invalid_format(self):
         """Invalid ticker format returns 400."""
-        event = {"queryStringParameters": {"ticker": "AAPL@#$", "startDate": "2024-01-01"}}
+        event = {
+            "queryStringParameters": {"ticker": "AAPL@#$", "startDate": "2024-01-01"}
+        }
 
         result = handle_stocks_request(event)
 
@@ -91,9 +93,7 @@ class TestStocksHandlerPrices:
     @patch("handlers.stocks.query_stocks_by_date_range")
     @patch("handlers.stocks.fetch_stock_prices")
     @patch("handlers.stocks.batch_put_stocks")
-    def test_returns_prices_on_cache_miss(
-        self, mock_batch_put, mock_fetch, mock_query
-    ):
+    def test_returns_prices_on_cache_miss(self, mock_batch_put, mock_fetch, mock_query):
         """Returns prices from yfinance on cache miss."""
         mock_query.return_value = []  # Cache miss
         mock_df = pd.DataFrame(
@@ -131,7 +131,11 @@ class TestStocksHandlerPrices:
         """Returns prices from cache on cache hit."""
         # Return enough cached data for >80% hit rate (5 of 5 days)
         mock_query.return_value = [
-            {"ticker": "AAPL", "date": f"2024-01-{15+i}", "priceData": {"close": 150.0 + i}}
+            {
+                "ticker": "AAPL",
+                "date": f"2024-01-{15 + i}",
+                "priceData": {"close": 150.0 + i},
+            }
             for i in range(5)
         ]
 
@@ -222,7 +226,11 @@ class TestHistoricalBackfillOnCacheHit:
     """
 
     CACHED: ClassVar = [
-        {"ticker": "AAPL", "date": f"2024-01-{15 + i}", "priceData": {"close": 150.0 + i}}
+        {
+            "ticker": "AAPL",
+            "date": f"2024-01-{15 + i}",
+            "priceData": {"close": 150.0 + i},
+        }
         for i in range(5)
     ]
     EVENT: ClassVar = {
@@ -255,7 +263,9 @@ class TestHistoricalBackfillOnCacheHit:
     @patch("handlers.stocks.batch_put_historical")
     @patch("handlers.stocks.has_historical")
     @patch("handlers.stocks.query_stocks_by_date_range")
-    def test_does_not_rewrite_when_historical_exists(self, mock_query, mock_has, mock_put):
+    def test_does_not_rewrite_when_historical_exists(
+        self, mock_query, mock_has, mock_put
+    ):
         """One bulk write per ticker ever, not one per cache hit."""
         from handlers.stocks import handle_stocks_request
 
@@ -285,3 +295,148 @@ class TestHistoricalBackfillOnCacheHit:
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert len(body["data"]) == 5
+
+
+class TestTailFreshness:
+    """
+    Cache-hit density is judged over the *whole* requested range, which a
+    stale tail barely moves when the range is long (e.g. 5 missing days out
+    of ~1300 expected trading days over 5 years still clears 80%). These
+    cover the independent tail-gap check that catches that, and the top-up
+    (or disclosed staleness) it triggers.
+    """
+
+    @patch("handlers.stocks.batch_put_historical")
+    @patch("handlers.stocks.batch_put_stocks")
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.fetch_stock_prices")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_tops_up_a_stale_tail_behind_a_dense_range(
+        self, mock_query, mock_fetch, mock_has, mock_batch_stocks, mock_batch_hist
+    ):
+        """
+        19 of 22 expected days present (86% dense) clears the 80% cache-hit
+        threshold, but the cached tail stops 12 days short of the requested
+        end date — well past MAX_TAIL_STALENESS_DAYS. The response must
+        reflect the topped-up date, not the stale cached one.
+        """
+        mock_query.return_value = [
+            {
+                "ticker": "AAPL",
+                "date": f"2024-01-{i:02d}",
+                "priceData": {"close": 100.0 + i},
+            }
+            for i in range(1, 20)  # 2024-01-01 .. 2024-01-19
+        ]
+        mock_has.return_value = (
+            True  # HIST# already exists; isolate the tail-gap behavior
+        )
+        mock_fetch.return_value = pd.DataFrame(
+            {
+                "Open": [200.0],
+                "High": [201.0],
+                "Low": [199.0],
+                "Close": [200.5],
+                "Adj Close": [200.5],
+                "Volume": [500000],
+                "Dividends": [0.0],
+                "Stock Splits": [0.0],
+            },
+            index=pd.to_datetime(["2024-01-31"]),
+        )
+
+        event = {
+            "queryStringParameters": {
+                "ticker": "AAPL",
+                "startDate": "2024-01-01",
+                "endDate": "2024-01-31",
+            }
+        }
+
+        result = handle_stocks_request(event)
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        # 19 cached records + 1 topped-up record.
+        assert len(body["data"]) == 20
+        assert body["data"][-1]["date"] == "2024-01-31T00:00:00.000Z"
+        assert body["_meta"]["latestAvailableDate"] == "2024-01-31"
+
+        # The top-up fetches only the gap after the cached tail, not the
+        # whole requested range.
+        mock_fetch.assert_called_once_with("AAPL", "2024-01-20", "2024-01-31")
+        mock_batch_stocks.assert_called_once()
+        assert len(mock_batch_stocks.call_args.args[0]) == 1
+
+    @patch("handlers.stocks.batch_put_historical")
+    @patch("handlers.stocks.batch_put_stocks")
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.fetch_stock_prices")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_serves_stale_data_with_disclosed_date_when_top_up_fails(
+        self, mock_query, mock_fetch, mock_has, mock_batch_stocks, mock_batch_hist
+    ):
+        """
+        A wrong number is worse than a missing one: when the top-up fetch
+        fails, the response still succeeds, but it must report the true last
+        cached date rather than silently implying the requested end date.
+        """
+        mock_query.return_value = [
+            {
+                "ticker": "AAPL",
+                "date": f"2024-01-{i:02d}",
+                "priceData": {"close": 100.0 + i},
+            }
+            for i in range(1, 20)
+        ]
+        mock_has.return_value = True
+        mock_fetch.side_effect = RuntimeError("yfinance unreachable")
+
+        event = {
+            "queryStringParameters": {
+                "ticker": "AAPL",
+                "startDate": "2024-01-01",
+                "endDate": "2024-01-31",
+            }
+        }
+
+        result = handle_stocks_request(event)
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert len(body["data"]) == 19
+        assert body["_meta"]["latestAvailableDate"] == "2024-01-19"
+        mock_batch_stocks.assert_not_called()
+
+    @patch("handlers.stocks.has_historical")
+    @patch("handlers.stocks.query_stocks_by_date_range")
+    def test_does_not_top_up_when_tail_is_within_staleness_budget(
+        self, mock_query, mock_has
+    ):
+        """A tail within MAX_TAIL_STALENESS_DAYS of the requested end is a plain cache hit."""
+        mock_query.return_value = [
+            {
+                "ticker": "AAPL",
+                "date": f"2024-01-{15 + i}",
+                "priceData": {"close": 150.0 + i},
+            }
+            for i in range(5)  # through 2024-01-19
+        ]
+        mock_has.return_value = True
+
+        event = {
+            "queryStringParameters": {
+                "ticker": "AAPL",
+                "startDate": "2024-01-15",
+                "endDate": "2024-01-19",
+            }
+        }
+
+        with patch("handlers.stocks.fetch_stock_prices") as mock_fetch:
+            result = handle_stocks_request(event)
+            mock_fetch.assert_not_called()
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["_meta"]["cached"] is True
+        assert body["_meta"]["latestAvailableDate"] == "2024-01-19"

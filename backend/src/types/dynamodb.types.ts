@@ -120,6 +120,17 @@ export interface NewsCacheItem extends BaseTableItem {
   publishedAt: string;
   /** Provider-computed sentiment (EODHD only); opaque passthrough. */
   providerSentiment?: import('./eodhd.types.js').EodhdSentiment;
+  /**
+   * Comma-separated tickers the provider says this article concerns
+   * (`FinnhubNewsArticle.related`, e.g. "AAPL.US,PYPL.US"). Previously
+   * captured at the provider edge and then discarded before it reached the
+   * cache, which meant an article stored under one ticker's PK carried no
+   * record of what the provider actually thought it was about. Persisted so
+   * newsCache.service's relevance filter (see MASS_ROUNDUP_OTHER_TICKER_THRESHOLD)
+   * has data to work from on read as well as on ingest, and so a future
+   * backfill has something to filter existing rows against.
+   */
+  related?: string;
 }
 
 /**
@@ -415,7 +426,10 @@ export interface TrendingItem extends BaseTableItem {
   date: string;
   tickers: Array<{
     ticker: string;
-    name: string;
+    // Absent, not echoed from `ticker`, when the name lookup in
+    // trending.service's resolveNames failed or found nothing real — see
+    // that function for why an echoed name is worse than a missing one.
+    name?: string;
     sentimentDelta: number;
     direction: 'up' | 'down';
     currentScore: number;

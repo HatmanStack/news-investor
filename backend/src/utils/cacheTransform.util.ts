@@ -36,6 +36,7 @@ export function transformFinnhubToCache(
       ...(finnhubArticle.providerSentiment
         ? { providerSentiment: finnhubArticle.providerSentiment }
         : {}),
+      ...(finnhubArticle.related ? { related: finnhubArticle.related } : {}),
     },
     fetchedAt: Date.now(),
   };
@@ -56,7 +57,7 @@ export function transformCacheToFinnhub(cacheItem: NewsCacheItem): FinnhubNewsAr
     headline: cacheItem.article.title,
     id: 0, // Generated ID not available for cached articles
     image: cacheItem.article.imageUrl || '',
-    related: '', // Not stored in cache
+    related: cacheItem.article.related || '',
     source: cacheItem.article.publisher || '',
     summary: cacheItem.article.description || '',
     url: cacheItem.article.url,

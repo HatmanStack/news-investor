@@ -97,6 +97,11 @@ class PriceResult(TypedDict):
     data: list[PriceRecord]
     cached: bool
     cacheHitRate: float
+    # The actual last date in `data`, independent of cached/cacheHitRate.
+    # Those two describe how the response was assembled; this states plainly
+    # how fresh it is, so a caller never has to infer staleness by indexing
+    # into the array themselves. None only when `data` is empty.
+    latestAvailableDate: str | None
 
 
 class MetadataResult(TypedDict):

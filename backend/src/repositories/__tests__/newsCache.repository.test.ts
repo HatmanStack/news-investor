@@ -65,6 +65,51 @@ describe('NewsCacheRepository', () => {
       expect(result?.articleHash).toBe('hash123');
       expect(result?.article.title).toBe('Test Article');
     });
+
+    it('carries the provider related-tickers field through to the legacy shape', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'NEWS#AAPL',
+        sk: 'HASH#hash123',
+        entityType: 'NEWS',
+        ticker: 'AAPL',
+        articleHash: 'hash123',
+        headline: 'Test Article',
+        summary: 'Summary text',
+        source: 'Test Source',
+        url: 'https://example.com/article',
+        publishedAt: '2025-01-15',
+        related: 'AAPL.US,PYPL.US',
+        ttl: 1700000000,
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getArticle('AAPL', 'hash123');
+
+      expect(result?.article.related).toBe('AAPL.US,PYPL.US');
+    });
+
+    it('omits related from the legacy shape when the stored item never had it', async () => {
+      mockGetItem.mockResolvedValueOnce({
+        pk: 'NEWS#AAPL',
+        sk: 'HASH#hash123',
+        entityType: 'NEWS',
+        ticker: 'AAPL',
+        articleHash: 'hash123',
+        headline: 'Test Article',
+        summary: 'Summary text',
+        source: 'Test Source',
+        url: 'https://example.com/article',
+        publishedAt: '2025-01-15',
+        ttl: 1700000000,
+        createdAt: '2025-01-15T00:00:00.000Z',
+        updatedAt: '2025-01-15T00:00:00.000Z',
+      });
+
+      const result = await getArticle('AAPL', 'hash123');
+
+      expect(result?.article.related).toBeUndefined();
+    });
   });
 
   describe('putArticle', () => {
@@ -93,6 +138,29 @@ describe('NewsCacheRepository', () => {
           articleHash: 'hash123',
           headline: 'Test Article',
         }),
+        'attribute_not_exists(pk)',
+      );
+    });
+
+    it('persists the related field when the article carries one', async () => {
+      mockPutItemConditional.mockResolvedValueOnce(true);
+
+      await putArticle({
+        ticker: 'AAPL',
+        articleHash: 'hash123',
+        article: {
+          title: 'Test Article',
+          url: 'https://example.com/article',
+          description: 'Description',
+          date: '2025-01-15',
+          publisher: 'Test Publisher',
+          related: 'AAPL.US,PYPL.US',
+        },
+        fetchedAt: Date.now(),
+      });
+
+      expect(mockPutItemConditional).toHaveBeenCalledWith(
+        expect.objectContaining({ related: 'AAPL.US,PYPL.US' }),
         'attribute_not_exists(pk)',
       );
     });

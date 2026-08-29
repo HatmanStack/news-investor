@@ -42,3 +42,21 @@ export function nextTradingDay(dateStr: string): string {
     date.setUTCDate(date.getUTCDate() + 1);
   }
 }
+
+/**
+ * Find the most recent trading day strictly before the given date (skip
+ * weekends). Always moves at least one day back, so a trading-day input
+ * returns the trading day before it, not itself.
+ *
+ * Like the rest of this module, this does not know about market holidays —
+ * a caller comparing against "the previous trading day" should treat a
+ * holiday the same way it treats any other date with no data for that
+ * ticker: absent, not a reason to search further back.
+ */
+export function previousTradingDay(dateStr: string): string {
+  const date = new Date(dateStr + 'T12:00:00Z');
+  do {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+  return date.toISOString().split('T')[0]!;
+}

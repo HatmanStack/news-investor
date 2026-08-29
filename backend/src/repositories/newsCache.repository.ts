@@ -34,6 +34,11 @@ export interface NewsArticle {
    * consumed by scoring (plan.md ADR 5).
    */
   providerSentiment?: EodhdSentiment;
+  /**
+   * Comma-separated tickers the provider tagged this article with (see
+   * NewsCacheItem.related in dynamodb.types.ts for why this exists).
+   */
+  related?: string;
 }
 
 /**
@@ -307,6 +312,7 @@ function transformFromLegacy(item: Omit<LegacyNewsCacheItem, 'ttl'>): NewsCacheI
     ...(item.article.providerSentiment
       ? { providerSentiment: item.article.providerSentiment }
       : {}),
+    ...(item.article.related ? { related: item.article.related } : {}),
     ttl: calculateTTLByDataType('news'),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -327,6 +333,7 @@ function transformToLegacy(item: NewsCacheItem): LegacyNewsCacheItem {
       date: item.publishedAt,
       publisher: item.source,
       ...(item.providerSentiment ? { providerSentiment: item.providerSentiment } : {}),
+      ...(item.related ? { related: item.related } : {}),
     },
     ttl: item.ttl || 0,
     fetchedAt: new Date(item.createdAt).getTime(),

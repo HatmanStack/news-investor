@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { addTradingDays, isTradingDay, nextTradingDay } from '../date.util.js';
+import { addTradingDays, isTradingDay, nextTradingDay, previousTradingDay } from '../date.util.js';
 
 describe('addTradingDays', () => {
   it('should add 1 trading day from Friday to Monday', () => {
@@ -65,5 +65,27 @@ describe('nextTradingDay', () => {
 
   it('should return Monday from Sunday', () => {
     expect(nextTradingDay('2024-01-21')).toBe('2024-01-22'); // Sunday -> Monday
+  });
+});
+
+describe('previousTradingDay', () => {
+  it('should return the prior weekday for a midweek date', () => {
+    expect(previousTradingDay('2024-01-17')).toBe('2024-01-16'); // Wednesday -> Tuesday
+  });
+
+  it('should skip the weekend from Monday to the prior Friday', () => {
+    expect(previousTradingDay('2024-01-22')).toBe('2024-01-19'); // Monday -> Friday
+  });
+
+  it('should return Friday from Saturday', () => {
+    expect(previousTradingDay('2024-01-20')).toBe('2024-01-19'); // Saturday -> Friday
+  });
+
+  it('should return Friday from Sunday', () => {
+    expect(previousTradingDay('2024-01-21')).toBe('2024-01-19'); // Sunday -> Friday
+  });
+
+  it('should never return the input date itself, even for a trading day', () => {
+    expect(previousTradingDay('2024-01-15')).toBe('2024-01-12'); // Monday -> prior Friday
   });
 });

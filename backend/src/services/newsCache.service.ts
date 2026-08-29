@@ -57,6 +57,135 @@ async function fetchFromProvider(
 }
 
 /**
+ * Above this many OTHER distinct `.US`-listed tickers tagged alongside the
+ * requested one, an article is a market-wide roundup rather than
+ * company-specific coverage, and is dropped rather than stored under this
+ * ticker.
+ *
+ * Chosen from live EODHD data (2026-08-29), not guessed: pulled every AAPL-
+ * and DIS-tagged article over a multi-week window and split each set by
+ * whether its own headline named the company. The highest other-ticker
+ * count on a genuinely-relevant headline was 8 (AAPL); every article above
+ * that bar, in both samples, was a broad-market piece (Fed commentary,
+ * "stocks that explain today's market", ETF roundups) that happened to tag
+ * the ticker along with a dozen-plus others. 10 leaves margin.
+ *
+ * What this threshold does NOT catch, and the reason it is not the whole
+ * fix: the misattributed articles that prompted this change (e.g. "PayPal
+ * Shares Tank After Major Takeover Talks Collapse" stored under AAPL) carry
+ * only 3-7 other .US tickers each -- well inside this bar, alongside
+ * ordinary single-company coverage of the requested ticker. Distinguishing
+ * "PayPal is the subject, AAPL is incidental" from "AAPL is the subject"
+ * requires knowing what the article's title is actually about, which needs
+ * a verified ticker-to-company-name mapping this codebase does not have
+ * (building one for the S&P 500 from memory risks shipping wrong company
+ * names into a financial product, which is worse than the status quo this
+ * is meant to fix). This threshold only removes the extreme tail; `related`
+ * is persisted (see NewsCacheItem.related) specifically so a name-based
+ * filter can be layered on later without re-fetching anything.
+ */
+const MASS_ROUNDUP_OTHER_TICKER_THRESHOLD = 10;
+
+/**
+ * Drop provider articles that should not have been attributed to this
+ * ticker, using the provider's own `related` tag list.
+ *
+ * A no-op for Finnhub and Alpha Vantage: Finnhub's `related` is just an
+ * echo of the requested symbol (verified live, 2026-08-29 -- every article
+ * from `/company-news?symbol=AAPL` came back with `related: "AAPL"`,
+ * regardless of what the article was actually about), so it never has more
+ * than one entry and both checks below fall through to "keep". This only
+ * has teeth against EODHD, which multi-tags an article with every ticker it
+ * mentions in any capacity -- including a company's own foreign
+ * cross-listings (AAPL.US, AAPL.BA, AAPL.MX, APC.DU, ... for one Apple
+ * story) alongside genuinely unrelated companies -- and is what made
+ * `s=AAPL.US` return PayPal and SK Hynix stories as AAPL articles.
+ */
+/**
+ * Does this article's own tag list say it is about this ticker?
+ *
+ * Extracted so the cache-read path can apply the identical rule. It used to
+ * live inline on the provider path only, which meant the filter ran on write
+ * and never on read: every row already in the cache was served unchecked
+ * forever, including every row written before the filter existed.
+ */
+function isTickerSpecific(ticker: string, related: string[]): boolean {
+  // No tags at all means there is nothing to reason about — Alpha Vantage
+  // sends none, and an article we cannot judge is kept rather than guessed at.
+  if (related.length === 0) return true;
+
+  /*
+   * Any tag list at all must name the ticker we asked for.
+   *
+   * The check used to be skipped whenever there was only ONE tag, on the
+   * reasoning that a single tag is Finnhub's echo of the requested symbol.
+   * That let a lone tag naming a DIFFERENT company through, so the rule
+   * contradicted itself: an article tagged [MSFT.US, AAPL.US, …] missing our
+   * ticker was dropped, while one tagged only [MSFT] was kept.
+   *
+   * Both provider spellings are accepted because they genuinely differ, and
+   * this is the detail that makes the naive version of this fix wrong:
+   * Finnhub echoes the BARE symbol ("AAPL") while EODHD tags the exchange
+   * -qualified one ("AAPL.US"). Requiring only the qualified form drops every
+   * Finnhub article on the floor.
+   */
+  const bare = ticker.toUpperCase();
+  const qualified = `${bare}.US`;
+  if (!related.includes(bare) && !related.includes(qualified)) return false;
+  /*
+   * Count US-listed OTHER companies, in either spelling.
+   *
+   * Counting only the `.US` form missed every bare-symbol roundup: a Finnhub
+   * -shaped list like [AAPL, MSFT, GOOGL, …] scored zero other companies and
+   * passed however long it was. Accepting the bare form for the self check
+   * while ignoring it for the peer count is the inconsistency that allowed it.
+   *
+   * Cross-listings stay excluded, and that exclusion is the whole reason this
+   * counts companies rather than symbols: a single-subject Apple story
+   * routinely carries ten AAPL cross-listings (AAPL.BA, AAPL.MX, APC.DU,
+   * APC.F …), so a raw symbol count is not a relevance signal. Those all carry
+   * a non-US suffix, so "bare or .US" admits exactly the US listings.
+   */
+  const others = new Set(
+    related
+      .filter((tag) => !tag.includes('.') || tag.endsWith('.US'))
+      .map((tag) => (tag.endsWith('.US') ? tag.slice(0, -'.US'.length) : tag))
+      .filter((base) => base !== bare),
+  );
+  return others.size <= MASS_ROUNDUP_OTHER_TICKER_THRESHOLD;
+}
+
+function normalizeRelated(related: string | undefined): string[] {
+  return related
+    ? related
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+    : [];
+}
+
+function filterTickerSpecificArticles(
+  ticker: string,
+  articles: FinnhubNewsArticle[],
+): { kept: FinnhubNewsArticle[]; droppedCount: number } {
+  const kept: FinnhubNewsArticle[] = [];
+  let droppedCount = 0;
+
+  for (const article of articles) {
+    const related = normalizeRelated(article.related);
+
+    if (!isTickerSpecific(ticker, related)) {
+      droppedCount++;
+      continue;
+    }
+
+    kept.push(article);
+  }
+
+  return { kept, droppedCount };
+}
+
+/**
  * Filter out articles already in cache.
  * Returns only new articles with pre-computed hashes to avoid double hashing.
  */
@@ -141,19 +270,47 @@ export async function fetchNewsWithCache(
     });
 
     const { articles, provider } = await fetchFromProvider(ticker, from, to, apiKey);
+    const { kept, droppedCount } = filterTickerSpecificArticles(ticker, articles);
+    if (droppedCount > 0) {
+      logger.warn(`Dropped ${droppedCount} not-ticker-specific articles for ${ticker}`, {
+        provider,
+      });
+    }
     return {
-      data: articles,
+      data: kept,
       cached: false,
-      newArticlesCount: articles.length,
+      newArticlesCount: kept.length,
       cachedArticlesCount: 0,
       source: provider,
     };
   }
 
   {
-    const cachedInRange = cachedItems.filter((item) => {
-      return item.article.date >= from && item.article.date <= to;
-    });
+    /*
+     * The relevance filter runs on READ as well as write.
+     *
+     * It used to run only when fetching from a provider, so every row already
+     * in the cache was served unchecked on every hit — including rows written
+     * before the filter existed, which is all of them. A mis-attributed
+     * article could therefore sit in the cache indefinitely and be served
+     * forever, which is exactly the defect the filter was added to stop.
+     *
+     * A row stored before `related` was persisted has no tags and is kept:
+     * nothing can be judged about it without re-fetching, and dropping every
+     * historical row would empty the cache. Repairing those is the backfill
+     * question recorded in backend-findings.md.
+     *
+     * This also feeds the coverage ratio below, deliberately — a dropped row
+     * is not coverage, and counting it would suppress the provider fetch that
+     * would replace it.
+     */
+    const relevantCached = cachedItems.filter((item) =>
+      isTickerSpecific(ticker, normalizeRelated(item.article.related)),
+    );
+
+    const cachedInRange = relevantCached.filter(
+      (item) => item.article.date >= from && item.article.date <= to,
+    );
 
     logger.info(`Found ${cachedInRange.length} cached articles for ${ticker}`, { from, to });
 
@@ -218,7 +375,14 @@ export async function fetchNewsWithCache(
     logger.info(`Cache miss for ${ticker}, fetching from API`);
     let apiCallCount = 1;
     const fetched = await fetchFromProvider(ticker, from, to, apiKey);
-    let apiArticles = fetched.articles;
+    const { kept: relevantArticles, droppedCount: notTickerSpecificCount } =
+      filterTickerSpecificArticles(ticker, fetched.articles);
+    if (notTickerSpecificCount > 0) {
+      logger.warn(`Dropped ${notTickerSpecificCount} not-ticker-specific articles for ${ticker}`, {
+        provider: fetched.provider,
+      });
+    }
+    let apiArticles = relevantArticles;
     let newsSource: 'finnhub' | 'eodhd' | 'alphavantage' = fetched.provider;
 
     const finnhubUniqueDays = new Set(
@@ -232,7 +396,15 @@ export async function fetchNewsWithCache(
       uniqueDays: finnhubUniqueDays,
     });
 
-    const totalCachedDays = new Set(cachedItems.map((item) => item.article.date)).size;
+    /*
+     * The historical-coverage decision reads the FILTERED cache, not the raw
+     * one. Filtering only the in-range slice left this counting mis-attributed
+     * rows on other dates, so enough of them made `needsHistoricalData` false
+     * and skipped the Alpha Vantage backfill while the ticker had almost no
+     * relevant history — the rows that are not about this company were
+     * standing in for the coverage that is missing because of them.
+     */
+    const totalCachedDays = new Set(relevantCached.map((item) => item.article.date)).size;
     const needsHistoricalData =
       totalCachedDays < MIN_DAYS_FOR_PREDICTIONS && finnhubUniqueDays < MIN_DAYS_FOR_PREDICTIONS;
 
@@ -250,12 +422,28 @@ export async function fetchNewsWithCache(
         const alphaTo = today.toISOString().split('T')[0]!;
 
         apiCallCount++;
-        const alphaArticles = await fetchAlphaVantageNews(
+        const alphaFetched = await fetchAlphaVantageNews(
           ticker,
           alphaFrom,
           alphaTo,
           alphaVantageKey,
         );
+        /*
+         * The fallback provider is filtered on the same terms as the primary
+         * one. Filtering only the primary path left this branch storing and
+         * returning unfiltered articles under the requested ticker — the
+         * mass-roundup guard would have been silently absent for every ticker
+         * that fell through to Alpha Vantage, which is precisely the
+         * thin-coverage case where a roundup is most likely to be all there
+         * is.
+         */
+        const { kept: alphaArticles, droppedCount: alphaDropped } = filterTickerSpecificArticles(
+          ticker,
+          alphaFetched,
+        );
+        if (alphaDropped > 0) {
+          logger.info(`Dropped ${alphaDropped} mis-attributed Alpha Vantage articles`, { ticker });
+        }
         const alphaUniqueDays = new Set(
           alphaArticles.map((a) => {
             const date = new Date(a.datetime * 1000);
@@ -303,7 +491,7 @@ export async function fetchNewsWithCache(
     }
 
     // Filter and cache new articles
-    const isFreshStock = cachedItems.length === 0;
+    const isFreshStock = relevantCached.length === 0;
     const { newArticles, duplicateCount } = await filterNewArticles(
       ticker,
       apiArticles,

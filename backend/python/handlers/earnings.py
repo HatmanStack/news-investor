@@ -4,6 +4,7 @@ Handles GET /earnings and POST /batch/earnings requests.
 """
 
 import json
+from decimal import Decimal
 from typing import cast
 
 from repositories.earnings_cache import cache_earnings, get_cached_earnings
@@ -82,9 +83,23 @@ def _get_earnings_for_ticker(ticker: str) -> list[EarningsEvent]:
 
 
 def _clean_cache_items(items: list[EarningsCacheItem]) -> list[EarningsEvent]:
-    """Remove DynamoDB-specific fields from cached items."""
+    """Remove DynamoDB-specific fields and convert Decimal back to float.
+
+    cache_earnings stores epsEstimate/revenueEstimate as Decimal (DynamoDB's
+    only numeric type). success_response's JSON encoder has no Decimal
+    support, so a cache hit must convert back before returning — the same
+    round trip handlers/stocks.py does explicitly for its cached price
+    fields.
+    """
     keys_to_remove = {"pk", "sk", "entityType", "ttl", "createdAt", "updatedAt"}
     return [
-        cast(EarningsEvent, {k: v for k, v in item.items() if k not in keys_to_remove})
+        cast(
+            EarningsEvent,
+            {
+                k: (float(v) if isinstance(v, Decimal) else v)
+                for k, v in item.items()
+                if k not in keys_to_remove
+            },
+        )
         for item in items
     ]
